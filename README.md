@@ -5,10 +5,24 @@
 ![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
-> An experimental research platform for investigating adaptive user interfaces in extended reality (XR) environments through Fitts's Law target selection tasks with gaze and hand modalities.
+**Adaptive Modality Systems for Extended Reality: A Fitts's Law Investigation**
 
-**Authors:** Mohammad Dastgheib, Fatemeh Pourmahdian  
-**License:** GNU General Public License v3.0
+A research platform for studying adaptive user interface interventions in dual-modality XR environments (hand vs. gaze). Features Fitts's Law target selection, policy-driven adaptation, contextual factors (pressure, aging), and comprehensive data logging.
+
+## 📋 Description
+
+This platform enables researchers to:
+- Study hand vs. gaze interaction patterns using Fitts's Law
+- Investigate adaptive UI interventions based on performance and context
+- Evaluate cognitive load using NASA-TLX
+- Generate comprehensive CSV datasets for statistical analysis
+
+Key features include:
+- **Dual-modality support**: Hand-like (click) and gaze-like (dwell + Space key) interactions
+- **Adaptive policies**: Rule-based UI adaptation (declutter, inflate width) based on performance triggers
+- **Contextual factors**: Time pressure countdown and aging proxy (visual impairment simulation)
+- **Robust logging**: 23-column CSV schema with participant tracking, TLX scores, and metadata
+- **Analysis ready**: Python ops tools (anonymization, validation) and R/Python analysis skeletons
 
 ## Quick Start
 
@@ -37,25 +51,6 @@ xr-adaptive-modality-2025/
 ├── ops/              # Operations and deployment
 └── video/            # Video materials
 ```
-
-## About
-
-This project investigates how adaptive user interfaces can enhance performance and reduce cognitive load in XR environments. The platform enables researchers to:
-
-- Conduct Fitts's Law target selection experiments
-- Switch between gaze-based and hand-based input modalities
-- Measure cognitive load through NASA-TLX and pupil diameter proxies
-- Study adaptation policies based on real-time performance triggers
-- Simulate contextual factors (time pressure, visual aging)
-- Collect comprehensive behavioral data for statistical analysis
-
-### Research Focus
-
-- **Adaptive Modality Switching**: How does switching between gaze and hand input affect performance?
-- **Performance Triggers**: What metric thresholds (RT percentile, error bursts) should drive adaptation?
-- **Hysteresis**: How many consecutive good/bad trials should be required before adapting?
-- **Contextual Factors**: How do time pressure and visual aging affect interaction patterns?
-- **Cognitive Load**: Can pupil diameter proxies provide early indicators of performance degradation?
 
 ## Features
 
@@ -141,14 +136,6 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
-## Technology Stack
-
-- **Frontend:** React 18 + TypeScript + Vite
-- **Styling:** CSS Modules
-- **Testing:** Vitest + React Testing Library + Playwright
-- **Linting:** ESLint + Prettier
-- **CI/CD:** GitHub Actions
-
 ## Privacy
 
 Privacy is important. See [docs/privacy_notice.md](docs/privacy_notice.md) for details on data collection, retention, and your rights.
@@ -159,14 +146,7 @@ Privacy is important. See [docs/privacy_notice.md](docs/privacy_notice.md) for d
 - **Retention ≤90 days** (then permanently deleted)
 - **Local processing** (all data remains on your device until export)
 
-## Authors
+## Author
 
-- **Mohammad Dastgheib**
-- **Fatemeh Pourmahdian**
-
-## Repository Topics
-
-For improved discoverability, add these topics to your GitHub repository:
-
-`fitts-law` `adaptive-ui` `human-computer-interaction` `research-tool` `reaction-time` `cognitive-load` `workload-assessment` `nasa-tlx` `pupil-diameter` `eye-tracking` `accessible-design` `aging-simulation` `time-pressure` `gaze-tracking` `hand-tracking` `interaction-design` `extended-reality` `xr-research` `react` `typescript` `vite` `behavioral-studies` `usability-testing` `experimental-platform` `adaptive-interface` `dual-modality`
+Fatemeh Pourmahdian
 
