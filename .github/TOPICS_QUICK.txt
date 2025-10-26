@@ -1,0 +1,58 @@
+## 📝 Quick Update Guide
+
+### Step 1: Go to GitHub
+Visit: https://github.com/mohdasti/xr-adaptive-modality-2025
+
+### Step 2: Click Settings Icon
+Click the **⚙️ gear icon** next to "About" section
+
+### Step 3: Update Description
+Copy this text:
+
+```
+Adaptive Modality Systems for Extended Reality: A Fitts's Law Investigation
+
+A research platform for studying adaptive user interface interventions in dual-modality XR environments (hand vs. gaze). Features Fitts's Law target selection, policy-driven adaptation, contextual factors (pressure, aging), and comprehensive data logging.
+```
+
+### Step 4: Add Topics
+In the Topics field, add these keywords (one by one, or paste the comma-separated list below):
+
+react
+typescript
+vite
+human-computer-interaction
+extended-reality
+adaptive-interfaces
+fitts-law
+gaze-interaction
+eye-tracking
+adaptive-ui
+policy-based-adaptation
+python
+r
+statistical-analysis
+cognitive-modeling
+data-logging
+privacy-first
+experimental-research
+psychology
+usability-research
+
+**Or paste this entire line at once:**
+react,typescript,vite,human-computer-interaction,extended-reality,adaptive-interfaces,fitts-law,gaze-interaction,eye-tracking,adaptive-ui,policy-based-adaptation,python,r,statistical-analysis,cognitive-modeling,data-logging,privacy-first,experimental-research,psychology,usability-research
+
+### Step 5: Save
+Click **Save changes**
+
+---
+
+## Alternative: Use GitHub CLI
+
+```bash
+# Update description
+gh repo edit mohdasti/xr-adaptive-modality-2025 --description "Adaptive Modality Systems for Extended Reality: A Fitts's Law Investigation - A research platform for studying adaptive user interface interventions in dual-modality XR environments (hand vs. gaze). Features Fitts's Law target selection, policy-driven adaptation, contextual factors (pressure, aging), and comprehensive data logging."
+
+# Add topics (run these commands one by one or all at once)
+gh repo edit mohdasti/xr-adaptive-modality-2025 --add-topic react --add-topic typescript --add-topic vite --add-topic human-computer-interaction --add-topic extended-reality --add-topic adaptive-interfaces --add-topic fitts-law --add-topic gaze-interaction --add-topic eye-tracking --add-topic adaptive-ui --add-topic policy-based-adaptation --add-topic python --add-topic r --add-topic statistical-analysis --add-topic cognitive-modeling --add-topic data-logging --add-topic privacy-first --add-topic experimental-research --add-topic psychology --add-topic usability-research
+```
