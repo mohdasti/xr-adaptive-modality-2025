@@ -1,4 +1,4 @@
-type EventHandler = (payload: any) => void
+type EventHandler = (payload: unknown) => void
 
 class EventBus {
   private events: Map<string, Set<EventHandler>> = new Map()
@@ -20,7 +20,7 @@ class EventBus {
     }
   }
 
-  emit(event: string, payload?: any): void {
+  emit(event: string, payload?: unknown): void {
     const handlers = this.events.get(event)
     if (handlers) {
       handlers.forEach((handler) => {

@@ -236,7 +236,7 @@ export function getLogger(): CSVLogger {
 /**
  * Helper to create row from trial event
  */
-export function createRowFromTrial(payload: any, blockNumber: number = 1): CSVRow {
+export function createRowFromTrial(payload: Record<string, unknown>, blockNumber: number = 1): CSVRow {
   const row: CSVRow = {
     ts: payload.timestamp || Date.now(),
     block: blockNumber,

@@ -85,8 +85,6 @@ test.describe('Pressure and Adaptation', () => {
     const logTable = page.locator('.log-table tbody')
     await page.waitForTimeout(1000) // Give events time to log
     
-    const policyRows = logTable.locator('tr').filter({ hasText: 'policy:change' })
-    
     // Should have at least logged some events (start, end, possibly policy:change)
     const allRows = await logTable.locator('tr').count()
     expect(allRows).toBeGreaterThan(0)
@@ -190,8 +188,6 @@ test.describe('Pressure and Adaptation', () => {
     await page.waitForTimeout(500)
     
     // Target should exist
-    const target = page.locator('.fitts-target')
-    
     // Check for inflated class if policy triggers
     await page.waitForTimeout(500)
     

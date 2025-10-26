@@ -65,6 +65,19 @@ export function FittsTask({
   const animationFrameRef = useRef<number | null>(null)
   const trialDataRef = useRef<TrialData | null>(null)
 
+  const handleTimeout = useCallback(() => {
+    if (!trialDataRef.current) return
+    
+    bus.emit('trial:error', {
+      trialId: trialDataRef.current.trialId,
+      error: 'timeout',
+      err_type: 'timeout',
+      timestamp: Date.now(),
+    })
+    
+    onTrialError('timeout')
+  }, [onTrialError])
+
   // Generate possible target positions
   const targetPositions = useRef(
     generateCircularPositions(startPos, config.A, 8)
@@ -120,20 +133,7 @@ export function FittsTask({
         handleTimeout()
       }, timeout)
     }
-  }, [config, modalityConfig, ui_mode, pressure, trialNumber, timeout, startPos])
-
-  const handleTimeout = useCallback(() => {
-    if (!trialDataRef.current) return
-    
-    bus.emit('trial:error', {
-      trialId: trialDataRef.current.trialId,
-      error: 'timeout',
-      err_type: 'timeout',
-      timestamp: Date.now(),
-    })
-    
-    onTrialError('timeout')
-  }, [onTrialError])
+  }, [config, modalityConfig, ui_mode, pressure, trialNumber, timeout, startPos, handleTimeout])
 
   const completeSelection = useCallback(
     (clickPos: Position, isClick: boolean = false) => {
@@ -184,7 +184,7 @@ export function FittsTask({
         onTrialError(errorType)
       }
     },
-    [trialStartTime, targetPos, config, trialNumber, modalityConfig, onTrialComplete, onTrialError]
+    [trialStartTime, targetPos, config, trialNumber, modalityConfig, onTrialComplete, onTrialError, effectiveWidth]
   )
 
   // Hand mode: click handler

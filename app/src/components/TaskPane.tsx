@@ -53,7 +53,7 @@ export function TaskPane() {
   
   // Listen for modality changes from HUDPane
   useEffect(() => {
-    const handleModalityChange = (payload: any) => {
+    const handleModalityChange = (payload: Record<string, unknown>) => {
       setModalityConfig(payload.config)
     }
     
@@ -63,7 +63,7 @@ export function TaskPane() {
   
   // Listen for policy changes
   useEffect(() => {
-    const handlePolicyChange = (payload: any) => {
+    const handlePolicyChange = (payload: Record<string, unknown>) => {
       if (payload.state && payload.state.action === 'inflate_width') {
         const delta = payload.state.delta_w || 0.25
         setWidthScale(1.0 + delta)
@@ -78,7 +78,7 @@ export function TaskPane() {
   
   // Listen for context changes
   useEffect(() => {
-    const handleContextChange = (payload: any) => {
+    const handleContextChange = (payload: Record<string, unknown>) => {
       setPressureEnabled(payload.pressure)
       setAgingEnabled(payload.aging)
       if (payload.camera !== undefined) {

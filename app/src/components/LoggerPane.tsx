@@ -7,7 +7,7 @@ import './LoggerPane.css'
 interface LogEntry {
   id: string
   event: string
-  payload: any
+  payload: Record<string, unknown>
   timestamp: number
   time: string
 }
@@ -29,7 +29,7 @@ export function LoggerPane() {
     const logger = getLogger()
     let blockNumber = 1
     
-    const createLogHandler = (eventName: string) => (payload: any) => {
+    const createLogHandler = (eventName: string) => (payload: Record<string, unknown>) => {
       const entry: LogEntry = {
         id: `${eventName}-${Date.now()}-${Math.random()}`,
         event: eventName,
@@ -122,7 +122,7 @@ export function LoggerPane() {
     return ''
   }
 
-  const formatPayload = (payload: any): string => {
+  const formatPayload = (payload: Record<string, unknown>): string => {
     if (!payload) return 'null'
     try {
       return JSON.stringify(payload, null, 2)

@@ -105,7 +105,7 @@ export function HUDPane() {
   useEffect(() => {
     const policyEngine = getPolicyEngine()
     
-    const handleTrialStart = (payload: any) => {
+    const handleTrialStart = (payload: Record<string, unknown>) => {
       setStats((prev) => ({
         ...prev,
         totalTrials: prev.totalTrials + 1,
@@ -119,7 +119,7 @@ export function HUDPane() {
       }
     }
 
-    const handleTrialEnd = (payload: any) => {
+    const handleTrialEnd = (payload: Record<string, unknown>) => {
       setStats((prev) => ({
         ...prev,
         activeTrials: Math.max(0, prev.activeTrials - 1),
@@ -156,7 +156,7 @@ export function HUDPane() {
       }
     }
 
-    const handleTrialError = (payload: any) => {
+    const handleTrialError = (payload: Record<string, unknown>) => {
       setStats((prev) => ({
         ...prev,
         errors: prev.errors + 1,
@@ -193,7 +193,7 @@ export function HUDPane() {
       }
     }
 
-    const handlePolicyChange = (payload: any) => {
+    const handlePolicyChange = (payload: Record<string, unknown>) => {
       setStats((prev) => ({
         ...prev,
         currentPolicy: payload.policy || 'default',
@@ -212,7 +212,7 @@ export function HUDPane() {
       bus.off('trial:error', handleTrialError)
       bus.off('policy:change', handlePolicyChange)
     }
-  }, [modalityConfig.modality, pressure, policyState.action])
+  }, [modalityConfig.modality, pressure, policyState.action, pressureEnabled])
 
   return (
     <div className={`pane hud-pane ${policyState.action === 'declutter' ? 'decluttered' : ''}`}>

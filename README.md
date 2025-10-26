@@ -5,24 +5,7 @@
 ![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
-**Adaptive Modality Systems for Extended Reality: A Fitts's Law Investigation**
-
-A research platform for studying adaptive user interface interventions in dual-modality XR environments (hand vs. gaze). Features Fitts's Law target selection, policy-driven adaptation, contextual factors (pressure, aging), and comprehensive data logging.
-
-## 📋 Description
-
-This platform enables researchers to:
-- Study hand vs. gaze interaction patterns using Fitts's Law
-- Investigate adaptive UI interventions based on performance and context
-- Evaluate cognitive load using NASA-TLX
-- Generate comprehensive CSV datasets for statistical analysis
-
-Key features include:
-- **Dual-modality support**: Hand-like (click) and gaze-like (dwell + Space key) interactions
-- **Adaptive policies**: Rule-based UI adaptation (declutter, inflate width) based on performance triggers
-- **Contextual factors**: Time pressure countdown and aging proxy (visual impairment simulation)
-- **Robust logging**: 23-column CSV schema with participant tracking, TLX scores, and metadata
-- **Analysis ready**: Python ops tools (anonymization, validation) and R/Python analysis skeletons
+A research project exploring adaptive modality in extended reality environments.
 
 ## Quick Start
 
