@@ -273,10 +273,18 @@ bus.off('trial:start', handler)
 4. **Run tests**: `npm run test`
 5. **Build**: `npm run build`
 
+### Libraries
+
+- `/app/src/lib/bus.ts`: Global event bus
+- `/app/src/lib/fitts.ts`: Fitts's Law calculations
+- `/app/src/lib/modality.ts`: Modality mechanics
+- `/app/src/lib/policy.ts`: Adaptive policy engine
+- `/app/src/lib/csv.ts`: CSV logging and data export
+
 ## Future Enhancements
 
 - [ ] Event persistence (localStorage/IndexedDB)
-- [ ] Export logs to CSV/JSON
+- [x] Export logs to CSV/JSON
 - [ ] Real-time event filtering
 - [ ] Event replay functionality
 - [ ] WebSocket integration for multi-user sessions

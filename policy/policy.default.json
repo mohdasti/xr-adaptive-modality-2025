@@ -1,0 +1,25 @@
+{
+  "adaptive": true,
+  "pressure_only": true,
+  "hysteresis_trials": 5,
+  "gaze": {
+    "trigger": {
+      "rt_p": 75,
+      "err_burst": 2
+    },
+    "action": "declutter"
+  },
+  "hand": {
+    "trigger": {
+      "rt_p": 75,
+      "err_burst": 2
+    },
+    "action": "inflate_width",
+    "delta_w": 0.25
+  },
+  "fallback": {
+    "use_performance_triggers": true,
+    "use_camera": false
+  }
+}
+

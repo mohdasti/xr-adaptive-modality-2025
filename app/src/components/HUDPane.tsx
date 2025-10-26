@@ -7,6 +7,11 @@ import {
   DEFAULT_MODALITY_CONFIG,
   getModalityLabel,
 } from '../lib/modality'
+import {
+  getPolicyEngine,
+  PolicyState,
+  TrialHistoryEntry,
+} from '../lib/policy'
 import './HUDPane.css'
 
 interface Stats {
@@ -29,6 +34,17 @@ export function HUDPane() {
   const [modalityConfig, setModalityConfig] = useState<ModalityConfig>(
     DEFAULT_MODALITY_CONFIG
   )
+  
+  const [policyState, setPolicyState] = useState<PolicyState>({
+    action: 'none',
+    reason: 'Initial state',
+    triggered: false,
+    hysteresis_count: 0,
+  })
+  
+  const [pressure, setPressure] = useState(1.0)
+  const [pressureEnabled, setPressureEnabled] = useState(false)
+  const [agingEnabled, setAgingEnabled] = useState(false)
   
   const handleModalityChange = (modality: Modality) => {
     const newConfig: ModalityConfig = {
@@ -53,37 +69,122 @@ export function HUDPane() {
       timestamp: Date.now(),
     })
   }
+  
+  const handlePressureToggle = () => {
+    const newValue = !pressureEnabled
+    setPressureEnabled(newValue)
+    bus.emit('context:change', {
+      pressure: newValue,
+      aging: agingEnabled,
+      timestamp: Date.now(),
+    })
+  }
+  
+  const handleAgingToggle = () => {
+    const newValue = !agingEnabled
+    setAgingEnabled(newValue)
+    bus.emit('context:change', {
+      pressure: pressureEnabled,
+      aging: newValue,
+      timestamp: Date.now(),
+    })
+  }
 
   useEffect(() => {
-    const handleTrialStart = () => {
+    const policyEngine = getPolicyEngine()
+    
+    const handleTrialStart = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         totalTrials: prev.totalTrials + 1,
         activeTrials: prev.activeTrials + 1,
         lastEventTime: new Date().toLocaleTimeString(),
       }))
+      
+      // Update pressure if provided
+      if (payload.pressure !== undefined) {
+        setPressure(payload.pressure)
+      }
     }
 
-    const handleTrialEnd = () => {
+    const handleTrialEnd = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         activeTrials: Math.max(0, prev.activeTrials - 1),
         lastEventTime: new Date().toLocaleTimeString(),
       }))
+      
+      // Add to policy engine history
+      const entry: TrialHistoryEntry = {
+        trialId: payload.trialId,
+        modality: payload.modality || modalityConfig.modality,
+        rt_ms: payload.rt_ms,
+        correct: payload.correct || false,
+        error: false,
+        timestamp: payload.timestamp,
+      }
+      policyEngine.addTrial(entry)
+      
+      // Compute next policy state
+      const newState = policyEngine.nextPolicyState({
+        modality: modalityConfig.modality,
+        pressure,
+        pressureEnabled,
+        currentRT: payload.rt_ms,
+      })
+      
+      // If state changed, emit policy:change event
+      if (newState.action !== policyState.action) {
+        setPolicyState(newState)
+        bus.emit('policy:change', {
+          policy: newState.action,
+          state: newState,
+          timestamp: Date.now(),
+        })
+      }
     }
 
-    const handleTrialError = () => {
+    const handleTrialError = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         errors: prev.errors + 1,
         lastEventTime: new Date().toLocaleTimeString(),
       }))
+      
+      // Add to policy engine history
+      const entry: TrialHistoryEntry = {
+        trialId: payload.trialId,
+        modality: payload.modality || modalityConfig.modality,
+        rt_ms: payload.rt_ms,
+        correct: false,
+        error: true,
+        err_type: payload.err_type,
+        timestamp: payload.timestamp,
+      }
+      policyEngine.addTrial(entry)
+      
+      // Compute next policy state
+      const newState = policyEngine.nextPolicyState({
+        modality: modalityConfig.modality,
+        pressure,
+        pressureEnabled,
+      })
+      
+      // If state changed, emit policy:change event
+      if (newState.action !== policyState.action) {
+        setPolicyState(newState)
+        bus.emit('policy:change', {
+          policy: newState.action,
+          state: newState,
+          timestamp: Date.now(),
+        })
+      }
     }
 
     const handlePolicyChange = (payload: any) => {
       setStats((prev) => ({
         ...prev,
-        currentPolicy: payload.policy,
+        currentPolicy: payload.policy || 'default',
         lastEventTime: new Date().toLocaleTimeString(),
       }))
     }
@@ -99,11 +200,52 @@ export function HUDPane() {
       bus.off('trial:error', handleTrialError)
       bus.off('policy:change', handlePolicyChange)
     }
-  }, [])
+  }, [modalityConfig.modality, pressure, policyState.action])
 
   return (
-    <div className="pane hud-pane">
+    <div className={`pane hud-pane ${policyState.action === 'declutter' ? 'decluttered' : ''}`}>
       <h2>System HUD</h2>
+      
+      {/* Policy Status */}
+      {policyState.action !== 'none' && (
+        <div className="policy-status">
+          <div className="policy-badge">
+            <span className="policy-icon">⚡</span>
+            <strong>Adaptation Active:</strong> {policyState.action}
+          </div>
+          <div className="policy-reason noncritical">{policyState.reason}</div>
+        </div>
+      )}
+      
+      {/* Contextual Factors */}
+      <div className="context-controls">
+        <h3>Contextual Factors</h3>
+        <div className="context-toggles">
+          <label className="context-toggle">
+            <input
+              type="checkbox"
+              checked={pressureEnabled}
+              onChange={handlePressureToggle}
+            />
+            <span className="toggle-label">
+              <span className="toggle-icon">⏱️</span>
+              Pressure (Countdown Timer)
+            </span>
+          </label>
+          
+          <label className="context-toggle">
+            <input
+              type="checkbox"
+              checked={agingEnabled}
+              onChange={handleAgingToggle}
+            />
+            <span className="toggle-label">
+              <span className="toggle-icon">👓</span>
+              Aging Proxy (Reduced Contrast)
+            </span>
+          </label>
+        </div>
+      </div>
       
       {/* Modality Switch */}
       <div className="modality-switch">
@@ -176,13 +318,13 @@ export function HUDPane() {
           <div className="stat-value policy">{stats.currentPolicy}</div>
         </div>
         
-        <div className="stat-card wide">
+        <div className="stat-card wide noncritical">
           <div className="stat-label">Last Event</div>
           <div className="stat-value time">{stats.lastEventTime}</div>
         </div>
       </div>
 
-      <div className="status-indicator">
+      <div className="status-indicator noncritical">
         <span className="indicator-dot"></span>
         System Active
       </div>

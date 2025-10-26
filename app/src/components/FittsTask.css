@@ -5,6 +5,24 @@
   width: 100%;
 }
 
+/* Aging mode effects */
+.fitts-task.aging-mode .fitts-target {
+  filter: contrast(0.7) blur(0.5px);
+}
+
+.fitts-task.aging-mode .fitts-info {
+  filter: contrast(0.8);
+  opacity: 0.85;
+}
+
+.fitts-task.aging-mode .fitts-param span {
+  color: #666;
+}
+
+.fitts-task.aging-mode .fitts-param strong {
+  color: #0099cc;
+}
+
 .fitts-canvas {
   position: relative;
   width: 800px;
@@ -98,6 +116,21 @@
   box-shadow: 0 0 30px rgba(0, 217, 255, 0.8);
 }
 
+.fitts-target.inflated {
+  border-color: #ffa500;
+  box-shadow: 0 0 20px rgba(255, 165, 0, 0.6);
+  animation: inflate-pulse 1s ease-in-out infinite;
+}
+
+@keyframes inflate-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 165, 0, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 165, 0, 0.9);
+  }
+}
+
 /* Dwell progress indicator */
 .dwell-progress {
   position: absolute;
@@ -173,6 +206,55 @@
   font-size: 1rem;
   color: #00d9ff;
   font-family: 'Courier New', monospace;
+}
+
+.scale-indicator {
+  color: #ffa500;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Countdown overlay */
+.countdown-overlay {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 1rem 1.5rem;
+  background: rgba(0, 217, 255, 0.9);
+  color: #000;
+  font-size: 2rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.6);
+  z-index: 100;
+  animation: countdown-pulse 1s ease-in-out infinite;
+}
+
+.countdown-overlay.warning {
+  background: rgba(255, 68, 68, 0.9);
+  box-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+  animation: countdown-warning 0.5s ease-in-out infinite;
+}
+
+@keyframes countdown-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes countdown-warning {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 30px rgba(255, 68, 68, 1);
+  }
 }
 
 /* Responsive adjustments */

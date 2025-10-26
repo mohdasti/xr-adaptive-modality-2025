@@ -24,6 +24,9 @@ export interface FittsTaskProps {
   ui_mode: string
   pressure: number
   trialNumber: number
+  widthScale?: number // Width inflation factor (default: 1.0)
+  pressureEnabled?: boolean // Show countdown timer
+  agingEnabled?: boolean // Apply aging visual effects
   onTrialComplete: () => void
   onTrialError: (errorType: 'miss' | 'timeout' | 'slip') => void
   timeout?: number // milliseconds
@@ -35,10 +38,15 @@ export function FittsTask({
   ui_mode,
   pressure,
   trialNumber,
+  widthScale = 1.0,
+  pressureEnabled = false,
+  agingEnabled = false,
   onTrialComplete,
   onTrialError,
   timeout = 10000,
 }: FittsTaskProps) {
+  // Apply width scaling
+  const effectiveWidth = config.W * widthScale
   const [startPos] = useState<Position>({ x: 400, y: 300 }) // Center of canvas
   const [targetPos, setTargetPos] = useState<Position | null>(null)
   const [trialStartTime, setTrialStartTime] = useState<number | null>(null)
@@ -47,6 +55,7 @@ export function FittsTask({
   const [gazeState, setGazeState] = useState<GazeState>(
     createGazeState(modalityConfig.dwellTime)
   )
+  const [countdown, setCountdown] = useState<number>(timeout / 1000)
   
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
@@ -65,6 +74,7 @@ export function FittsTask({
     setTargetPos(target)
     setShowStart(false)
     setGazeState(createGazeState(modalityConfig.dwellTime))
+    setCountdown(timeout / 1000)
     
     const startTime = Date.now()
     setTrialStartTime(startTime)
@@ -134,7 +144,7 @@ export function FittsTask({
       const endTime = Date.now()
       const rt_ms = endTime - trialStartTime
       
-      const hit = isHit(clickPos, targetPos, config.W)
+      const hit = isHit(clickPos, targetPos, effectiveWidth)
       
       if (hit) {
         // Success
@@ -218,7 +228,7 @@ export function FittsTask({
     if (showStart || !targetPos) return
     
     const updateHover = () => {
-      const isHovering = isPointInTarget(cursorPos, targetPos, config.W)
+      const isHovering = isPointInTarget(cursorPos, targetPos, effectiveWidth)
       const currentTime = Date.now()
       
       setGazeState((prev) => {
@@ -257,7 +267,7 @@ export function FittsTask({
     showStart,
     targetPos,
     cursorPos,
-    config.W,
+    effectiveWidth,
     completeSelection,
   ])
 
@@ -304,6 +314,24 @@ export function FittsTask({
     onTrialError,
   ])
 
+  // Countdown timer for pressure mode
+  useEffect(() => {
+    if (!pressureEnabled || showStart || !targetPos) return
+    
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        const next = prev - 0.1
+        if (next <= 0) {
+          clearInterval(interval)
+          return 0
+        }
+        return next
+      })
+    }, 100)
+    
+    return () => clearInterval(interval)
+  }, [pressureEnabled, showStart, targetPos])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -317,12 +345,18 @@ export function FittsTask({
   }, [])
 
   return (
-    <div className="fitts-task">
+    <div className={`fitts-task ${agingEnabled ? 'aging-mode' : ''}`}>
       <div
         className={`fitts-canvas ${modalityConfig.modality === Modality.GAZE ? 'gaze-mode' : 'hand-mode'}`}
         onClick={handleClick}
         onMouseMove={handleMouseMove}
       >
+        {/* Countdown overlay for pressure mode */}
+        {pressureEnabled && !showStart && targetPos && (
+          <div className={`countdown-overlay ${countdown <= 3 ? 'warning' : ''}`}>
+            {countdown.toFixed(1)}s
+          </div>
+        )}
         {showStart && (
           <button
             className="fitts-start-button"
@@ -338,13 +372,13 @@ export function FittsTask({
         {!showStart && targetPos && (
           <>
             <div
-              className={`fitts-target ${gazeState.isHovering ? 'hovering' : ''}`}
-              style={{
-                left: `${targetPos.x}px`,
-                top: `${targetPos.y}px`,
-                width: `${config.W}px`,
-                height: `${config.W}px`,
-              }}
+            className={`fitts-target ${gazeState.isHovering ? 'hovering' : ''} ${widthScale > 1.0 ? 'inflated' : ''}`}
+            style={{
+              left: `${targetPos.x}px`,
+              top: `${targetPos.y}px`,
+              width: `${effectiveWidth}px`,
+              height: `${effectiveWidth}px`,
+            }}
             >
               {/* Dwell progress indicator for gaze mode */}
               {modalityConfig.modality === Modality.GAZE &&
@@ -368,7 +402,7 @@ export function FittsTask({
                   className="space-indicator"
                   style={{
                     left: `${targetPos.x}px`,
-                    top: `${targetPos.y - config.W / 2 - 40}px`,
+                    top: `${targetPos.y - effectiveWidth / 2 - 40}px`,
                   }}
                 >
                   Press SPACE
@@ -384,6 +418,9 @@ export function FittsTask({
         </div>
         <div className="fitts-param">
           <span>Width:</span> <strong>{config.W}px</strong>
+          {widthScale > 1.0 && (
+            <span className="scale-indicator"> (×{widthScale.toFixed(2)})</span>
+          )}
         </div>
         <div className="fitts-param">
           <span>ID:</span> <strong>{config.ID.toFixed(2)} bits</strong>

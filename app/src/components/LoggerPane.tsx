@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { bus } from '../lib/bus'
+import { getLogger, createRowFromTrial, initLogger } from '../lib/csv'
 import './LoggerPane.css'
 
 interface LogEntry {
@@ -14,8 +15,19 @@ const MAX_LOGS = 20
 
 export function LoggerPane() {
   const [logs, setLogs] = useState<LogEntry[]>([])
+  const [csvRowCount, setCsvRowCount] = useState(0)
+  const [currentBlock, setCurrentBlock] = useState(1)
+
+  // Initialize CSV logger on mount
+  useEffect(() => {
+    const pid = prompt('Enter Participant ID (or leave blank for auto-generated):')
+    initLogger(pid || undefined)
+  }, [])
 
   useEffect(() => {
+    const logger = getLogger()
+    let blockNumber = 1
+    
     const createLogHandler = (eventName: string) => (payload: any) => {
       const entry: LogEntry = {
         id: `${eventName}-${Date.now()}-${Math.random()}`,
@@ -29,6 +41,19 @@ export function LoggerPane() {
         const updated = [entry, ...prev]
         return updated.slice(0, MAX_LOGS)
       })
+      
+      // Log to CSV for trial events
+      if (eventName === 'trial:end' || eventName === 'trial:error') {
+        const row = createRowFromTrial(payload, blockNumber)
+        logger.pushRow(row)
+        setCsvRowCount(logger.getRowCount())
+      }
+      
+      // Track block completion
+      if (eventName === 'block:complete') {
+        blockNumber++
+        setCurrentBlock(blockNumber)
+      }
     }
 
     const handlers = {
@@ -54,6 +79,28 @@ export function LoggerPane() {
   const clearLogs = () => {
     setLogs([])
   }
+  
+  const handleDownloadCSV = () => {
+    const logger = getLogger()
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+    const filename = `experiment_${timestamp}.csv`
+    logger.downloadCSV(filename)
+  }
+  
+  const handleDownloadJSON = () => {
+    const logger = getLogger()
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+    const filename = `experiment_${timestamp}.json`
+    logger.downloadJSON(filename)
+  }
+  
+  const handleClearCSV = () => {
+    if (confirm('Clear all CSV data? This cannot be undone.')) {
+      const logger = getLogger()
+      logger.clear()
+      setCsvRowCount(0)
+    }
+  }
 
   const getEventClass = (event: string): string => {
     if (event.includes('error')) return 'event-error'
@@ -76,13 +123,27 @@ export function LoggerPane() {
     <div className="pane logger-pane">
       <div className="logger-header">
         <h2>Event Logger</h2>
-        <button onClick={clearLogs} className="clear-btn">
-          Clear Logs
-        </button>
+        <div className="logger-actions">
+          <button onClick={clearLogs} className="clear-btn">
+            Clear Logs
+          </button>
+          <div className="csv-actions">
+            <span className="csv-count">{csvRowCount} rows</span>
+            <button onClick={handleDownloadCSV} className="download-btn">
+              📊 Download CSV
+            </button>
+            <button onClick={handleDownloadJSON} className="download-btn secondary">
+              📄 JSON
+            </button>
+            <button onClick={handleClearCSV} className="clear-btn small">
+              🗑️
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="log-info">
-        Showing last {logs.length} of {MAX_LOGS} events
+        Showing last {logs.length} of {MAX_LOGS} events | Block: {currentBlock}
       </div>
 
       <div className="log-table-container">

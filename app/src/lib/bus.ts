@@ -70,19 +70,34 @@ export interface EventPayloads {
   'trial:error': {
     trialId: string
     error: string
-    err_type?: 'miss' | 'timeout'
+    err_type?: 'miss' | 'timeout' | 'slip'
     rt_ms?: number
     clickPos?: { x: number; y: number }
     targetPos?: { x: number; y: number }
     timestamp: number
   }
-  'policy:change': { policy: string; timestamp: number }
+  'policy:change': {
+    policy?: string
+    state?: {
+      action: string
+      reason: string
+      triggered: boolean
+      hysteresis_count: number
+      delta_w?: number
+    }
+    timestamp: number
+  }
   'block:complete': { totalTrials: number; timestamp: number }
   'modality:change': {
     config: {
       modality: string
       dwellTime: number
     }
+    timestamp: number
+  }
+  'context:change': {
+    pressure: boolean
+    aging: boolean
     timestamp: number
   }
 }

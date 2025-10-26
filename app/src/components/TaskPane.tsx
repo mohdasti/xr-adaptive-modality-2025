@@ -39,6 +39,13 @@ export function TaskPane() {
   const [uiMode, setUiMode] = useState('standard')
   const [pressure, setPressure] = useState(1.0)
   
+  // Width scale factor from policy
+  const [widthScale, setWidthScale] = useState(1.0)
+  
+  // Context factors
+  const [pressureEnabled, setPressureEnabled] = useState(false)
+  const [agingEnabled, setAgingEnabled] = useState(false)
+  
   // Listen for modality changes from HUDPane
   useEffect(() => {
     const handleModalityChange = (payload: any) => {
@@ -47,6 +54,32 @@ export function TaskPane() {
     
     bus.on('modality:change', handleModalityChange)
     return () => bus.off('modality:change', handleModalityChange)
+  }, [])
+  
+  // Listen for policy changes
+  useEffect(() => {
+    const handlePolicyChange = (payload: any) => {
+      if (payload.state && payload.state.action === 'inflate_width') {
+        const delta = payload.state.delta_w || 0.25
+        setWidthScale(1.0 + delta)
+      } else {
+        setWidthScale(1.0)
+      }
+    }
+    
+    bus.on('policy:change', handlePolicyChange)
+    return () => bus.off('policy:change', handlePolicyChange)
+  }, [])
+  
+  // Listen for context changes
+  useEffect(() => {
+    const handleContextChange = (payload: any) => {
+      setPressureEnabled(payload.pressure)
+      setAgingEnabled(payload.aging)
+    }
+    
+    bus.on('context:change', handleContextChange)
+    return () => bus.off('context:change', handleContextChange)
   }, [])
 
   // Manual mode handlers
@@ -307,6 +340,9 @@ export function TaskPane() {
             ui_mode={uiMode}
             pressure={pressure}
             trialNumber={currentTrialIndex + 1}
+            widthScale={widthScale}
+            pressureEnabled={pressureEnabled}
+            agingEnabled={agingEnabled}
             onTrialComplete={handleFittsTrialComplete}
             onTrialError={handleFittsTrialError}
             timeout={10000}

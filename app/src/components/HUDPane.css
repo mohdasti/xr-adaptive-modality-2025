@@ -2,6 +2,132 @@
   background: linear-gradient(135deg, #1f1f3a 0%, #1a1a2e 100%);
 }
 
+/* Declutter mode: hide non-critical elements */
+.hud-pane.decluttered .noncritical {
+  display: none;
+}
+
+/* Policy Status */
+.policy-status {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(255, 165, 0, 0.1) 0%, rgba(255, 140, 0, 0.05) 100%);
+  border: 2px solid #ffa500;
+  border-radius: 6px;
+  animation: pulse-policy 2s ease-in-out infinite;
+}
+
+@keyframes pulse-policy {
+  0%, 100% {
+    border-color: #ffa500;
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.3);
+  }
+  50% {
+    border-color: #ffb733;
+    box-shadow: 0 0 20px rgba(255, 165, 0, 0.5);
+  }
+}
+
+.policy-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #ffa500;
+  margin-bottom: 0.5rem;
+}
+
+.policy-icon {
+  font-size: 1.25rem;
+  animation: flash 1s ease-in-out infinite;
+}
+
+@keyframes flash {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.policy-reason {
+  font-size: 0.75rem;
+  color: #b0b0b0;
+  font-style: italic;
+}
+
+/* Context Controls */
+.context-controls {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(255, 165, 0, 0.05);
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+}
+
+.context-controls h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  color: #ffa500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.context-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.context-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #0f0f0f;
+  border: 2px solid #2a2a2a;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.context-toggle:hover {
+  border-color: #ffa500;
+  background: rgba(255, 165, 0, 0.05);
+}
+
+.context-toggle input[type='checkbox'] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #ffa500;
+}
+
+.context-toggle input[type='checkbox']:checked + .toggle-label {
+  color: #ffa500;
+  font-weight: 600;
+}
+
+.context-toggle:has(input:checked) {
+  border-color: #ffa500;
+  background: rgba(255, 165, 0, 0.1);
+  box-shadow: 0 0 12px rgba(255, 165, 0, 0.3);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #b0b0b0;
+  transition: color 0.2s ease;
+}
+
+.toggle-icon {
+  font-size: 1.25rem;
+}
+
 /* Modality Switch */
 .modality-switch {
   margin-bottom: 1.5rem;

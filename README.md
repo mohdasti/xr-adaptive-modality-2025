@@ -54,6 +54,16 @@ xr-adaptive-modality-2025/
 - Real-time modality switching
 - Error detection (miss, timeout, slip)
 
+### Policy-Based Adaptation Engine
+
+- Rule-based adaptation responding to performance
+- **Triggers**: RT percentile (p75), error burst detection
+- **Actions**:
+  - Declutter (gaze): Hide non-critical UI elements
+  - Inflate width (hand): Increase target size by 25%
+- Hysteresis mechanism (5-trial threshold)
+- Configurable via `/policy/policy.default.json`
+
 ### Global Event Bus
 
 Lightweight pub/sub system for inter-component communication:
@@ -65,6 +75,9 @@ See detailed documentation:
 - [app/ARCHITECTURE.md](app/ARCHITECTURE.md) - System architecture
 - [app/FITTS_TASK.md](app/FITTS_TASK.md) - Fitts task implementation
 - [app/MODALITY.md](app/MODALITY.md) - Modality mechanics
+- [app/POLICY.md](app/POLICY.md) - Adaptation engine
+- [app/CONTEXT.md](app/CONTEXT.md) - Contextual factors (pressure, aging)
+- [app/CSV_LOGGING.md](app/CSV_LOGGING.md) - Data logging and export
 
 ## Development
 
