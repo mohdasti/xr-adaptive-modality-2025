@@ -1,0 +1,55 @@
+# GitHub Repository Topics/Tags
+
+Add these topics to your repository on GitHub for better discoverability:
+
+## Topics (Copy and paste into GitHub Topics field)
+
+fitts-law
+target-selection
+reaction-time
+adaptive-ui
+modality-switching
+gaze-tracking
+hand-tracking
+cognitive-load
+workload-assessment
+nasa-tlx
+pupil-diameter
+eye-tracking
+accessible-design
+aging-simulation
+time-pressure
+hysteresis-adaptation
+performance-triggers
+policy-driven
+declutter-ui
+width-inflation
+experimental-platform
+research-tool
+human-computer-interaction
+extended-reality
+xr-research
+react
+typescript
+vite
+fitts-experiment
+behavioral-studies
+usability-testing
+adaptive-interface
+dual-modality
+interaction-design
+
+## Category Tags
+
+#primary:
+fitts-law, adaptive-ui, human-computer-interaction, research-tool
+
+#secondary:
+reaction-time, cognitive-load, workload-assessment, extended-reality
+
+#tech:
+react, typescript, vite, web-application
+
+#research:
+behavioral-studies, usability-testing, experimental-platform, research-tool
+
