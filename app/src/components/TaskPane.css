@@ -1,0 +1,260 @@
+.task-pane {
+  background: linear-gradient(135deg, #1a1a2e 0%, #1f1f3a 100%);
+  overflow-y: auto;
+}
+
+.control-group {
+  margin-bottom: 2rem;
+}
+
+.control-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Mode Selector */
+.mode-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.mode-selector button {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  background: #0f0f0f;
+  color: #808080;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.mode-selector button.active {
+  background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+  color: #00d9ff;
+  border-color: #00d9ff;
+}
+
+.mode-selector button:hover:not(:disabled) {
+  border-color: #00d9ff;
+}
+
+.mode-selector button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Button Groups */
+.button-group {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.task-pane button {
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+  color: #00d9ff;
+  border: 1px solid #00d9ff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.task-pane button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.task-pane button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: #555;
+  color: #666;
+}
+
+.task-pane button.primary-button {
+  background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%);
+  color: #000;
+  border-color: #00ffff;
+  font-weight: 600;
+}
+
+.task-pane button.primary-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00ffff 0%, #00d9ff 100%);
+  box-shadow: 0 0 16px rgba(0, 217, 255, 0.6);
+}
+
+.task-pane button.stop-button {
+  background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+  color: #fff;
+  border-color: #ff6666;
+}
+
+.task-pane button.stop-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff6666 0%, #ff4444 100%);
+  box-shadow: 0 0 12px rgba(255, 68, 68, 0.4);
+}
+
+/* Form Elements */
+.task-pane select {
+  width: 100%;
+  padding: 0.625rem;
+  background: #0f0f0f;
+  color: #e0e0e0;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.task-pane select:focus {
+  outline: none;
+  border-color: #00d9ff;
+  box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.2);
+}
+
+.input-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: #b0b0b0;
+}
+
+.input-label input[type='number'],
+.input-label input[type='range'] {
+  padding: 0.5rem;
+  background: #0f0f0f;
+  color: #e0e0e0;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.input-label input[type='number']:focus {
+  outline: none;
+  border-color: #00d9ff;
+  box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.2);
+}
+
+.input-label input[type='range'] {
+  cursor: pointer;
+}
+
+.pressure-value {
+  color: #00d9ff;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Checkbox Group */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(0, 217, 255, 0.05);
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+}
+
+.checkbox-group > label:first-child {
+  font-size: 0.75rem;
+  color: #808080;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #e0e0e0;
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Status */
+.status {
+  padding: 0.75rem;
+  background: rgba(0, 217, 255, 0.05);
+  border-left: 3px solid #00d9ff;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #b0b0b0;
+}
+
+.status code {
+  background: #0f0f0f;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  color: #00d9ff;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+}
+
+.status strong {
+  color: #00d9ff;
+  font-weight: 600;
+}
+
+/* Block Progress */
+.block-progress {
+  margin-bottom: 1rem;
+}
+
+.block-progress h3 {
+  margin-bottom: 0.5rem;
+  color: #00d9ff;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #0f0f0f;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d9ff 0%, #00ff88 100%);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+}
+
+/* Scrollbar */
+.task-pane::-webkit-scrollbar {
+  width: 8px;
+}
+
+.task-pane::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.task-pane::-webkit-scrollbar-thumb {
+  background: #0f3460;
+  border-radius: 4px;
+}
+
+.task-pane::-webkit-scrollbar-thumb:hover {
+  background: #00d9ff;
+}
