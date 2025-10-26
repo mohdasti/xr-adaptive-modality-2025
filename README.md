@@ -1,5 +1,10 @@
 # XR Adaptive Modality 2025
 
+![CI Status](https://img.shields.io/github/actions/workflow/status/mohdasti/xr-adaptive-modality-2025/ci.yml?branch=main&logo=github)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
+
 A research project exploring adaptive modality in extended reality environments.
 
 ## Quick Start
@@ -113,6 +118,16 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Privacy
+
+Privacy is important. See [docs/privacy_notice.md](docs/privacy_notice.md) for details on data collection, retention, and your rights.
+
+- **No personally identifiable information (PII)** collected
+- **Camera off by default** (optional, used only for cognitive load estimation)
+- **Data anonymized** before storage (SHA256 hashing)
+- **Retention ≤90 days** (then permanently deleted)
+- **Local processing** (all data remains on your device until export)
 
 ## Author
 
