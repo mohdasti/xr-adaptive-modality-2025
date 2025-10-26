@@ -13,6 +13,8 @@ import {
   DEFAULT_MODALITY_CONFIG,
 } from '../lib/modality'
 import { FittsTask } from './FittsTask'
+import { TLXForm, TLXValues } from './TLXForm'
+import { getTlxStore } from '../lib/tlxStore'
 import './TaskPane.css'
 
 type TaskMode = 'manual' | 'fitts'
@@ -45,6 +47,10 @@ export function TaskPane() {
   // Context factors
   const [pressureEnabled, setPressureEnabled] = useState(false)
   const [agingEnabled, setAgingEnabled] = useState(false)
+  
+  // TLX modal state
+  const [showTlxModal, setShowTlxModal] = useState(false)
+  const [currentBlockNumber, setCurrentBlockNumber] = useState(1)
   
   // Listen for modality changes from HUDPane
   useEffect(() => {
@@ -131,14 +137,33 @@ export function TaskPane() {
     if (nextIndex < trialSequence.length) {
       setCurrentTrialIndex(nextIndex)
     } else {
-      // Block complete
+      // Block complete - show TLX modal
       setFittsActive(false)
-      setCurrentTrialIndex(0)
+      setShowTlxModal(true)
       bus.emit('block:complete', {
         totalTrials: trialSequence.length,
         timestamp: Date.now(),
       })
     }
+  }
+  
+  const handleTlxSubmit = (values: TLXValues) => {
+    const tlxStore = getTlxStore()
+    tlxStore.setBlockTLX(currentBlockNumber, values)
+    
+    bus.emit('tlx:submit', {
+      blockNumber: currentBlockNumber,
+      values,
+      timestamp: Date.now(),
+    })
+    
+    setShowTlxModal(false)
+    setCurrentTrialIndex(0)
+  }
+  
+  const handleTlxClose = () => {
+    setShowTlxModal(false)
+    setCurrentTrialIndex(0)
   }
 
   const handleFittsTrialError = (errorType: 'miss' | 'timeout' | 'slip') => {
@@ -349,6 +374,14 @@ export function TaskPane() {
           />
         </>
       )}
+      
+      {/* TLX Modal */}
+      <TLXForm
+        blockNumber={currentBlockNumber}
+        isOpen={showTlxModal}
+        onSubmit={handleTlxSubmit}
+        onClose={handleTlxClose}
+      />
     </div>
   )
 }

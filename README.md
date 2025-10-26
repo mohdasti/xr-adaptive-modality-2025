@@ -78,6 +78,7 @@ See detailed documentation:
 - [app/POLICY.md](app/POLICY.md) - Adaptation engine
 - [app/CONTEXT.md](app/CONTEXT.md) - Contextual factors (pressure, aging)
 - [app/CSV_LOGGING.md](app/CSV_LOGGING.md) - Data logging and export
+- [app/TLX_FORM.md](app/TLX_FORM.md) - NASA-TLX workload assessment
 
 ## Development
 

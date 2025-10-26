@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { bus } from '../lib/bus'
-import { getLogger, createRowFromTrial, initLogger } from '../lib/csv'
+import { getLogger, createRowFromTrial, initLogger, attachTlxToRow } from '../lib/csv'
+import { getTlxStore } from '../lib/tlxStore'
 import './LoggerPane.css'
 
 interface LogEntry {
@@ -44,8 +45,19 @@ export function LoggerPane() {
       
       // Log to CSV for trial events
       if (eventName === 'trial:end' || eventName === 'trial:error') {
-        const row = createRowFromTrial(payload, blockNumber)
+        let row = createRowFromTrial(payload, blockNumber)
+        
+        // Attach TLX values from store
+        const tlxStore = getTlxStore()
+        const tlxValues = tlxStore.getBlockTLX(blockNumber)
+        row = attachTlxToRow(row, tlxValues)
+        
         logger.pushRow(row)
+        setCsvRowCount(logger.getRowCount())
+      }
+      
+      // Log TLX submission
+      if (eventName === 'tlx:submit') {
         setCsvRowCount(logger.getRowCount())
       }
       

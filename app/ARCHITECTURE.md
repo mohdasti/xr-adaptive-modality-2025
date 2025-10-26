@@ -202,8 +202,10 @@ bus.clear(): void
 | `trial:end` | `{ trialId, trial?, duration, rt_ms?, correct?, A?, W?, ID?, clickPos?, targetPos?, timestamp }` | Trial completes |
 | `trial:error` | `{ trialId, error, err_type?, rt_ms?, clickPos?, targetPos?, timestamp }` | Error occurs (miss/timeout/slip) |
 | `modality:change` | `{ config: { modality, dwellTime }, timestamp }` | Modality switched |
-| `policy:change` | `{ policy, timestamp }` | Policy changes |
+| `context:change` | `{ pressure, aging, timestamp }` | Contextual factors changed |
+| `policy:change` | `{ policy?, state?, timestamp }` | Policy changes |
 | `block:complete` | `{ totalTrials, timestamp }` | Fitts block finishes |
+| `tlx:submit` | `{ blockNumber, values: { global, mental }, timestamp }` | TLX form submitted |
 
 ### Usage Example
 
@@ -280,6 +282,7 @@ bus.off('trial:start', handler)
 - `/app/src/lib/modality.ts`: Modality mechanics
 - `/app/src/lib/policy.ts`: Adaptive policy engine
 - `/app/src/lib/csv.ts`: CSV logging and data export
+- `/app/src/lib/tlxStore.ts`: TLX value persistence
 
 ## Future Enhancements
 

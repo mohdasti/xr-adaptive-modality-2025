@@ -100,6 +100,14 @@ export interface EventPayloads {
     aging: boolean
     timestamp: number
   }
+  'tlx:submit': {
+    blockNumber: number
+    values: {
+      global: number
+      mental: number
+    }
+    timestamp: number
+  }
 }
 
 export type EventType = keyof EventPayloads

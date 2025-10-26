@@ -237,7 +237,7 @@ export function getLogger(): CSVLogger {
  * Helper to create row from trial event
  */
 export function createRowFromTrial(payload: any, blockNumber: number = 1): CSVRow {
-  return {
+  const row: CSVRow = {
     ts: payload.timestamp || Date.now(),
     block: blockNumber,
     trial: payload.trial || payload.trialNumber || 0,
@@ -259,5 +259,18 @@ export function createRowFromTrial(payload: any, blockNumber: number = 1): CSVRo
     tlx_global: payload.tlx_global || null,
     tlx_mental: payload.tlx_mental || null,
   }
+  
+  return row
+}
+
+/**
+ * Helper to attach TLX values to a row
+ */
+export function attachTlxToRow(row: CSVRow, tlxValues?: { global: number; mental: number }): CSVRow {
+  if (tlxValues) {
+    row.tlx_global = tlxValues.global
+    row.tlx_mental = tlxValues.mental
+  }
+  return row
 }
 
