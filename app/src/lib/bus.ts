@@ -98,6 +98,7 @@ export interface EventPayloads {
   'context:change': {
     pressure: boolean
     aging: boolean
+    camera?: boolean
     timestamp: number
   }
   'tlx:submit': {

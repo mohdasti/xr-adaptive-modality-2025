@@ -45,6 +45,7 @@ export function HUDPane() {
   const [pressure, setPressure] = useState(1.0)
   const [pressureEnabled, setPressureEnabled] = useState(false)
   const [agingEnabled, setAgingEnabled] = useState(false)
+  const [cameraEnabled, setCameraEnabled] = useState(false)
   
   const handleModalityChange = (modality: Modality) => {
     const newConfig: ModalityConfig = {
@@ -86,6 +87,17 @@ export function HUDPane() {
     bus.emit('context:change', {
       pressure: pressureEnabled,
       aging: newValue,
+      timestamp: Date.now(),
+    })
+  }
+  
+  const handleCameraToggle = () => {
+    const newValue = !cameraEnabled
+    setCameraEnabled(newValue)
+    bus.emit('context:change', {
+      pressure: pressureEnabled,
+      aging: agingEnabled,
+      camera: newValue,
       timestamp: Date.now(),
     })
   }
@@ -244,7 +256,29 @@ export function HUDPane() {
               Aging Proxy (Reduced Contrast)
             </span>
           </label>
+          
+          <label className="context-toggle">
+            <input
+              type="checkbox"
+              checked={cameraEnabled}
+              onChange={handleCameraToggle}
+            />
+            <span className="toggle-label">
+              <span className="toggle-icon">📷</span>
+              Pupil Proxy (Camera Required)
+            </span>
+          </label>
         </div>
+        
+        {cameraEnabled && (
+          <div className="camera-consent">
+            <p className="consent-text">
+              ⚠️ <strong>Consent:</strong> This feature uses your webcam to estimate cognitive load via pupil proxy. 
+              <br />No video frames are stored or transmitted—only a scalar value (luminance-based z-score).
+              <br />Your privacy is protected.
+            </p>
+          </div>
+        )}
       </div>
       
       {/* Modality Switch */}

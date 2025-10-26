@@ -79,6 +79,7 @@ See detailed documentation:
 - [app/CONTEXT.md](app/CONTEXT.md) - Contextual factors (pressure, aging)
 - [app/CSV_LOGGING.md](app/CSV_LOGGING.md) - Data logging and export
 - [app/TLX_FORM.md](app/TLX_FORM.md) - NASA-TLX workload assessment
+- [app/PUPIL_PROXY.md](app/PUPIL_PROXY.md) - Pupil diameter proxy (camera-based)
 
 ## Development
 

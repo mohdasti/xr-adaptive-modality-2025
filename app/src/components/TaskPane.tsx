@@ -47,6 +47,7 @@ export function TaskPane() {
   // Context factors
   const [pressureEnabled, setPressureEnabled] = useState(false)
   const [agingEnabled, setAgingEnabled] = useState(false)
+  const [cameraEnabled, setCameraEnabled] = useState(false)
   
   // TLX modal state
   const [showTlxModal, setShowTlxModal] = useState(false)
@@ -82,6 +83,9 @@ export function TaskPane() {
     const handleContextChange = (payload: any) => {
       setPressureEnabled(payload.pressure)
       setAgingEnabled(payload.aging)
+      if (payload.camera !== undefined) {
+        setCameraEnabled(payload.camera)
+      }
     }
     
     bus.on('context:change', handleContextChange)
@@ -368,6 +372,7 @@ export function TaskPane() {
             widthScale={widthScale}
             pressureEnabled={pressureEnabled}
             agingEnabled={agingEnabled}
+            cameraEnabled={cameraEnabled}
             onTrialComplete={handleFittsTrialComplete}
             onTrialError={handleFittsTrialError}
             timeout={10000}

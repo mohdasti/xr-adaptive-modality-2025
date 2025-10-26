@@ -128,6 +128,37 @@
   font-size: 1.25rem;
 }
 
+.camera-consent {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 140, 0, 0.1);
+  border: 2px solid #ff8c00;
+  border-radius: 6px;
+  animation: consent-pulse 2s ease-in-out infinite;
+}
+
+@keyframes consent-pulse {
+  0%, 100% {
+    border-color: #ff8c00;
+    background: rgba(255, 140, 0, 0.1);
+  }
+  50% {
+    border-color: #ffa500;
+    background: rgba(255, 165, 0, 0.15);
+  }
+}
+
+.consent-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: #ffa500;
+}
+
+.consent-text strong {
+  color: #ff8c00;
+}
+
 /* Modality Switch */
 .modality-switch {
   margin-bottom: 1.5rem;

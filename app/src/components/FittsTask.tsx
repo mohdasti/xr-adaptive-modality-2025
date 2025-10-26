@@ -16,6 +16,7 @@ import {
   isGazeSelectionComplete,
   isPointInTarget,
 } from '../lib/modality'
+import { getPupilTracker } from '../lib/pupil'
 import './FittsTask.css'
 
 export interface FittsTaskProps {
@@ -27,6 +28,7 @@ export interface FittsTaskProps {
   widthScale?: number // Width inflation factor (default: 1.0)
   pressureEnabled?: boolean // Show countdown timer
   agingEnabled?: boolean // Apply aging visual effects
+  cameraEnabled?: boolean // Enable pupil tracking
   onTrialComplete: () => void
   onTrialError: (errorType: 'miss' | 'timeout' | 'slip') => void
   timeout?: number // milliseconds
@@ -41,6 +43,7 @@ export function FittsTask({
   widthScale = 1.0,
   pressureEnabled = false,
   agingEnabled = false,
+  cameraEnabled = false,
   onTrialComplete,
   onTrialError,
   timeout = 10000,
@@ -56,10 +59,12 @@ export function FittsTask({
     createGazeState(modalityConfig.dwellTime)
   )
   const [countdown, setCountdown] = useState<number>(timeout / 1000)
+  const [pupilZScore, setPupilZScore] = useState(0)
   
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const trialDataRef = useRef<TrialData | null>(null)
+  const pupilTrackerRef = useRef<ReturnType<typeof getPupilTracker> | null>(null)
 
   // Generate possible target positions
   const targetPositions = useRef(
