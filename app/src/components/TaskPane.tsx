@@ -2,14 +2,12 @@ import { useState, useEffect } from 'react'
 import { bus } from '../lib/bus'
 import {
   FittsConfig,
-  ladder,
   DIFFICULTY_PRESETS,
   generateTrialSequence,
 } from '../lib/fitts'
 import {
   Modality,
   ModalityConfig,
-  DWELL_TIMES,
   DEFAULT_MODALITY_CONFIG,
 } from '../lib/modality'
 import { FittsTask } from './FittsTask'
@@ -51,7 +49,7 @@ export function TaskPane() {
   
   // TLX modal state
   const [showTlxModal, setShowTlxModal] = useState(false)
-  const [currentBlockNumber, setCurrentBlockNumber] = useState(1)
+  const [currentBlockNumber] = useState(1)
   
   // Listen for modality changes from HUDPane
   useEffect(() => {

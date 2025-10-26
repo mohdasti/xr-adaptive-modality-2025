@@ -2,11 +2,17 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { FittsTask } from './FittsTask'
 import { DIFFICULTY_PRESETS } from '../lib/fitts'
+import { Modality, ModalityConfig, DWELL_TIMES } from '../lib/modality'
 
 describe('FittsTask', () => {
+  const defaultModalityConfig: ModalityConfig = {
+    modality: Modality.HAND,
+    dwellTime: DWELL_TIMES.NONE,
+  }
+  
   const defaultProps = {
     config: DIFFICULTY_PRESETS.medium,
-    modality: 'visual',
+    modalityConfig: defaultModalityConfig,
     ui_mode: 'standard',
     pressure: 1.0,
     trialNumber: 1,

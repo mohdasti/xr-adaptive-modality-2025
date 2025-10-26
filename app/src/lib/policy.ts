@@ -280,7 +280,9 @@ export class PolicyEngine {
     pressureEnabled?: boolean
     currentRT?: number
   }): PolicyState {
-    const { modality, pressure, pressureEnabled = false, currentRT } = params
+    const { modality, pressureEnabled = false, currentRT } = params
+    // Pressure parameter not used in current implementation
+    void params.pressure
     
     // If not adaptive, return none
     if (!this.policy.adaptive) {

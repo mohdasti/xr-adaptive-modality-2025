@@ -62,7 +62,7 @@ export function HUDPane() {
   const handleDwellTimeChange = (dwellTime: number) => {
     const newConfig: ModalityConfig = {
       modality: modalityConfig.modality,
-      dwellTime,
+      dwellTime: dwellTime as typeof modalityConfig.dwellTime,
     }
     setModalityConfig(newConfig)
     bus.emit('modality:change', {

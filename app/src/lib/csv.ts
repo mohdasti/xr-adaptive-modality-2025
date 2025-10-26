@@ -96,10 +96,10 @@ export class CSVLogger {
    */
   pushRow(row: CSVRow): void {
     // Merge with session data
-    const fullRow = {
+    const fullRow: CSVRow = {
       ...this.sessionData,
       ...row,
-    }
+    } as CSVRow
 
     // Validate
     if (!this.validateRow(fullRow)) {
