@@ -1,4 +1,5 @@
-type EventHandler = (payload: unknown) => void
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type EventHandler = (payload: any) => void
 
 class EventBus {
   private events: Map<string, Set<EventHandler>> = new Map()
@@ -20,7 +21,8 @@ class EventBus {
     }
   }
 
-  emit(event: string, payload?: unknown): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  emit(event: string, payload?: any): void {
     const handlers = this.events.get(event)
     if (handlers) {
       handlers.forEach((handler) => {

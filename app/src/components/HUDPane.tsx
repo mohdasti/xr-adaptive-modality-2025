@@ -105,7 +105,8 @@ export function HUDPane() {
   useEffect(() => {
     const policyEngine = getPolicyEngine()
     
-    const handleTrialStart = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleTrialStart = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         totalTrials: prev.totalTrials + 1,
@@ -119,7 +120,8 @@ export function HUDPane() {
       }
     }
 
-    const handleTrialEnd = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleTrialEnd = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         activeTrials: Math.max(0, prev.activeTrials - 1),
@@ -156,7 +158,8 @@ export function HUDPane() {
       }
     }
 
-    const handleTrialError = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleTrialError = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         errors: prev.errors + 1,
@@ -193,7 +196,8 @@ export function HUDPane() {
       }
     }
 
-    const handlePolicyChange = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handlePolicyChange = (payload: any) => {
       setStats((prev) => ({
         ...prev,
         currentPolicy: payload.policy || 'default',

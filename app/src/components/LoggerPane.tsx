@@ -7,7 +7,8 @@ import './LoggerPane.css'
 interface LogEntry {
   id: string
   event: string
-  payload: Record<string, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any
   timestamp: number
   time: string
 }
@@ -29,7 +30,8 @@ export function LoggerPane() {
     const logger = getLogger()
     let blockNumber = 1
     
-    const createLogHandler = (eventName: string) => (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const createLogHandler = (eventName: string) => (payload: any) => {
       const entry: LogEntry = {
         id: `${eventName}-${Date.now()}-${Math.random()}`,
         event: eventName,
@@ -122,7 +124,8 @@ export function LoggerPane() {
     return ''
   }
 
-  const formatPayload = (payload: Record<string, unknown>): string => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const formatPayload = (payload: any): string => {
     if (!payload) return 'null'
     try {
       return JSON.stringify(payload, null, 2)

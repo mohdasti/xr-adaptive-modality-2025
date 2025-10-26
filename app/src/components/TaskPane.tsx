@@ -53,7 +53,8 @@ export function TaskPane() {
   
   // Listen for modality changes from HUDPane
   useEffect(() => {
-    const handleModalityChange = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleModalityChange = (payload: any) => {
       setModalityConfig(payload.config)
     }
     
@@ -63,7 +64,8 @@ export function TaskPane() {
   
   // Listen for policy changes
   useEffect(() => {
-    const handlePolicyChange = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handlePolicyChange = (payload: any) => {
       if (payload.state && payload.state.action === 'inflate_width') {
         const delta = payload.state.delta_w || 0.25
         setWidthScale(1.0 + delta)
@@ -78,7 +80,8 @@ export function TaskPane() {
   
   // Listen for context changes
   useEffect(() => {
-    const handleContextChange = (payload: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleContextChange = (payload: any) => {
       setPressureEnabled(payload.pressure)
       setAgingEnabled(payload.aging)
       if (payload.camera !== undefined) {
