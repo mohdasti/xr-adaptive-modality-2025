@@ -117,6 +117,7 @@ export function TaskPane() {
       error: 'Simulated error occurred',
       timestamp: Date.now(),
     })
+    setTrialId('') // Clear trial ID after error
   }
 
   const handlePolicyChange = (newPolicy: string) => {
