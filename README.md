@@ -131,5 +131,5 @@ Privacy is important. See [docs/privacy_notice.md](docs/privacy_notice.md) for d
 
 ## Author
 
-Fatemeh Pourmahdian
+Fatemeh Pourmahdian & Mohammad Dastgheib
 
