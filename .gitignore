@@ -78,6 +78,9 @@ venv.bak/
 .httr-oauth
 *.rds
 *.rda
+data/raw/
+data/private/
+results/
 
 # IDEs
 .vscode/

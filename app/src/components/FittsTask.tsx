@@ -7,6 +7,7 @@ import {
   generateCircularPositions,
   isHit,
 } from '../lib/fitts'
+import { shuffle } from '../experiment/counterbalance'
 import {
   Modality,
   ModalityConfig,
@@ -16,14 +17,23 @@ import {
   isGazeSelectionComplete,
   isPointInTarget,
 } from '../lib/modality'
+import { distance as distanceBetweenPoints } from '../utils/geom'
 import './FittsTask.css'
+
+interface TrialContext {
+  globalTrialNumber: number
+  trialInBlock: number
+  blockNumber: number
+  blockOrder: string
+  blockTrialCount: number
+}
 
 export interface FittsTaskProps {
   config: FittsConfig
   modalityConfig: ModalityConfig
   ui_mode: string
   pressure: number
-  trialNumber: number
+  trialContext: TrialContext
   widthScale?: number // Width inflation factor (default: 1.0)
   pressureEnabled?: boolean // Show countdown timer
   agingEnabled?: boolean // Apply aging visual effects
@@ -38,7 +48,7 @@ export function FittsTask({
   modalityConfig,
   ui_mode,
   pressure,
-  trialNumber,
+  trialContext,
   widthScale = 1.0,
   pressureEnabled = false,
   agingEnabled = false,
@@ -64,24 +74,97 @@ export function FittsTask({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const trialDataRef = useRef<TrialData | null>(null)
+  const canvasRef = useRef<HTMLDivElement | null>(null)
+  const targetRef = useRef<HTMLDivElement | null>(null)
+
+  const getSpatialMetrics = useCallback(
+    (localPoint?: Position | null) => {
+    const canvasRect = canvasRef.current?.getBoundingClientRect()
+    const targetRect = targetRef.current?.getBoundingClientRect()
+
+    const endpoint =
+      localPoint && canvasRect
+        ? {
+            x: canvasRect.left + localPoint.x,
+            y: canvasRect.top + localPoint.y,
+          }
+        : null
+
+    const targetCenter = targetRect
+      ? {
+          x: targetRect.left + targetRect.width / 2,
+          y: targetRect.top + targetRect.height / 2,
+        }
+      : canvasRect && targetPos
+        ? {
+            x: canvasRect.left + targetPos.x,
+            y: canvasRect.top + targetPos.y,
+          }
+        : null
+
+    const endpointError =
+      endpoint && targetCenter ? distanceBetweenPoints(endpoint, targetCenter) : null
+
+    return {
+      endpoint,
+      targetCenter,
+      endpointError,
+    }
+    },
+    [targetPos]
+  )
 
   const handleTimeout = useCallback(() => {
     if (!trialDataRef.current) return
-    
+
+    const trialData = trialDataRef.current
+    const metrics = getSpatialMetrics(null)
+    const timestamp = Date.now()
+
     bus.emit('trial:error', {
-      trialId: trialDataRef.current.trialId,
+      trialId: trialData.trialId,
+      trial: trialData.trialNumber,
+      trial_in_block: trialData.trialInBlock,
+      trial_number: trialData.globalTrialNumber,
+      block_number: trialData.blockNumber,
+      block_order: trialData.blockOrder,
+      block_trial_count: trialData.blockTrialCount,
       error: 'timeout',
       err_type: 'timeout',
-      timestamp: Date.now(),
+      rt_ms: timestamp - trialData.timestamp,
+      A: trialData.A,
+      W: trialData.W,
+      ID: trialData.ID,
+      index_of_difficulty_nominal: trialData.ID,
+      target_distance_A: trialData.A,
+      modality: trialData.modality,
+      ui_mode: trialData.ui_mode,
+      pressure: trialData.pressure,
+      aging: trialData.aging,
+      targetPos: trialData.targetPos,
+      target_center_x: metrics.targetCenter?.x ?? null,
+      target_center_y: metrics.targetCenter?.y ?? null,
+      endpoint_x: metrics.endpoint?.x ?? null,
+      endpoint_y: metrics.endpoint?.y ?? null,
+      endpoint_error_px: metrics.endpointError ?? null,
+      timestamp,
     })
-    
+
     onTrialError('timeout')
-  }, [onTrialError])
+  }, [getSpatialMetrics, onTrialError])
 
   // Generate possible target positions
   const targetPositions = useRef(
     generateCircularPositions(startPos, config.A, 8)
   )
+  
+  // Shuffle target positions when block number changes
+  useEffect(() => {
+    if (trialContext.blockNumber > 0) {
+      const positions = generateCircularPositions(startPos, config.A, 8)
+      targetPositions.current = shuffle(positions)
+    }
+  }, [trialContext.blockNumber, startPos, config.A])
 
   const startTrial = useCallback(() => {
     // Select random target position
@@ -100,13 +183,19 @@ export function FittsTask({
     const trialId = `trial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const trialData: TrialData = {
       trialId,
-      trialNumber,
+      trialNumber: trialContext.trialInBlock,
+      globalTrialNumber: trialContext.globalTrialNumber,
+      trialInBlock: trialContext.trialInBlock,
+      blockNumber: trialContext.blockNumber,
+      blockOrder: trialContext.blockOrder,
+      blockTrialCount: trialContext.blockTrialCount,
       A: config.A,
       W: config.W,
       ID: config.ID,
       modality: modalityConfig.modality,
       ui_mode,
       pressure,
+      aging: agingEnabled,
       startPos,
       targetPos: target,
       timestamp: startTime,
@@ -117,13 +206,21 @@ export function FittsTask({
     // Emit trial start event
     bus.emit('trial:start', {
       trialId,
-      trial: trialNumber,
+      trial: trialContext.trialInBlock,
+      trial_in_block: trialContext.trialInBlock,
+      trial_number: trialContext.globalTrialNumber,
+      block_number: trialContext.blockNumber,
+      block_order: trialContext.blockOrder,
+      block_trial_count: trialContext.blockTrialCount,
       A: config.A,
       W: config.W,
       ID: config.ID,
+      index_of_difficulty_nominal: config.ID,
+      target_distance_A: config.A,
       modality: modalityConfig.modality,
       ui_mode,
       pressure,
+      aging: agingEnabled,
       timestamp: startTime,
     })
     
@@ -133,7 +230,30 @@ export function FittsTask({
         handleTimeout()
       }, timeout)
     }
-  }, [config, modalityConfig, ui_mode, pressure, trialNumber, timeout, startPos, handleTimeout])
+  }, [
+    config,
+    modalityConfig,
+    ui_mode,
+    pressure,
+    trialContext,
+    timeout,
+    startPos,
+    handleTimeout,
+    agingEnabled,
+  ])
+
+  const getConfirmType = useCallback(
+    (wasClick: boolean): string => {
+      if (modalityConfig.modality === Modality.HAND) {
+        return 'click'
+      }
+      if (!wasClick && modalityConfig.dwellTime > 0) {
+        return 'dwell'
+      }
+      return 'space'
+    },
+    [modalityConfig.modality, modalityConfig.dwellTime]
+  )
 
   const completeSelection = useCallback(
     (clickPos: Position, isClick: boolean = false) => {
@@ -147,23 +267,42 @@ export function FittsTask({
       
       const endTime = Date.now()
       const rt_ms = endTime - trialStartTime
+      const trialData = trialDataRef.current
+      const confirmType = getConfirmType(isClick)
       
       const hit = isHit(clickPos, targetPos, effectiveWidth)
       
       if (hit) {
-        // Success
+        const metrics = getSpatialMetrics(clickPos)
+
         bus.emit('trial:end', {
-          trialId: trialDataRef.current.trialId,
-          trial: trialNumber,
+          trialId: trialData.trialId,
+          trial: trialData.trialNumber,
+          trial_in_block: trialData.trialInBlock,
+          trial_number: trialData.globalTrialNumber,
+          block_number: trialData.blockNumber,
+          block_order: trialData.blockOrder,
+          block_trial_count: trialData.blockTrialCount,
           rt_ms,
           duration: rt_ms,
           correct: true,
-          A: config.A,
-          W: config.W,
-          ID: config.ID,
+          A: trialData.A,
+          W: trialData.W,
+          ID: trialData.ID,
+          index_of_difficulty_nominal: trialData.ID,
+          target_distance_A: trialData.A,
           clickPos,
-          targetPos,
-          modality: modalityConfig.modality,
+          targetPos: trialData.targetPos,
+          target_center_x: metrics.targetCenter?.x ?? null,
+          target_center_y: metrics.targetCenter?.y ?? null,
+          endpoint_x: metrics.endpoint?.x ?? null,
+          endpoint_y: metrics.endpoint?.y ?? null,
+          endpoint_error_px: metrics.endpointError ?? null,
+          modality: trialData.modality,
+          ui_mode: trialData.ui_mode,
+          pressure: trialData.pressure,
+          aging: trialData.aging,
+          confirm_type: confirmType,
           timestamp: endTime,
         })
         
@@ -171,20 +310,43 @@ export function FittsTask({
       } else {
         // Miss or slip
         const errorType = isClick ? 'miss' : 'slip'
+        const metrics = getSpatialMetrics(clickPos)
+
         bus.emit('trial:error', {
-          trialId: trialDataRef.current.trialId,
+          trialId: trialData.trialId,
+          trial: trialData.trialNumber,
+          trial_in_block: trialData.trialInBlock,
+          trial_number: trialData.globalTrialNumber,
+          block_number: trialData.blockNumber,
+          block_order: trialData.blockOrder,
+          block_trial_count: trialData.blockTrialCount,
           error: errorType,
           err_type: errorType,
           rt_ms,
           clickPos,
-          targetPos,
+          targetPos: trialData.targetPos,
+          target_center_x: metrics.targetCenter?.x ?? null,
+          target_center_y: metrics.targetCenter?.y ?? null,
+          endpoint_x: metrics.endpoint?.x ?? null,
+          endpoint_y: metrics.endpoint?.y ?? null,
+          endpoint_error_px: metrics.endpointError ?? null,
+          modality: trialData.modality,
+          ui_mode: trialData.ui_mode,
+          pressure: trialData.pressure,
+          aging: trialData.aging,
+          A: trialData.A,
+          W: trialData.W,
+          ID: trialData.ID,
+          index_of_difficulty_nominal: trialData.ID,
+          target_distance_A: trialData.A,
+          confirm_type: confirmType,
           timestamp: endTime,
         })
         
         onTrialError(errorType)
       }
     },
-    [trialStartTime, targetPos, config, trialNumber, modalityConfig, onTrialComplete, onTrialError, effectiveWidth]
+    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType]
   )
 
   // Hand mode: click handler
@@ -291,13 +453,39 @@ export function FittsTask({
         } else {
           // Premature confirmation (slip)
           if (trialDataRef.current) {
+            const trialData = trialDataRef.current
+            const timestamp = Date.now()
+            const metrics = getSpatialMetrics(cursorPos)
+
             bus.emit('trial:error', {
-              trialId: trialDataRef.current.trialId,
+              trialId: trialData.trialId,
+              trial: trialData.trialNumber,
+              trial_in_block: trialData.trialInBlock,
+              trial_number: trialData.globalTrialNumber,
+              block_number: trialData.blockNumber,
+              block_order: trialData.blockOrder,
+              block_trial_count: trialData.blockTrialCount,
               error: 'slip',
               err_type: 'slip',
+              rt_ms: timestamp - trialData.timestamp,
               clickPos: cursorPos,
               targetPos,
-              timestamp: Date.now(),
+              target_center_x: metrics.targetCenter?.x ?? null,
+              target_center_y: metrics.targetCenter?.y ?? null,
+              endpoint_x: metrics.endpoint?.x ?? null,
+              endpoint_y: metrics.endpoint?.y ?? null,
+              endpoint_error_px: metrics.endpointError ?? null,
+              modality: trialData.modality,
+              ui_mode: trialData.ui_mode,
+              pressure: trialData.pressure,
+              aging: trialData.aging,
+              A: trialData.A,
+              W: trialData.W,
+              ID: trialData.ID,
+              index_of_difficulty_nominal: trialData.ID,
+              target_distance_A: trialData.A,
+              confirm_type: getConfirmType(false),
+              timestamp,
             })
             onTrialError('slip')
           }
@@ -316,6 +504,8 @@ export function FittsTask({
     cursorPos,
     completeSelection,
     onTrialError,
+    getSpatialMetrics,
+    getConfirmType,
   ])
 
   // Countdown timer for pressure mode
@@ -354,6 +544,7 @@ export function FittsTask({
         className={`fitts-canvas ${modalityConfig.modality === Modality.GAZE ? 'gaze-mode' : 'hand-mode'}`}
         onClick={handleClick}
         onMouseMove={handleMouseMove}
+        ref={canvasRef}
       >
         {/* Countdown overlay for pressure mode */}
         {pressureEnabled && !showStart && targetPos && (
@@ -383,6 +574,7 @@ export function FittsTask({
               width: `${effectiveWidth}px`,
               height: `${effectiveWidth}px`,
             }}
+            ref={targetRef}
             >
               {/* Dwell progress indicator for gaze mode */}
               {modalityConfig.modality === Modality.GAZE &&
@@ -430,7 +622,14 @@ export function FittsTask({
           <span>ID:</span> <strong>{config.ID.toFixed(2)} bits</strong>
         </div>
         <div className="fitts-param">
-          <span>Trial:</span> <strong>{trialNumber}</strong>
+          <span>Trial (Block):</span>{' '}
+          <strong>
+            {trialContext.trialInBlock}/{trialContext.blockTrialCount}
+          </strong>
+        </div>
+        <div className="fitts-param">
+          <span>Trial (Global):</span>{' '}
+          <strong>{trialContext.globalTrialNumber}</strong>
         </div>
         <div className="fitts-param">
           <span>Modality:</span> <strong>{modalityConfig.modality}</strong>

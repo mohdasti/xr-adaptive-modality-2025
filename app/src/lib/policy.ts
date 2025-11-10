@@ -3,6 +3,10 @@
  */
 
 import { Modality } from './modality'
+import {
+  loadAdaptationPolicy,
+  AdaptationPolicy,
+} from '../policy/loadPolicy'
 
 /**
  * Policy configuration structure
@@ -71,20 +75,84 @@ export interface TriggerResults {
   total_trials: number
 }
 
+function isAdaptationPolicy(candidate: unknown): candidate is AdaptationPolicy {
+  return (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    'adaptation' in candidate &&
+    typeof (candidate as AdaptationPolicy).adaptation === 'object'
+  )
+}
+
+function applyAdaptationPolicy(
+  basePolicy: PolicyConfig,
+  adaptationPolicy: AdaptationPolicy
+): PolicyConfig {
+  const {
+    triggers: {
+      rt_percentile,
+      error_burst_threshold,
+      min_trials_before_adapt,
+    },
+    hysteresis,
+  } = adaptationPolicy.adaptation
+
+  const resolvedHysteresis =
+    Math.max(
+      hysteresis?.post_trigger_window ?? 0,
+      min_trials_before_adapt
+    ) || basePolicy.hysteresis_trials
+
+  return {
+    ...basePolicy,
+    hysteresis_trials: resolvedHysteresis,
+    gaze: {
+      ...basePolicy.gaze,
+      trigger: {
+        ...basePolicy.gaze.trigger,
+        rt_p: rt_percentile,
+        err_burst: error_burst_threshold,
+      },
+    },
+    hand: {
+      ...basePolicy.hand,
+      trigger: {
+        ...basePolicy.hand.trigger,
+        rt_p: rt_percentile,
+        err_burst: error_burst_threshold,
+      },
+    },
+  }
+}
+
+async function fetchPolicyFromPath(path: string): Promise<unknown> {
+  const response = await fetch(path, { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error(`Failed to load policy: ${response.statusText}`)
+  }
+  return response.json()
+}
+
 /**
- * Load policy configuration from JSON file
+ * Load policy configuration from JSON file or adaptation policy definitions
  */
-export async function loadPolicy(path: string = '/policy/policy.default.json'): Promise<PolicyConfig> {
+export async function loadPolicy(path?: string): Promise<PolicyConfig> {
+  const basePolicy = getDefaultPolicy()
+
   try {
-    const response = await fetch(path)
-    if (!response.ok) {
-      throw new Error(`Failed to load policy: ${response.statusText}`)
+    if (path) {
+      const policyOverride = await fetchPolicyFromPath(path)
+      if (isAdaptationPolicy(policyOverride)) {
+        return applyAdaptationPolicy(basePolicy, policyOverride)
+      }
+      return policyOverride as PolicyConfig
     }
-    return await response.json()
+
+    const adaptationPolicy = await loadAdaptationPolicy()
+    return applyAdaptationPolicy(basePolicy, adaptationPolicy)
   } catch (error) {
-    console.error('Error loading policy:', error)
-    // Return default policy
-    return getDefaultPolicy()
+    console.error('Error loading policy configuration:', error)
+    return basePolicy
   }
 }
 

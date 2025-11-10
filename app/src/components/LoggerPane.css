@@ -41,6 +41,10 @@
   padding: 0 0.5rem;
 }
 
+.csv-count.secondary {
+  color: #ffa500;
+}
+
 .clear-btn {
   padding: 0.5rem 1rem;
   background: #ff4444;

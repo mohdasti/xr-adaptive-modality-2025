@@ -1,6 +1,7 @@
 /**
  * CSV logging utilities for experiment data
  */
+import { getDisplayMetadata } from '../utils/sessionMeta'
 
 /**
  * CSV schema columns in order
@@ -8,6 +9,11 @@
 export const CSV_HEADERS = [
   'pid',
   'ts',
+  'trial_number',
+  'trial_in_block',
+  'block_number',
+  'block_order',
+  'block_trial_count',
   'block',
   'trial',
   'modality',
@@ -15,23 +21,64 @@ export const CSV_HEADERS = [
   'pressure',
   'aging',
   'ID',
+  'index_of_difficulty_nominal',
   'A',
+  'target_distance_A',
   'W',
   'target_x',
   'target_y',
+  'target_center_x',
+  'target_center_y',
+  'endpoint_x',
+  'endpoint_y',
+  'endpoint_error_px',
   'rt_ms',
   'correct',
   'err_type',
   'hover_ms',
   'confirm_type',
   'pupil_z_med',
-  'tlx_global',
-  'tlx_mental',
+  'screen_width',
+  'screen_height',
+  'window_width',
+  'window_height',
+  'device_pixel_ratio',
+  'zoom_level',
+  'is_fullscreen',
+  'user_agent',
   'browser',
   'dpi',
 ] as const
 
 export type CSVRow = Record<string, string | number | boolean | null>
+
+const BLOCK_HEADERS = [
+  'participant_id',
+  'modality',
+  'ui_mode',
+  'block_number',
+  'tlx_mental',
+  'tlx_physical',
+  'tlx_temporal',
+  'tlx_performance',
+  'tlx_effort',
+  'tlx_frustration',
+] as const
+
+export type BlockRow = {
+  participant_id: string
+  modality: string
+  ui_mode: string
+  block_number: number
+  tlx_mental: number
+  tlx_physical: number
+  tlx_temporal: number
+  tlx_performance: number
+  tlx_effort: number
+  tlx_frustration: number
+}
+
+type BlockRowInput = Omit<BlockRow, 'participant_id'>
 
 /**
  * CSV Logger class
@@ -40,22 +87,32 @@ export class CSVLogger {
   private headers: string[]
   private rows: CSVRow[]
   private sessionData: Partial<CSVRow>
+  private blockRows: BlockRow[]
+  private participantId: string = ''
 
   constructor(headers: string[] = [...CSV_HEADERS]) {
     this.headers = headers
     this.rows = []
     this.sessionData = {}
+    this.blockRows = []
   }
 
   /**
    * Initialize session-level data
    */
   initSession(data: Partial<CSVRow>): void {
+    const meta = typeof window !== 'undefined' ? getDisplayMetadata() : undefined
+    const providedPid = typeof data.pid === 'string' ? data.pid : undefined
+    const pid = providedPid || `P${Date.now()}`
     this.sessionData = {
+      ...(meta ?? {}),
       ...data,
+      pid,
       browser: this.getBrowser(),
       dpi: this.getDPI(),
     }
+
+    this.participantId = String(pid)
   }
 
   /**
@@ -122,6 +179,7 @@ export class CSVLogger {
    */
   clear(): void {
     this.rows = []
+    this.blockRows = []
   }
 
   /**
@@ -205,6 +263,64 @@ export class CSVLogger {
 
     URL.revokeObjectURL(url)
   }
+
+  getBlockRowCount(): number {
+    return this.blockRows.length
+  }
+
+  pushBlockRow(row: BlockRowInput): void {
+    const participant_id = this.participantId || String(this.sessionData.pid ?? '')
+    const fullRow: BlockRow = {
+      participant_id,
+      ...row,
+    }
+    this.blockRows.push(fullRow)
+  }
+
+  clearBlockRows(): void {
+    this.blockRows = []
+  }
+
+  private toBlockCSV(): string {
+    const lines: string[] = []
+    lines.push(BLOCK_HEADERS.join(','))
+
+    for (const row of this.blockRows) {
+      const values = BLOCK_HEADERS.map((header) => {
+        const value = row[header as keyof BlockRow]
+        if (value === null || value === undefined) return ''
+        const strValue = String(value)
+        if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+          return `"${strValue.replace(/"/g, '""')}"`
+        }
+        return strValue
+      })
+      lines.push(values.join(','))
+    }
+
+    return lines.join('\n')
+  }
+
+  downloadBlockCSV(filename: string = 'block_data.csv'): void {
+    if (this.blockRows.length === 0) {
+      console.warn('No block-level TLX data to download.')
+      return
+    }
+    const csvContent = this.toBlockCSV()
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.style.display = 'none'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  }
 }
 
 /**
@@ -240,38 +356,37 @@ export function getLogger(): CSVLogger {
 export function createRowFromTrial(payload: any, blockNumber: number = 1): CSVRow {
   const row: CSVRow = {
     ts: payload.timestamp || Date.now(),
-    block: blockNumber,
-    trial: payload.trial || payload.trialNumber || 0,
+    trial_number: payload.trial_number || payload.globalTrialNumber || payload.trialSequenceNumber || null,
+    trial_in_block: payload.trial_in_block || payload.trial || payload.trialNumber || null,
+    block_number: payload.block_number || blockNumber,
+    block_order: payload.block_order || payload.blockOrder || '',
+    block_trial_count: payload.block_trial_count || payload.blockTrialCount || null,
+    block: payload.block_number || blockNumber,
+    trial: payload.trial_in_block || payload.trial || payload.trialNumber || 0,
     modality: payload.modality || '',
     ui_mode: payload.ui_mode || '',
     pressure: payload.pressure || 0,
     aging: payload.aging || false,
     ID: payload.ID || null,
+    index_of_difficulty_nominal: payload.index_of_difficulty_nominal || payload.ID || null,
     A: payload.A || null,
+    target_distance_A: payload.target_distance_A || payload.A || null,
     W: payload.W || null,
     target_x: payload.targetPos?.x || null,
     target_y: payload.targetPos?.y || null,
+    target_center_x: payload.target_center_x ?? null,
+    target_center_y: payload.target_center_y ?? null,
+    endpoint_x: payload.endpoint_x ?? payload.clickPos?.x ?? null,
+    endpoint_y: payload.endpoint_y ?? payload.clickPos?.y ?? null,
+    endpoint_error_px: payload.endpoint_error_px ?? null,
     rt_ms: payload.rt_ms || null,
     correct: payload.correct !== undefined ? payload.correct : null,
     err_type: payload.err_type || payload.error || null,
     hover_ms: payload.hover_ms || null,
     confirm_type: payload.confirm_type || null,
     pupil_z_med: payload.pupil_z_med || null,
-    tlx_global: payload.tlx_global || null,
-    tlx_mental: payload.tlx_mental || null,
   }
-  
-  return row
-}
 
-/**
- * Helper to attach TLX values to a row
- */
-export function attachTlxToRow(row: CSVRow, tlxValues?: { global: number; mental: number }): CSVRow {
-  if (tlxValues) {
-    row.tlx_global = tlxValues.global
-    row.tlx_mental = tlxValues.mental
-  }
   return row
 }
 

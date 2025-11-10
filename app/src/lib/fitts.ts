@@ -215,12 +215,18 @@ export function isHit(
 export interface TrialData {
   trialId: string
   trialNumber: number
+  globalTrialNumber: number
+  trialInBlock: number
+  blockNumber: number
+  blockOrder: string
+  blockTrialCount: number
   A: number
   W: number
   ID: number
   modality: string
   ui_mode: string
   pressure: number
+  aging: boolean
   startPos: Position
   targetPos: Position
   timestamp: number

@@ -69,6 +69,48 @@ xr-adaptive-modality-2025/
 - Hysteresis mechanism (5-trial threshold)
 - Configurable via `/policy/policy.default.json`
 
+#### Post-Pilot Locking
+
+After the pilot study, lock the calibrated thresholds by copying the default policy to the locked file and committing:
+
+```
+cp policy/policy.default.json policy/policy.locked.json
+git commit -am "Lock thresholds post-pilot"
+```
+
+---
+
+## Study Snapshot (Portfolio-Ready)
+
+- **Design:** 2×2 within — Modality (Hand vs Gaze-confirm) × UI (Static vs Adaptive)
+- **N:** 24–30 | **Session:** 20–30 min | **Trials:** ~160/participant
+- **KPIs:** Movement Time, Error, **Throughput (IDe/MT)**, Raw NASA-TLX
+- **Adaptation:** RT p75 or 2-error burst triggers; **~15–25%** adaptive; **5-trial hysteresis**
+- **Display control:** Fullscreen + 100% zoom enforced; DPI logged
+
+### Success Criteria (Pre-Registered)
+
+- RT: **non-inferior** within ±5% (TOST) or ≥5–10% faster
+- Errors: ≥**15%** relative reduction
+- Throughput: **+0.2–0.3 bits/s**
+- TLX: **≥10–15%** lower
+
+### Run Analysis
+
+```bash
+Rscript analysis/compute_effective_metrics.R
+Rscript analysis/primary_models.R
+Rscript analysis/visualizations.R   # optional
+
+Pilot → Lock Thresholds
+# After pilot tuning reaches ~15–25% adaptive trials
+cp policy/policy.default.json policy/policy.locked.json
+git add policy/policy.locked.json
+git commit -m "Lock adaptation thresholds post-pilot"
+```
+
+---
+
 ### Global Event Bus
 
 Lightweight pub/sub system for inter-component communication:

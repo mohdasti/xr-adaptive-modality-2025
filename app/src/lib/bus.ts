@@ -48,25 +48,50 @@ export interface EventPayloads {
   'trial:start': {
     trialId: string
     trial?: number
+    trial_number?: number
+    trial_in_block?: number
+    block_number?: number
+    block_order?: string
+    block_trial_count?: number
     A?: number
     W?: number
     ID?: number
+    index_of_difficulty_nominal?: number
+    target_distance_A?: number
     modality?: string
     ui_mode?: string
     pressure?: number
+    aging?: boolean
     timestamp: number
   }
   'trial:end': {
     trialId: string
     trial?: number
+    trial_number?: number
+    trial_in_block?: number
+    block_number?: number
+    block_order?: string
+    block_trial_count?: number
     duration: number
     rt_ms?: number
     correct?: boolean
     A?: number
     W?: number
     ID?: number
+    index_of_difficulty_nominal?: number
+    target_distance_A?: number
     clickPos?: { x: number; y: number }
     targetPos?: { x: number; y: number }
+    target_center_x?: number
+    target_center_y?: number
+    endpoint_x?: number
+    endpoint_y?: number
+    endpoint_error_px?: number
+    modality?: string
+    ui_mode?: string
+    pressure?: number
+    aging?: boolean
+    confirm_type?: string
     timestamp: number
   }
   'trial:error': {
@@ -76,6 +101,26 @@ export interface EventPayloads {
     rt_ms?: number
     clickPos?: { x: number; y: number }
     targetPos?: { x: number; y: number }
+    target_center_x?: number
+    target_center_y?: number
+    endpoint_x?: number
+    endpoint_y?: number
+    endpoint_error_px?: number
+    trial_number?: number
+    trial_in_block?: number
+    block_number?: number
+    block_order?: string
+    block_trial_count?: number
+    modality?: string
+    ui_mode?: string
+    pressure?: number
+    aging?: boolean
+    A?: number
+    W?: number
+    ID?: number
+    index_of_difficulty_nominal?: number
+    target_distance_A?: number
+    confirm_type?: string
     timestamp: number
   }
   'policy:change': {
@@ -89,7 +134,12 @@ export interface EventPayloads {
     }
     timestamp: number
   }
-  'block:complete': { totalTrials: number; timestamp: number }
+  'block:complete': {
+    totalTrials: number
+    block_number?: number
+    block_order?: string
+    timestamp: number
+  }
   'modality:change': {
     config: {
       modality: string
@@ -105,9 +155,16 @@ export interface EventPayloads {
   }
   'tlx:submit': {
     blockNumber: number
+    blockOrder?: string
+    modality: string
+    ui_mode: string
     values: {
-      global: number
       mental: number
+      physical: number
+      temporal: number
+      performance: number
+      effort: number
+      frustration: number
     }
     timestamp: number
   }

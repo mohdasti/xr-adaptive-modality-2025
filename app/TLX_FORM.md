@@ -4,11 +4,16 @@ This document describes the lightweight NASA-TLX workload assessment form integr
 
 ## Overview
 
-The TLX form appears after each block completion to collect subjective workload ratings. The form captures:
-- **Global Workload**: Overall perceived workload
-- **Mental Demand**: Cognitive load required
+The TLX form appears after each block completion to collect **raw (unweighted) NASA-TLX ratings**. The form captures six 0–100 sliders:
 
-These values are automatically attached to all trial rows for that block in the CSV output.
+- **Mental Demand**
+- **Physical Demand**
+- **Temporal Demand**
+- **Performance** (reverse-scored later as 100 − performance)
+- **Effort**
+- **Frustration**
+
+Values are stored once per block and exported via `block_data.csv`; they are no longer duplicated on every trial row.
 
 ## Implementation
 
@@ -78,7 +83,7 @@ Store TLX in memory (per block)
     ↓
 Emit 'tlx:submit' event
     ↓
-CSV rows for this block attach TLX values
+Block-level CSV (block_data.csv) receives one TLX row
 ```
 
 ## Data Flow
@@ -111,6 +116,8 @@ const handleTlxSubmit = (values: TLXValues) => {
   
   bus.emit('tlx:submit', {
     blockNumber: currentBlockNumber,
+    modality: currentModality,
+    ui_mode: currentUiMode,
     values,
     timestamp: Date.now(),
   })
@@ -120,40 +127,23 @@ const handleTlxSubmit = (values: TLXValues) => {
 }
 ```
 
-### 3. CSV Attachment
+### 3. Block-Level CSV
 
-In LoggerPane, when logging trial events:
-
-```typescript
-if (eventName === 'trial:end' || eventName === 'trial:error') {
-  let row = createRowFromTrial(payload, blockNumber)
-  
-  // Attach TLX values from store
-  const tlxStore = getTlxStore()
-  const tlxValues = tlxStore.getBlockTLX(blockNumber)
-  row = attachTlxToRow(row, tlxValues)
-  
-  logger.pushRow(row)
-}
-```
-
-### 4. Helper Functions
-
-From `/app/src/lib/csv.ts`:
+`CSVLogger` now exposes `pushBlockRow` / `downloadBlockCSV` to collect one TLX row per block:
 
 ```typescript
-/**
- * Attach TLX values to a CSV row
- */
-export function attachTlxToRow(
-  row: CSVRow, 
-  tlxValues?: { global: number; mental: number }
-): CSVRow {
-  if (tlxValues) {
-    row.tlx_global = tlxValues.global
-    row.tlx_mental = tlxValues.mental
-  }
-  return row
+if (eventName === 'tlx:submit' && payload?.values) {
+  logger.pushBlockRow({
+    modality: payload.modality,
+    ui_mode: payload.ui_mode,
+    block_number: payload.blockNumber,
+    tlx_mental: payload.values.mental,
+    tlx_physical: payload.values.physical,
+    tlx_temporal: payload.values.temporal,
+    tlx_performance: payload.values.performance,
+    tlx_effort: payload.values.effort,
+    tlx_frustration: payload.values.frustration,
+  })
 }
 ```
 

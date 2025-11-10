@@ -15,7 +15,13 @@ describe('FittsTask', () => {
     modalityConfig: defaultModalityConfig,
     ui_mode: 'standard',
     pressure: 1.0,
-    trialNumber: 1,
+    trialContext: {
+      globalTrialNumber: 5,
+      trialInBlock: 1,
+      blockNumber: 1,
+      blockOrder: 'HaS' as const,
+      blockTrialCount: 9,
+    },
     onTrialComplete: vi.fn(),
     onTrialError: vi.fn(),
     timeout: 10000,
@@ -31,7 +37,8 @@ describe('FittsTask', () => {
     expect(screen.getByText(/Amplitude:/)).toBeInTheDocument()
     expect(screen.getByText(/Width:/)).toBeInTheDocument()
     expect(screen.getByText(/ID:/)).toBeInTheDocument()
-    expect(screen.getByText(/Trial:/)).toBeInTheDocument()
+    expect(screen.getByText(/Trial \(Block\):/)).toBeInTheDocument()
+    expect(screen.getByText(/Trial \(Global\):/)).toBeInTheDocument()
   })
 
   it('shows correct parameter values', () => {
@@ -39,7 +46,8 @@ describe('FittsTask', () => {
     expect(screen.getByText('400px')).toBeInTheDocument() // A
     expect(screen.getByText('40px')).toBeInTheDocument() // W
     expect(screen.getByText('3.32 bits')).toBeInTheDocument() // ID
-    expect(screen.getByText('1')).toBeInTheDocument() // Trial number
+    expect(screen.getByText('1/9')).toBeInTheDocument() // Trial in block
+    expect(screen.getByText('5')).toBeInTheDocument() // Global trial number
   })
 
   it('renders canvas with correct class', () => {

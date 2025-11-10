@@ -13,17 +13,26 @@ import {
 import { FittsTask } from './FittsTask'
 import { TLXForm, TLXValues } from './TLXForm'
 import { getTlxStore } from '../lib/tlxStore'
+import {
+  getDisplayMetadata,
+  meetsDisplayRequirements,
+  DisplayMetadata,
+} from '../utils/sessionMeta'
+import { sequenceForParticipant, type Cond } from '../experiment/counterbalance'
 import './TaskPane.css'
 
 type TaskMode = 'manual' | 'fitts'
 
+// Show Manual Control only in development mode
+const SHOW_DEV_MODE = import.meta.env.DEV || import.meta.env.MODE === 'development'
+
 export function TaskPane() {
-  // Manual mode state
+  // Manual mode state (dev only)
   const [trialId, setTrialId] = useState('')
   const [policy, setPolicy] = useState('default')
   
-  // Task mode
-  const [taskMode, setTaskMode] = useState<TaskMode>('manual')
+  // Task mode - default to Fitts Task (the actual experiment)
+  const [taskMode, setTaskMode] = useState<TaskMode>('fitts')
   
   // Modality configuration (shared state via event bus)
   const [modalityConfig, setModalityConfig] = useState<ModalityConfig>(
@@ -49,7 +58,44 @@ export function TaskPane() {
   
   // TLX modal state
   const [showTlxModal, setShowTlxModal] = useState(false)
-  const [currentBlockNumber] = useState(1)
+  const [blockNumber, setBlockNumber] = useState(1)
+  const [globalTrialNumber, setGlobalTrialNumber] = useState(1)
+  const [trialInBlock, setTrialInBlock] = useState(1)
+  const [blockOrderCode, setBlockOrderCode] = useState<'HaS' | 'GaS' | 'HaA' | 'GaA'>('HaS')
+  const [displayMetadata, setDisplayMetadata] = useState<DisplayMetadata | null>(null)
+  const [showDisplayWarning, setShowDisplayWarning] = useState(false)
+  const [activeBlockContext, setActiveBlockContext] = useState<{ modality: string; uiMode: string } | null>(null)
+  
+  // Participant index for counterbalancing (stored for potential logging/display)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [participantIndex, setParticipantIndex] = useState<number | null>(null)
+  const [blockSequence, setBlockSequence] = useState<Cond[]>([])
+  
+  // Initialize participant index and block sequence on mount
+  useEffect(() => {
+    const storedIndex = localStorage.getItem('participantIndex')
+    if (storedIndex !== null) {
+      const idx = parseInt(storedIndex, 10)
+      if (!isNaN(idx)) {
+        setParticipantIndex(idx)
+        const sequence = sequenceForParticipant(idx)
+        setBlockSequence(sequence)
+        return
+      }
+    }
+    
+    // Prompt for participant index if not stored
+    const input = prompt('Enter Participant Index (0-99) for counterbalancing:')
+    if (input !== null) {
+      const idx = parseInt(input, 10)
+      if (!isNaN(idx) && idx >= 0) {
+        setParticipantIndex(idx)
+        localStorage.setItem('participantIndex', String(idx))
+        const sequence = sequenceForParticipant(idx)
+        setBlockSequence(sequence)
+      }
+    }
+  }, [])
   
   // Listen for modality changes from HUDPane
   useEffect(() => {
@@ -125,29 +171,119 @@ export function TaskPane() {
     bus.emit('policy:change', { policy: newPolicy, timestamp: Date.now() })
   }
 
+  // Parse condition code to modality and UI mode
+  const parseCondition = (cond: Cond): { modality: Modality; uiMode: string } => {
+    const modality = cond.startsWith('H') ? Modality.HAND : Modality.GAZE
+    const uiMode = cond.endsWith('A') ? 'adaptive' : 'static'
+    return { modality, uiMode }
+  }
+
   // Fitts task handlers
-  const handleStartFittsBlock = () => {
-    // Generate trial sequence
+  const startFittsBlockInternal = () => {
+    // Get block order from counterbalanced sequence
+    if (blockSequence.length === 0 || blockNumber > blockSequence.length) {
+      console.warn('Block sequence not initialized or block number out of range')
+      return
+    }
+    
+    const currentCond = blockSequence[blockNumber - 1]
+    setBlockOrderCode(currentCond)
+    
+    const { modality: targetModality, uiMode: targetUiMode } = parseCondition(currentCond)
+    
+    // Update modality if needed
+    if (modalityConfig.modality !== targetModality) {
+      bus.emit('modality:change', {
+        config: {
+          modality: targetModality,
+          dwellTime: modalityConfig.dwellTime,
+        },
+        timestamp: Date.now(),
+      })
+    }
+    
+    // Update UI mode
+    setUiMode(targetUiMode)
+    
+    // Generate and shuffle trial sequence
     const configs = selectedIDs.map((id) => DIFFICULTY_PRESETS[id])
     const sequence = generateTrialSequence(configs, nTrialsPerID, true)
     
     setTrialSequence(sequence)
     setCurrentTrialIndex(0)
+    setTrialInBlock(1)
+    setShowDisplayWarning(false)
+    setActiveBlockContext({
+      modality: targetModality,
+      uiMode: targetUiMode,
+    })
     setFittsActive(true)
+  }
+
+  const handleStartFittsBlock = () => {
+    const meta = getDisplayMetadata()
+    setDisplayMetadata(meta)
+
+    if (!meetsDisplayRequirements(meta)) {
+      setShowDisplayWarning(true)
+      return
+    }
+
+    startFittsBlockInternal()
+  }
+
+  const handleDisplayRetry = () => {
+    const meta = getDisplayMetadata()
+    setDisplayMetadata(meta)
+
+    if (meetsDisplayRequirements(meta)) {
+      setShowDisplayWarning(false)
+      startFittsBlockInternal()
+    } else {
+      // Provide feedback on what's still missing
+      const issues: string[] = []
+      const windowCoversMostOfScreen = 
+        meta.window_width >= meta.screen_width * 0.9 && 
+        meta.window_height >= meta.screen_height * 0.9
+      
+      if (!meta.is_fullscreen && !windowCoversMostOfScreen) {
+        issues.push('Maximize browser window or enter fullscreen (F11 or ⌃⌘F)')
+      }
+      if (meta.zoom_level < 95 || meta.zoom_level > 105) {
+        issues.push(`Reset zoom to ~100% (currently ${meta.zoom_level}% - use Ctrl+0 / ⌘0)`)
+      }
+      if (meta.window_width < 1280 || meta.window_height < 720) {
+        issues.push(`Resize window to at least 1280×720 (currently ${meta.window_width}×${meta.window_height})`)
+      }
+      
+      if (issues.length > 0) {
+        alert(`Please fix the following:\n\n${issues.join('\n')}`)
+      }
+    }
+  }
+
+  const handleDisplayModalClose = () => {
+    setShowDisplayWarning(false)
   }
 
   const handleFittsTrialComplete = () => {
     // Move to next trial
     const nextIndex = currentTrialIndex + 1
     
+    setGlobalTrialNumber((prev) => prev + 1)
+    
     if (nextIndex < trialSequence.length) {
       setCurrentTrialIndex(nextIndex)
+      setTrialInBlock((prev) => prev + 1)
     } else {
       // Block complete - show TLX modal
       setFittsActive(false)
       setShowTlxModal(true)
+      setTrialInBlock(1)
       bus.emit('block:complete', {
         totalTrials: trialSequence.length,
+        block_number: blockNumber,
+        block_order: blockOrderCode,
         timestamp: Date.now(),
       })
     }
@@ -155,21 +291,33 @@ export function TaskPane() {
   
   const handleTlxSubmit = (values: TLXValues) => {
     const tlxStore = getTlxStore()
-    tlxStore.setBlockTLX(currentBlockNumber, values)
+    tlxStore.setBlockTLX(blockNumber, values)
+    const blockContext = activeBlockContext ?? {
+      modality: modalityConfig.modality,
+      uiMode,
+    }
     
     bus.emit('tlx:submit', {
-      blockNumber: currentBlockNumber,
+      blockNumber,
+      blockOrder: blockOrderCode,
+      modality: blockContext.modality,
+      ui_mode: blockContext.uiMode,
       values,
       timestamp: Date.now(),
     })
     
     setShowTlxModal(false)
     setCurrentTrialIndex(0)
+    setTrialSequence([])
+    setBlockNumber((prev) => prev + 1)
+    setActiveBlockContext(null)
   }
   
   const handleTlxClose = () => {
     setShowTlxModal(false)
     setCurrentTrialIndex(0)
+    setTrialSequence([])
+    setActiveBlockContext(null)
   }
 
   const handleFittsTrialError = (errorType: 'miss' | 'timeout' | 'slip') => {
@@ -182,6 +330,9 @@ export function TaskPane() {
   const handleStopFittsBlock = () => {
     setFittsActive(false)
     setCurrentTrialIndex(0)
+    setTrialInBlock(1)
+    setTrialSequence([])
+    setActiveBlockContext(null)
   }
 
   const toggleIDSelection = (id: string) => {
@@ -190,33 +341,90 @@ export function TaskPane() {
     )
   }
 
+  const totalTrialsInBlock = Math.max(trialSequence.length, 1)
+  const currentDisplayMeta: DisplayMetadata | null = showDisplayWarning
+    ? displayMetadata ?? getDisplayMetadata()
+    : displayMetadata
+
   return (
     <div className="pane task-pane">
       <h2>Task Control</h2>
       
-      {/* Task Mode Selector */}
-      <div className="control-group">
-        <h3>Task Mode</h3>
-        <div className="mode-selector">
-          <button
-            className={taskMode === 'manual' ? 'active' : ''}
-            onClick={() => setTaskMode('manual')}
-            disabled={fittsActive}
-          >
-            Manual Control
-          </button>
-          <button
-            className={taskMode === 'fitts' ? 'active' : ''}
-            onClick={() => setTaskMode('fitts')}
-            disabled={fittsActive}
-          >
-            Fitts Task
-          </button>
+      {showDisplayWarning && (
+        <div className="display-guard-overlay">
+          <div className="display-guard-modal">
+            <h3>Display Requirements</h3>
+            <p>
+              Please maximize your browser window (or enter fullscreen with F11 / ⌃⌘F) and ensure browser zoom is reset to 100%
+              (Ctrl+0 / ⌘0). Minimum window size is 1280×720.
+            </p>
+            <p style={{ fontSize: '0.875rem', color: '#808080', marginTop: '0.5rem' }}>
+              <strong>Note:</strong> Different monitor sizes and resolutions are fine as long as the window meets minimum size requirements. Webcam is optional (only needed for pupil proxy feature).
+            </p>
+            <div className="display-guard-meta">
+              <div>
+                <strong>Fullscreen:</strong>{' '}
+                {currentDisplayMeta?.is_fullscreen ? 'Yes' : 'No'}
+              </div>
+              <div>
+                <strong>Maximized:</strong>{' '}
+                {currentDisplayMeta && 
+                 currentDisplayMeta.window_width >= currentDisplayMeta.screen_width * 0.9 &&
+                 currentDisplayMeta.window_height >= currentDisplayMeta.screen_height * 0.9
+                  ? 'Yes' : 'No'}
+              </div>
+              <div>
+                <strong>Zoom:</strong>{' '}
+                {currentDisplayMeta ? `${currentDisplayMeta.zoom_level}%` : '—'}
+              </div>
+              <div>
+                <strong>Window:</strong>{' '}
+                {currentDisplayMeta
+                  ? `${currentDisplayMeta.window_width} × ${currentDisplayMeta.window_height}`
+                  : '—'}
+              </div>
+              <div>
+                <strong>Screen:</strong>{' '}
+                {currentDisplayMeta
+                  ? `${currentDisplayMeta.screen_width} × ${currentDisplayMeta.screen_height}`
+                  : '—'}
+              </div>
+            </div>
+            <div className="display-guard-actions">
+              <button onClick={handleDisplayRetry} className="primary-button">
+                Re-check &amp; Start
+              </button>
+              <button onClick={handleDisplayModalClose}>Dismiss</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+      
+      {/* Task Mode Selector - Only show in dev mode */}
+      {SHOW_DEV_MODE && (
+        <div className="control-group">
+          <h3>Task Mode (Dev Only)</h3>
+          <div className="mode-selector">
+            <button
+              className={taskMode === 'manual' ? 'active' : ''}
+              onClick={() => setTaskMode('manual')}
+              disabled={fittsActive}
+            >
+              Manual Control
+            </button>
+            <button
+              className={taskMode === 'fitts' ? 'active' : ''}
+              onClick={() => setTaskMode('fitts')}
+              disabled={fittsActive}
+            >
+              Fitts Task
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Manual Mode */}
-      {taskMode === 'manual' && (
+      {/* Manual Mode - Dev only */}
+      {SHOW_DEV_MODE && taskMode === 'manual' && (
         <>
           <div className="control-group">
             <h3>Trial Management</h3>
@@ -256,10 +464,11 @@ export function TaskPane() {
         </>
       )}
 
-      {/* Fitts Task Mode */}
+      {/* Fitts Task Mode - Primary experiment interface */}
       {taskMode === 'fitts' && !fittsActive && (
         <>
           <div className="control-group">
+            <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.5rem' }}>Fitts Task Experiment</h2>
             <h3>Block Configuration</h3>
             
             <label className="input-label">
@@ -300,30 +509,42 @@ export function TaskPane() {
                 </span>
               )}
               <br />
+              Block #{blockNumber} · Condition: <strong>{blockOrderCode}</strong>
+              <br />
+              Next global trial #: <strong>{globalTrialNumber}</strong>
+              <br />
               <small>Change modality in System HUD</small>
             </div>
 
-            <label className="input-label">
-              UI Mode:
-              <select value={uiMode} onChange={(e) => setUiMode(e.target.value)}>
-                <option value="standard">Standard</option>
-                <option value="minimal">Minimal</option>
-                <option value="enhanced">Enhanced</option>
-              </select>
-            </label>
+            <div className="status" style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+              <strong>Current Block:</strong> {blockOrderCode} — {
+                blockOrderCode === 'HaS' ? 'Hand · Static' :
+                blockOrderCode === 'GaS' ? 'Gaze · Static' :
+                blockOrderCode === 'HaA' ? 'Hand · Adaptive' :
+                'Gaze · Adaptive'
+              }
+              <br />
+              <small style={{ color: '#666' }}>
+                Block order is automatically set based on your participant index (Williams counterbalancing).
+                UI mode (Static/Adaptive) is controlled by the block sequence.
+              </small>
+            </div>
 
-            <label className="input-label">
-              Pressure:
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={pressure}
-                onChange={(e) => setPressure(parseFloat(e.target.value))}
-              />
-              <span className="pressure-value">{pressure.toFixed(1)}</span>
-            </label>
+            {/* Pressure control - Dev only (experimental variable) */}
+            {SHOW_DEV_MODE && (
+              <label className="input-label">
+                Pressure (Dev Only):
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={pressure}
+                  onChange={(e) => setPressure(parseFloat(e.target.value))}
+                />
+                <span className="pressure-value">{pressure.toFixed(1)}</span>
+              </label>
+            )}
 
             <div className="status">
               Total Trials: <strong>{selectedIDs.length * nTrialsPerID}</strong>
@@ -348,13 +569,16 @@ export function TaskPane() {
           <div className="control-group">
             <div className="block-progress">
               <h3>
-                Trial {currentTrialIndex + 1} of {trialSequence.length}
+                Trial {trialInBlock} of {trialSequence.length}
               </h3>
               <div className="progress-bar">
                 <div
                   className="progress-fill"
                   style={{
-                    width: `${((currentTrialIndex + 1) / trialSequence.length) * 100}%`,
+                    width: `${Math.min(
+                      (trialInBlock / totalTrialsInBlock) * 100,
+                      100
+                    )}%`,
                   }}
                 />
               </div>
@@ -370,7 +594,13 @@ export function TaskPane() {
             modalityConfig={modalityConfig}
             ui_mode={uiMode}
             pressure={pressure}
-            trialNumber={currentTrialIndex + 1}
+            trialContext={{
+              globalTrialNumber,
+              trialInBlock,
+              blockNumber,
+              blockOrder: blockOrderCode,
+              blockTrialCount: trialSequence.length,
+            }}
             widthScale={widthScale}
             pressureEnabled={pressureEnabled}
             agingEnabled={agingEnabled}
@@ -384,7 +614,7 @@ export function TaskPane() {
       
       {/* TLX Modal */}
       <TLXForm
-        blockNumber={currentBlockNumber}
+        blockNumber={blockNumber}
         isOpen={showTlxModal}
         onSubmit={handleTlxSubmit}
         onClose={handleTlxClose}

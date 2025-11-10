@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { bus } from '../lib/bus'
-import { getLogger, createRowFromTrial, initLogger, attachTlxToRow } from '../lib/csv'
-import { getTlxStore } from '../lib/tlxStore'
+import { getLogger, createRowFromTrial, initLogger } from '../lib/csv'
 import './LoggerPane.css'
 
 interface LogEntry {
@@ -19,6 +18,7 @@ export function LoggerPane() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [csvRowCount, setCsvRowCount] = useState(0)
   const [currentBlock, setCurrentBlock] = useState(1)
+  const [blockRowCount, setBlockRowCount] = useState(0)
 
   // Initialize CSV logger on mount
   useEffect(() => {
@@ -47,20 +47,24 @@ export function LoggerPane() {
       
       // Log to CSV for trial events
       if (eventName === 'trial:end' || eventName === 'trial:error') {
-        let row = createRowFromTrial(payload, blockNumber)
-        
-        // Attach TLX values from store
-        const tlxStore = getTlxStore()
-        const tlxValues = tlxStore.getBlockTLX(blockNumber)
-        row = attachTlxToRow(row, tlxValues)
-        
+        const row = createRowFromTrial(payload, blockNumber)
         logger.pushRow(row)
         setCsvRowCount(logger.getRowCount())
       }
       
-      // Log TLX submission
-      if (eventName === 'tlx:submit') {
-        setCsvRowCount(logger.getRowCount())
+      if (eventName === 'tlx:submit' && payload?.values) {
+        logger.pushBlockRow({
+          modality: payload.modality || '',
+          ui_mode: payload.ui_mode || '',
+          block_number: payload.blockNumber,
+          tlx_mental: payload.values.mental,
+          tlx_physical: payload.values.physical,
+          tlx_temporal: payload.values.temporal,
+          tlx_performance: payload.values.performance,
+          tlx_effort: payload.values.effort,
+          tlx_frustration: payload.values.frustration,
+        })
+        setBlockRowCount(logger.getBlockRowCount())
       }
       
       // Track block completion
@@ -75,6 +79,7 @@ export function LoggerPane() {
       'trial:end': createLogHandler('trial:end'),
       'trial:error': createLogHandler('trial:error'),
       'policy:change': createLogHandler('policy:change'),
+      'tlx:submit': createLogHandler('tlx:submit'),
     }
 
     // Subscribe to all events
@@ -100,6 +105,13 @@ export function LoggerPane() {
     const filename = `experiment_${timestamp}.csv`
     logger.downloadCSV(filename)
   }
+
+  const handleDownloadBlockCSV = () => {
+    const logger = getLogger()
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+    const filename = `block_data_${timestamp}.csv`
+    logger.downloadBlockCSV(filename)
+  }
   
   const handleDownloadJSON = () => {
     const logger = getLogger()
@@ -113,6 +125,7 @@ export function LoggerPane() {
       const logger = getLogger()
       logger.clear()
       setCsvRowCount(0)
+      setBlockRowCount(0)
     }
   }
 
@@ -143,9 +156,13 @@ export function LoggerPane() {
             Clear Logs
           </button>
           <div className="csv-actions">
-            <span className="csv-count">{csvRowCount} rows</span>
+            <span className="csv-count">{csvRowCount} trial rows</span>
+            <span className="csv-count secondary">{blockRowCount} block rows</span>
             <button onClick={handleDownloadCSV} className="download-btn">
               📊 Download CSV
+            </button>
+            <button onClick={handleDownloadBlockCSV} className="download-btn secondary">
+              🧱 Block CSV
             </button>
             <button onClick={handleDownloadJSON} className="download-btn secondary">
               📄 JSON

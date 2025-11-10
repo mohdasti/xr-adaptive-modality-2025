@@ -41,8 +41,6 @@ EXPECTED_SCHEMA = {
     'hover_ms': 'object',      # Hover duration
     'confirm_type': 'object',  # Confirmation method
     'pupil_z_med': 'object',   # Pupil z-score
-    'tlx_global': 'object',    # TLX global workload
-    'tlx_mental': 'object',    # TLX mental demand
     'browser': 'object',       # Browser name
     'dpi': 'object',           # Device pixel ratio
 }

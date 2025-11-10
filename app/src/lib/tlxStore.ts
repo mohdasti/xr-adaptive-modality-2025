@@ -4,8 +4,12 @@
  */
 
 export interface TLXValues {
-  global: number
   mental: number
+  physical: number
+  temporal: number
+  performance: number
+  effort: number
+  frustration: number
 }
 
 class TLXStore {
