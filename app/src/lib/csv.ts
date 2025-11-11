@@ -361,7 +361,7 @@ export function getLogger(): CSVLogger {
  * Helper to create row from trial event
  */
 export function createRowFromTrial(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any,
   blockNumber: number = 1,
   adaptationTriggered: boolean = false
@@ -411,7 +411,7 @@ export function createRowFromTrial(
     is_fullscreen: displayMeta?.is_fullscreen ?? payload.is_fullscreen ?? null,
     user_agent: displayMeta?.user_agent ?? payload.user_agent ?? null,
   }
-
+  
   return row
 }
 

@@ -30,8 +30,12 @@ test.describe('CSV Export', () => {
     // Otherwise, verify download button exists as sanity check
     const csv = await page.evaluate(() => {
       // Try to access logger's toCSV method if available
-      if (typeof (window as any).exportTrials === 'function') {
-        return (window as any).exportTrials()
+      interface WindowWithExport {
+        exportTrials?: () => string | null
+      }
+      const win = window as unknown as WindowWithExport
+      if (typeof win.exportTrials === 'function') {
+        return win.exportTrials()
       }
       return null
     })
@@ -69,8 +73,12 @@ test.describe('CSV Export', () => {
 
     // Try to get CSV content if export function exists
     const csvContent = await page.evaluate(() => {
-      if (typeof (window as any).exportTrials === 'function') {
-        return (window as any).exportTrials()
+      interface WindowWithExport {
+        exportTrials?: () => string | null
+      }
+      const win = window as unknown as WindowWithExport
+      if (typeof win.exportTrials === 'function') {
+        return win.exportTrials()
       }
       return null
     })

@@ -422,25 +422,25 @@ export function TaskPane() {
       
       {/* Task Mode Selector - Only show in dev mode */}
       {SHOW_DEV_MODE && (
-        <div className="control-group">
+      <div className="control-group">
           <h3>Task Mode (Dev Only)</h3>
-          <div className="mode-selector">
-            <button
-              className={taskMode === 'manual' ? 'active' : ''}
-              onClick={() => setTaskMode('manual')}
-              disabled={fittsActive}
-            >
-              Manual Control
-            </button>
-            <button
-              className={taskMode === 'fitts' ? 'active' : ''}
-              onClick={() => setTaskMode('fitts')}
-              disabled={fittsActive}
-            >
-              Fitts Task
-            </button>
-          </div>
+        <div className="mode-selector">
+          <button
+            className={taskMode === 'manual' ? 'active' : ''}
+            onClick={() => setTaskMode('manual')}
+            disabled={fittsActive}
+          >
+            Manual Control
+          </button>
+          <button
+            className={taskMode === 'fitts' ? 'active' : ''}
+            onClick={() => setTaskMode('fitts')}
+            disabled={fittsActive}
+          >
+            Fitts Task
+          </button>
         </div>
+      </div>
       )}
 
       {/* Manual Mode - Dev only */}
@@ -552,18 +552,18 @@ export function TaskPane() {
 
             {/* Pressure control - Dev only (experimental variable) */}
             {SHOW_DEV_MODE && (
-              <label className="input-label">
+            <label className="input-label">
                 Pressure (Dev Only):
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value={pressure}
-                  onChange={(e) => setPressure(parseFloat(e.target.value))}
-                />
-                <span className="pressure-value">{pressure.toFixed(1)}</span>
-              </label>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.1"
+                value={pressure}
+                onChange={(e) => setPressure(parseFloat(e.target.value))}
+              />
+              <span className="pressure-value">{pressure.toFixed(1)}</span>
+            </label>
             )}
 
             <div className="status">

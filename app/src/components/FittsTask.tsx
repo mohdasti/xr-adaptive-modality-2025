@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { bus } from '../lib/bus'
 import {
   FittsConfig,
@@ -166,7 +166,7 @@ export function FittsTask({
   // Canvas dimensions (from CSS: 800x600)
   const CANVAS_WIDTH = 800
   const CANVAS_HEIGHT = 600
-  const TARGET_MARGIN = Math.max(config.W * 2, 100) // Ensure target + some padding fits
+  const targetMargin = useMemo(() => Math.max(config.W * 2, 100), [config.W]) // Ensure target + some padding fits
   
   // Generate possible target positions (constrained to canvas bounds)
   const targetPositions = useRef(
@@ -175,7 +175,7 @@ export function FittsTask({
       config.A,
       8,
       { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
-      TARGET_MARGIN
+      targetMargin
     )
   )
   
@@ -187,11 +187,11 @@ export function FittsTask({
         config.A,
         8,
         { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
-        TARGET_MARGIN
+        targetMargin
       )
       targetPositions.current = shuffle(positions)
     }
-  }, [trialContext.blockNumber, startPos, config.A, config.W])
+  }, [trialContext.blockNumber, startPos, config.A, targetMargin])
 
   const startTrial = useCallback(() => {
     // Hide start button first
@@ -205,14 +205,14 @@ export function FittsTask({
     
     // Validate target is within canvas bounds
     if (
-      target.x < TARGET_MARGIN ||
-      target.x > CANVAS_WIDTH - TARGET_MARGIN ||
-      target.y < TARGET_MARGIN ||
-      target.y > CANVAS_HEIGHT - TARGET_MARGIN
+      target.x < targetMargin ||
+      target.x > CANVAS_WIDTH - targetMargin ||
+      target.y < targetMargin ||
+      target.y > CANVAS_HEIGHT - targetMargin
     ) {
       console.warn(
         `Target position (${target.x}, ${target.y}) is outside canvas bounds. ` +
-        `Canvas: ${CANVAS_WIDTH}×${CANVAS_HEIGHT}, Margin: ${TARGET_MARGIN}`
+        `Canvas: ${CANVAS_WIDTH}×${CANVAS_HEIGHT}, Margin: ${targetMargin}`
       )
     }
     
@@ -288,6 +288,7 @@ export function FittsTask({
     startPos,
     handleTimeout,
     agingEnabled,
+    targetMargin,
   ])
 
   const getConfirmType = useCallback(

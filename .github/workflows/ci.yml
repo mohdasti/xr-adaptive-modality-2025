@@ -52,10 +52,12 @@ jobs:
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: playwright-report
           path: app/playwright-report/
           retention-days: 30
+          if-no-files-found: ignore
 
   run-r-analysis:
     runs-on: ubuntu-latest
@@ -68,9 +70,14 @@ jobs:
         with:
           r-version: '4.4.0'
       
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgsl-dev libcurl4-openssl-dev libssl-dev libxml2-dev
+      
       - name: Install R packages
         run: |
-          Rscript -e 'install.packages(c("tidyverse","lme4","lmerTest","TOSTER","emmeans","afex"), repos="https://cloud.r-project.org", dependencies=TRUE)'
+          Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org")); install.packages(c("tidyverse","lme4","lmerTest","TOSTER","emmeans","afex"), dependencies=TRUE, Ncpus=2)'
       
       - name: Verify package installation
         run: |
