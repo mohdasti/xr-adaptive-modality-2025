@@ -59,6 +59,16 @@ export function FittsTask({
 }: FittsTaskProps) {
   // Suppress unused warning for future use
   void cameraEnabled
+  
+  // Debug: log modality config changes
+  useEffect(() => {
+    console.log('[FittsTask] Modality config:', {
+      modality: modalityConfig.modality,
+      dwellTime: modalityConfig.dwellTime,
+      isGaze: modalityConfig.modality === Modality.GAZE,
+    })
+  }, [modalityConfig.modality, modalityConfig.dwellTime])
+  
   // Apply width scaling
   const effectiveWidth = config.W * widthScale
   const [startPos] = useState<Position>({ x: 400, y: 300 }) // Center of canvas
@@ -153,83 +163,121 @@ export function FittsTask({
     onTrialError('timeout')
   }, [getSpatialMetrics, onTrialError])
 
-  // Generate possible target positions
+  // Canvas dimensions (from CSS: 800x600)
+  const CANVAS_WIDTH = 800
+  const CANVAS_HEIGHT = 600
+  const TARGET_MARGIN = Math.max(config.W * 2, 100) // Ensure target + some padding fits
+  
+  // Generate possible target positions (constrained to canvas bounds)
   const targetPositions = useRef(
-    generateCircularPositions(startPos, config.A, 8)
+    generateCircularPositions(
+      startPos,
+      config.A,
+      8,
+      { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+      TARGET_MARGIN
+    )
   )
   
   // Shuffle target positions when block number changes
   useEffect(() => {
     if (trialContext.blockNumber > 0) {
-      const positions = generateCircularPositions(startPos, config.A, 8)
+      const positions = generateCircularPositions(
+        startPos,
+        config.A,
+        8,
+        { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+        TARGET_MARGIN
+      )
       targetPositions.current = shuffle(positions)
     }
-  }, [trialContext.blockNumber, startPos, config.A])
+  }, [trialContext.blockNumber, startPos, config.A, config.W])
 
   const startTrial = useCallback(() => {
-    // Select random target position
-    const randomIndex = Math.floor(Math.random() * targetPositions.current.length)
-    const target = targetPositions.current[randomIndex]
-    
-    setTargetPos(target)
+    // Hide start button first
     setShowStart(false)
-    setGazeState(createGazeState(modalityConfig.dwellTime))
-    setCountdown(timeout / 1000)
+    setTargetPos(null) // Ensure target is hidden initially
     
-    const startTime = Date.now()
-    setTrialStartTime(startTime)
+    // Select target position based on trial number (cycles through positions)
+    // This ensures variety and prevents same position from repeating
+    const positionIndex = (trialContext.trialInBlock - 1) % targetPositions.current.length
+    const target = targetPositions.current[positionIndex]
     
-    // Create trial data
-    const trialId = `trial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const trialData: TrialData = {
-      trialId,
-      trialNumber: trialContext.trialInBlock,
-      globalTrialNumber: trialContext.globalTrialNumber,
-      trialInBlock: trialContext.trialInBlock,
-      blockNumber: trialContext.blockNumber,
-      blockOrder: trialContext.blockOrder,
-      blockTrialCount: trialContext.blockTrialCount,
-      A: config.A,
-      W: config.W,
-      ID: config.ID,
-      modality: modalityConfig.modality,
-      ui_mode,
-      pressure,
-      aging: agingEnabled,
-      startPos,
-      targetPos: target,
-      timestamp: startTime,
+    // Validate target is within canvas bounds
+    if (
+      target.x < TARGET_MARGIN ||
+      target.x > CANVAS_WIDTH - TARGET_MARGIN ||
+      target.y < TARGET_MARGIN ||
+      target.y > CANVAS_HEIGHT - TARGET_MARGIN
+    ) {
+      console.warn(
+        `Target position (${target.x}, ${target.y}) is outside canvas bounds. ` +
+        `Canvas: ${CANVAS_WIDTH}×${CANVAS_HEIGHT}, Margin: ${TARGET_MARGIN}`
+      )
     }
     
-    trialDataRef.current = trialData
-    
-    // Emit trial start event
-    bus.emit('trial:start', {
-      trialId,
-      trial: trialContext.trialInBlock,
-      trial_in_block: trialContext.trialInBlock,
-      trial_number: trialContext.globalTrialNumber,
-      block_number: trialContext.blockNumber,
-      block_order: trialContext.blockOrder,
-      block_trial_count: trialContext.blockTrialCount,
-      A: config.A,
-      W: config.W,
-      ID: config.ID,
-      index_of_difficulty_nominal: config.ID,
-      target_distance_A: config.A,
-      modality: modalityConfig.modality,
-      ui_mode,
-      pressure,
-      aging: agingEnabled,
-      timestamp: startTime,
-    })
-    
-    // Set timeout
-    if (timeout > 0) {
-      timeoutRef.current = setTimeout(() => {
-        handleTimeout()
-      }, timeout)
-    }
+    // Add a brief delay before showing target (200ms) to allow participant to prepare
+    // This makes the trial more realistic and prevents immediate clicking
+    setTimeout(() => {
+      setTargetPos(target)
+      setGazeState(createGazeState(modalityConfig.dwellTime))
+      setCountdown(timeout / 1000)
+      
+      const startTime = Date.now()
+      setTrialStartTime(startTime)
+      
+      // Create trial data
+      const trialId = `trial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const trialData: TrialData = {
+        trialId,
+        trialNumber: trialContext.trialInBlock,
+        globalTrialNumber: trialContext.globalTrialNumber,
+        trialInBlock: trialContext.trialInBlock,
+        blockNumber: trialContext.blockNumber,
+        blockOrder: trialContext.blockOrder,
+        blockTrialCount: trialContext.blockTrialCount,
+        A: config.A,
+        W: config.W,
+        ID: config.ID,
+        modality: modalityConfig.modality,
+        ui_mode,
+        pressure,
+        aging: agingEnabled,
+        startPos,
+        targetPos: target,
+        timestamp: startTime,
+      }
+      
+      trialDataRef.current = trialData
+      
+      // Emit trial start event
+      bus.emit('trial:start', {
+        trialId,
+        trial: trialContext.trialInBlock,
+        trial_in_block: trialContext.trialInBlock,
+        trial_number: trialContext.globalTrialNumber,
+        block_number: trialContext.blockNumber,
+        block_order: trialContext.blockOrder,
+        block_trial_count: trialContext.blockTrialCount,
+        A: config.A,
+        W: config.W,
+        ID: config.ID,
+        index_of_difficulty_nominal: config.ID,
+        target_distance_A: config.A,
+        modality: modalityConfig.modality,
+        ui_mode,
+        pressure,
+        aging: agingEnabled,
+        timestamp: startTime,
+      })
+      
+      // Set timeout
+      if (timeout > 0) {
+        timeoutRef.current = setTimeout(() => {
+          handleTimeout()
+        }, timeout)
+      }
+    }, 200) // 200ms delay before target appears
   }, [
     config,
     modalityConfig,
@@ -363,9 +411,14 @@ export function FittsTask({
         if (isHit(clickPos, startPos, 60)) {
           startTrial()
         }
-      } else if (targetPos && modalityConfig.modality === Modality.HAND) {
-        // Hand mode: direct click
-        completeSelection(clickPos, true)
+      } else if (targetPos) {
+        if (modalityConfig.modality === Modality.HAND) {
+          // Hand mode: direct click
+          completeSelection(clickPos, true)
+        } else {
+          // Gaze mode: clicking should not work (only dwell or space)
+          console.log('[FittsTask] Click ignored in gaze mode. Use dwell or space key.')
+        }
       }
     },
     [showStart, startPos, targetPos, modalityConfig.modality, startTrial, completeSelection]
@@ -388,13 +441,45 @@ export function FittsTask({
     [modalityConfig.modality, showStart, targetPos]
   )
 
-  // Gaze mode: update hover state
+  // Track mouse position globally for gaze mode
+  const mousePosRef = useRef<Position>({ x: 0, y: 0 })
+  
+  // Update mouse position on move
   useEffect(() => {
     if (modalityConfig.modality !== Modality.GAZE) return
+    
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (!canvasRef.current) return
+      const rect = canvasRef.current.getBoundingClientRect()
+      mousePosRef.current = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      }
+      // Also update cursorPos for display purposes
+      setCursorPos(mousePosRef.current)
+    }
+    
+    window.addEventListener('mousemove', handleGlobalMouseMove)
+    return () => window.removeEventListener('mousemove', handleGlobalMouseMove)
+  }, [modalityConfig.modality])
+
+  // Gaze mode: update hover state
+  useEffect(() => {
+    if (modalityConfig.modality !== Modality.GAZE) {
+      // Debug: log when not in gaze mode
+      if (showStart === false && targetPos !== null) {
+        console.log('[FittsTask] Not in gaze mode, modality:', modalityConfig.modality, 'dwellTime:', modalityConfig.dwellTime)
+      }
+      return
+    }
     if (showStart || !targetPos) return
     
+    console.log('[FittsTask] Starting gaze hover detection, dwellTime:', modalityConfig.dwellTime)
+    
     const updateHover = () => {
-      const isHovering = isPointInTarget(cursorPos, targetPos, effectiveWidth)
+      // Use the ref for current mouse position (always up-to-date)
+      const currentMousePos = mousePosRef.current
+      const isHovering = isPointInTarget(currentMousePos, targetPos, effectiveWidth)
       const currentTime = Date.now()
       
       setGazeState((prev) => {
@@ -405,12 +490,18 @@ export function FittsTask({
           modalityConfig.dwellTime
         )
         
+        // Debug: log hover state changes
+        if (isHovering !== prev.isHovering) {
+          console.log('[FittsTask] Hover state changed:', isHovering, 'dwellProgress:', newState.dwellProgress.toFixed(2))
+        }
+        
         // Check if selection is complete (dwell-based)
         if (
           modalityConfig.dwellTime > 0 &&
           isGazeSelectionComplete(newState, modalityConfig.dwellTime, false)
         ) {
-          completeSelection(cursorPos, false)
+          console.log('[FittsTask] Dwell complete! Auto-selecting...')
+          completeSelection(currentMousePos, false)
           return prev // Don't update state, trial is ending
         }
         
@@ -432,7 +523,6 @@ export function FittsTask({
     modalityConfig.dwellTime,
     showStart,
     targetPos,
-    cursorPos,
     effectiveWidth,
     completeSelection,
   ])
@@ -507,6 +597,26 @@ export function FittsTask({
     getSpatialMetrics,
     getConfirmType,
   ])
+
+  // Reset state when trial context changes (new trial starts)
+  useEffect(() => {
+    // Reset to start state for new trial
+    setShowStart(true)
+    setTargetPos(null)
+    setTrialStartTime(null)
+    setGazeState(createGazeState(modalityConfig.dwellTime))
+    setCountdown(timeout / 1000)
+    
+    // Clear any pending timeouts
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+  }, [trialContext.trialInBlock, trialContext.globalTrialNumber, modalityConfig.dwellTime, timeout])
 
   // Countdown timer for pressure mode
   useEffect(() => {
@@ -583,8 +693,8 @@ export function FittsTask({
                   <div
                     className="dwell-progress"
                     style={{
-                      width: `${gazeState.dwellProgress * 100}%`,
-                      height: `${gazeState.dwellProgress * 100}%`,
+                      width: `${gazeState.dwellProgress * effectiveWidth}px`,
+                      height: `${gazeState.dwellProgress * effectiveWidth}px`,
                     }}
                   />
                 )}

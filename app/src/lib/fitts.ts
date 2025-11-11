@@ -133,25 +133,52 @@ export interface Position {
 
 /**
  * Generate target positions in a circular layout around a center point
+ * Positions are constrained to stay within canvas bounds
  * @param center - Center position
  * @param amplitude - Distance from center
  * @param numPositions - Number of positions around the circle
+ * @param canvasBounds - Optional canvas bounds {width, height} to constrain positions
+ * @param margin - Margin from edges to ensure target is fully visible (default: 100px for target width)
  * @returns Array of positions
  */
 export function generateCircularPositions(
   center: Position,
   amplitude: number,
-  numPositions: number = 8
+  numPositions: number = 8,
+  canvasBounds?: { width: number; height: number },
+  margin: number = 100
 ): Position[] {
   const positions: Position[] = []
   const angleStep = (2 * Math.PI) / numPositions
   
+  // If canvas bounds provided, constrain amplitude to fit
+  let effectiveAmplitude = amplitude
+  if (canvasBounds) {
+    const maxAmplitudeX = (canvasBounds.width / 2) - margin
+    const maxAmplitudeY = (canvasBounds.height / 2) - margin
+    effectiveAmplitude = Math.min(amplitude, maxAmplitudeX, maxAmplitudeY)
+    
+    // Warn if amplitude was constrained (targets would be outside canvas)
+    if (effectiveAmplitude < amplitude) {
+      console.warn(
+        `Amplitude ${amplitude}px constrained to ${effectiveAmplitude}px ` +
+        `to fit canvas ${canvasBounds.width}×${canvasBounds.height}px with margin ${margin}px`
+      )
+    }
+  }
+  
   for (let i = 0; i < numPositions; i++) {
     const angle = i * angleStep
-    positions.push({
-      x: center.x + amplitude * Math.cos(angle),
-      y: center.y + amplitude * Math.sin(angle),
-    })
+    let x = center.x + effectiveAmplitude * Math.cos(angle)
+    let y = center.y + effectiveAmplitude * Math.sin(angle)
+    
+    // Clamp to canvas bounds if provided
+    if (canvasBounds) {
+      x = Math.max(margin, Math.min(canvasBounds.width - margin, x))
+      y = Math.max(margin, Math.min(canvasBounds.height - margin, y))
+    }
+    
+    positions.push({ x, y })
   }
   
   return positions

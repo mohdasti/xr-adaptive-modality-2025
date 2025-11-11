@@ -26,7 +26,6 @@ export function displayStabilityScore(
 export function enforceDisplayOrPause(onPause: (msg: string) => void): boolean {
   const okZoom = getZoomPercent() === 100
   const okFS = !!document.fullscreenElement
-  const okDPR = !!window.devicePixelRatio
 
   if (!okZoom || !okFS) {
     onPause('Display changed. Please return to **Fullscreen** and **100% zoom** to continue.')

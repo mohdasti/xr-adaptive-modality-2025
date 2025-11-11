@@ -9,6 +9,19 @@
       "post_trigger_window": 5,
       "min_trigger_gap": 3
     }
+  }
+}
+{
+  "adaptation": {
+    "triggers": {
+      "rt_percentile": 75,
+      "error_burst_threshold": 2,
+      "min_trials_before_adapt": 5
+    },
+    "hysteresis": {
+      "post_trigger_window": 5,
+      "min_trigger_gap": 3
+    }
   },
   "notes": {
     "target_trigger_rate_percent": "15-25 (tune in pilot, then lock)"

@@ -35,11 +35,16 @@
 }
 
 .fitts-canvas.hand-mode {
-  cursor: crosshair;
+  cursor: crosshair !important; /* Ensure cursor is always visible in hand mode */
 }
 
 .fitts-canvas.gaze-mode {
   cursor: none;
+}
+
+/* Ensure cursor remains visible in hand mode even with pressure/aging enabled */
+.fitts-canvas.hand-mode .countdown-overlay {
+  pointer-events: none;
 }
 
 .fitts-canvas.gaze-mode::after {
@@ -134,10 +139,18 @@
 /* Dwell progress indicator */
 .dwell-progress {
   position: absolute;
-  background: radial-gradient(circle, rgba(0, 217, 255, 0.6) 0%, rgba(0, 217, 255, 0.2) 100%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(0, 217, 255, 0.9) 0%, rgba(0, 217, 255, 0.5) 50%, rgba(0, 217, 255, 0.1) 100%);
   border-radius: 50%;
   transition: width 0.05s linear, height 0.05s linear;
   pointer-events: none;
+  z-index: 10;
+  border: 2px solid rgba(0, 217, 255, 0.8);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.6);
+  min-width: 0;
+  min-height: 0;
 }
 
 /* Space confirmation indicator */
@@ -228,6 +241,7 @@
   border-radius: 8px;
   box-shadow: 0 0 20px rgba(0, 217, 255, 0.6);
   z-index: 100;
+  pointer-events: none; /* Don't block mouse interactions */
   animation: countdown-pulse 1s ease-in-out infinite;
 }
 

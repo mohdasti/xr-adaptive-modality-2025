@@ -66,9 +66,8 @@ export function TaskPane() {
   const [showDisplayWarning, setShowDisplayWarning] = useState(false)
   const [activeBlockContext, setActiveBlockContext] = useState<{ modality: string; uiMode: string } | null>(null)
   
-  // Participant index for counterbalancing (stored for potential logging/display)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [participantIndex, setParticipantIndex] = useState<number | null>(null)
+  // Participant index for counterbalancing (stored in localStorage)
+  const [, setParticipantIndex] = useState<number | null>(null)
   const [blockSequence, setBlockSequence] = useState<Cond[]>([])
   
   // Initialize participant index and block sequence on mount
@@ -192,13 +191,34 @@ export function TaskPane() {
     const { modality: targetModality, uiMode: targetUiMode } = parseCondition(currentCond)
     
     // Update modality if needed
-    if (modalityConfig.modality !== targetModality) {
-      bus.emit('modality:change', {
-        config: {
-          modality: targetModality,
+    // In development, respect HUD selection to allow testing Gaze+dwell regardless of block order
+    if (!SHOW_DEV_MODE) {
+      if (modalityConfig.modality !== targetModality) {
+        console.log('[TaskPane] Block forcing modality change:', {
+          from: modalityConfig.modality,
+          to: targetModality,
+          blockCondition: currentCond,
+          currentDwellTime: modalityConfig.dwellTime,
+        })
+        bus.emit('modality:change', {
+          config: {
+            modality: targetModality,
+            dwellTime: modalityConfig.dwellTime, // Preserve dwell time setting
+          },
+          timestamp: Date.now(),
+        })
+      } else {
+        console.log('[TaskPane] Modality matches block condition:', {
+          modality: modalityConfig.modality,
+          blockCondition: currentCond,
           dwellTime: modalityConfig.dwellTime,
-        },
-        timestamp: Date.now(),
+        })
+      }
+    } else {
+      console.log('[TaskPane] DEV mode: respecting HUD modality override:', {
+        modalityFromHUD: modalityConfig.modality,
+        dwellTime: modalityConfig.dwellTime,
+        blockCondition: currentCond,
       })
     }
     
