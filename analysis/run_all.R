@@ -1,36 +1,32 @@
-# Master script to run all analyses in sequence
-# Usage: Rscript analysis/run_all.R
+suppressPackageStartupMessages({
+  library(tidyverse)
+})
 
-# Create output directories
+set.seed(42)
 dir.create("results", showWarnings = FALSE)
-dir.create("results/figures", recursive = TRUE, showWarnings = FALSE)
-dir.create("results/tables", recursive = TRUE, showWarnings = FALSE)
 
-cat("========================================\n")
-cat("Running XR Adaptive Modality Analysis\n")
-cat("========================================\n\n")
+trials <- read_csv("data/clean/trial_data.csv", show_col_types = FALSE)
 
-# Step 1: Compute effective metrics
-cat("Step 1: Computing effective metrics...\n")
-source("analysis/01_compute_effective_metrics.R")
-cat("\n")
+source("analysis/compute_effective_metrics.R")
+source("analysis/primary_models.R")
 
-# Step 2: Run primary models (RT and Errors)
-cat("Step 2: Running primary models (RT and Errors)...\n")
-source("analysis/02_models.R")
-cat("\n")
+# ISO metrics
+iso <- compute_effective_metrics(trials)
+write_csv(iso$per_condition, "results/iso_per_condition.csv")
+write_csv(iso$tp_condition, "results/iso_tp_condition.csv")
 
-# Step 3: TOST equivalence test
-cat("Step 3: Running TOST equivalence test...\n")
-source("analysis/03_tost_equivalence.R")
-cat("\n")
+# Attach IDe into trials for modeling (merge by keys)
+trials_w <- trials %>%
+  left_join(iso$per_condition %>%
+              group_by(participant_id, modality, ui_mode) %>%
+              summarise(IDe_bits = mean(IDe, na.rm = TRUE), .groups = "drop"),
+            by = c("participant_id", "modality", "ui_mode"))
 
-# Step 4: TLX analysis
-cat("Step 4: Running TLX analysis...\n")
-source("analysis/04_tlx.R")
-cat("\n")
+# Models
+h1 <- test_h1_modality(trials_w)
+h2 <- test_h2_tost(trials_w)
+h3 <- test_h3_interaction(trials_w)
 
-cat("========================================\n")
-cat("✓ Analysis complete. See results/ for outputs.\n")
-cat("========================================\n")
-
+capture.output(sessionInfo(), file = "results/session_info.txt")
+saveRDS(list(h1 = h1, h2 = h2, h3 = h3), "results/model_objects.rds")
+cat("✓ Analyses complete. See /results\n")

@@ -172,5 +172,31 @@ describe('Fitts Law Utilities', () => {
       expect(isHit({ x: 400, y: 400 }, target, width)).toBe(false)
     })
   })
+
+  describe('ISO 9241-9 Effective Metrics', () => {
+    function computeEffectiveWidth(sd: number) {
+      return 4.133 * sd
+    }
+
+    function computeIDe(A: number, We: number) {
+      return Math.log2(A / We + 1)
+    }
+
+    function throughput(IDe: number, MTs: number) {
+      return IDe / MTs
+    }
+
+    it('effective width', () => {
+      expect(computeEffectiveWidth(0.79)).toBeCloseTo(3.27, 2)
+    })
+
+    it('IDe', () => {
+      expect(computeIDe(200, 3.27)).toBeCloseTo(5.94, 2)
+    })
+
+    it('TP', () => {
+      expect(throughput(5.94, 0.5)).toBeCloseTo(11.88, 2)
+    })
+  })
 })
 

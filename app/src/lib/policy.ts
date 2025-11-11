@@ -480,3 +480,39 @@ export function getPolicyEngine(): PolicyEngine {
   return globalPolicyEngine
 }
 
+/**
+ * Hysteresis helper: Check if hand modality should adapt based on rolling error rate
+ * @param last - Array of recent trial results with error flag
+ * @param thr - Error rate threshold (default 0.10 = 10%)
+ * @param lookback - Number of trials to look back (default 5)
+ * @returns true if error rate exceeds threshold
+ */
+export function shouldAdaptHand(
+  last: Array<{ error: boolean }>,
+  thr = 0.10,
+  lookback = 5
+): boolean {
+  const w = last.slice(-lookback)
+  if (w.length < lookback) return false
+  const rate = w.filter((t) => t.error).length / w.length
+  return rate > thr
+}
+
+/**
+ * Hysteresis helper: Check if gaze modality should adapt based on rolling mean RT
+ * @param last - Array of recent trial results with movement time
+ * @param thrMs - RT threshold in milliseconds (default 1200ms)
+ * @param lookback - Number of trials to look back (default 5)
+ * @returns true if mean RT exceeds threshold
+ */
+export function shouldAdaptGaze(
+  last: Array<{ mt: number }>,
+  thrMs = 1200,
+  lookback = 5
+): boolean {
+  const w = last.slice(-lookback)
+  if (w.length < lookback) return false
+  const mean = w.reduce((a, b) => a + b.mt, 0) / w.length
+  return mean > thrMs
+}
+

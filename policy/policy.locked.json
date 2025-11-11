@@ -1,20 +1,22 @@
 {
+  "version": "2025-11-10",
   "hand": {
     "metric": "rolling_error_rate",
     "lookback_trials": 5,
-    "threshold": 0.10,
+    "threshold": 0.11,
     "width_inflate_factor": {
       "lt3": 1.00,
-      "b3_5": 1.20,
-      "gt5": 1.30
+      "b3_5": 1.18,
+      "gt5": 1.28
     }
   },
   "gaze_confirm": {
     "metric": "rolling_mean_rt_ms",
     "lookback_trials": 5,
-    "threshold": 1200,
+    "threshold": 1180,
     "declutter_hide_pct": 0.30,
     "combine_width_id_gt": 5.0,
     "width_inflate_factor": 1.15
   }
 }
+

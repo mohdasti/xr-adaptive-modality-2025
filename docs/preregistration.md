@@ -1,37 +1,37 @@
-# Preregistration (Lean 2×2)
+# Preregistration (Pre-Data)
 
-## Design
-- Within-subjects 2×2: Modality (Hand vs Gaze-confirm) × UI Mode (Static vs Adaptive).
-- Williams Latin-square counterbalancing (4 orders).
-- N = 24–30; session 20–30 min.
+## Hypotheses & Success Criteria
 
-## Primary Outcomes
-- Movement time (log-RT, successful trials, 150ms–5000ms).
-- Error (0/1).
-- Throughput (IDe / MT) computed with **effective width** (We = 4.133 × SD of endpoint error).
-- NASA-TLX (raw sum + key subscales).
+- **H1:** Hand > Gaze in TP (≥0.5 bits/s difference). Tests: LMEM log(MT), paired t on TP.
 
-## Success Thresholds
-- Error: ≥15% relative reduction with Adaptive vs Static.
-- RT: TOST equivalence within ±5% (no meaningful slowdown).
-- TLX: ≥10–15% reduction with Adaptive vs Static.
+- **H2 (Equivalence):** Adaptive vs Static RT difference within ±5% on log scale.  
+  **Primary:** 95% CI entirely within ±0.05 log units.  
+  **Secondary:** TOST (report p's) + sensitivity at ±3% and ±7.5%.
 
-## Exclusion Rules (pre-registered)
-- Trial-level (RT analysis): RT < 150ms or > 5000ms; timeouts; non-successes excluded from RT but included in error.
-- Participant-level: error rate > 40%; completion < 80%; zoom ≠ 100%; not full-screen.
-- Expect <5% trial exclusions; <15% participant exclusions.
+- **H3:** Modality × Adaptation interaction: hand benefits mainly on errors; gaze mainly on RT.
 
-## Adaptation Policy
-- Target trigger rate: **15–25%** (pilot tune in `policy.default.json`).
-- After pilot, freeze thresholds in `policy.locked.json`.
+- **H4:** Fitts fit: MT ~ a + b·IDe; R² ≥ .80 hand / ≥ .75 gaze; b_gaze > b_hand.
 
-## Modeling Plan
-- LMEM: log-RT ~ Modality * UI + scale(IDe) + scale(trial_number) + block_number + (1 + UI | participant).
-- GLMM(logit): Error ~ Modality * UI + scale(IDe) + scale(trial_number) + block_number + (1 | participant).
-- Fitts: mixed slopes; Modality × IDe interaction.
-- TOST: test RT equivalence (±5%) Adaptive vs Static.
-- TLX: RM-ANOVA or LMEM at block level.
+- **H5:** TLX total decreases ≥10% (5–7.5 points).
 
-## Reporting
-- Provide effect sizes (CIs), TOST results, and pre-committed thresholds.
-- Camera metrics, if any, reported as exploratory only.
+## Exclusions (predeclared)
+
+- Trial RT <150ms or >5000ms; participant error rate >40%; completion <80%.  
+- Display violations: zoom≠100%, not fullscreen, unstable DPR.
+
+## Analysis Model (primary)
+
+- LMEM: `log(MT) ~ modality * ui_mode + IDe + trial_number + block_number + (1+modality|participant)`
+
+- GLMM (binomial) for error with same fixed effects.
+
+- TP via mean-of-means per participant×condition (ISO recommendation).
+
+## Policy Lock
+
+- Adaptive thresholds finalized after 5-person pilot; frozen in `policy/policy.locked.json`.  
+- SHA-256 of locked policy: `45781b229a064e26f61bea817d8d181d04be8c95f28c0247cd023d06f4bb7e5b` (example policy, update after pilot)
+
+## Data Availability
+
+- Scripts + synthetic dataset in repo; de-identified aggregates on OSF/Zenodo at `v1.0.0-data`.

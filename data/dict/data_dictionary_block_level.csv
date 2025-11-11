@@ -1,0 +1,20 @@
+column,type,allowed_values,description
+participant_id,string,,Anonymous ID
+block_number,int,1-4,Counterbalanced block index
+modality,string,hand|gaze_confirm,Input condition
+ui_mode,string,static|adaptive,UI condition
+trials_completed,int,>=0,Count
+mean_RT_ms,float,>=0,Average RT
+error_rate,float,0-1,Miss proportion
+throughput_bits_s,float,>=0,IDe/MT aggregate
+tlx_total,float,0-100,Overall TLX if collected post-block
+tlx_mental,float,0-100,Subscale
+tlx_physical,float,0-100,Subscale
+tlx_temporal,float,0-100,Subscale
+tlx_performance,float,0-100,Subscale
+tlx_effort,float,0-100,Subscale
+tlx_frustration,float,0-100,Subscale
+display_stability_score,float,0-1,Composite stability
+pointer_type_mode,string,mouse|pen|touch|trackpad,Most frequent in block
+notes,string,,Free text (optional)
+

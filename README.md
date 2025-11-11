@@ -1,11 +1,33 @@
-# XR Adaptive Modality 2025
+# XR Adaptive Modality (Hand vs Gaze-Confirm) — ISO 9241-9 Study
 
 ![CI Status](https://img.shields.io/github/actions/workflow/status/mohdasti/xr-adaptive-modality-2025/ci.yml?branch=main&logo=github)
 ![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
 ![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
-A research project exploring adaptive modality in extended reality environments.
+> **Study status: Pre-Data (`v0.3.0-pilot`)**
+> - Design finalized & preregistered
+> - Power analysis complete (target N=26–28)
+> - Analysis pipeline implemented and validated on synthetic data
+> - **All performance metrics below are PREDICTED (literature-based) until `v1.0.0-data`**
+
+## Privacy & Data Governance
+
+- No PII collected (anonymous participant IDs only).  
+- Minimal logging: cursor positions, display metadata (zoom/DPR/fullscreen), trial metrics.  
+- Webcam/eye-tracking is **optional & exploratory**; never required to participate.  
+- Raw trial logs stored locally (gitignored); aggregated results shared via OSF/Zenodo on `v1.0.0-data`.  
+- Participants can withdraw any time; data minimization practiced.
+
+## Run in one command
+
+```bash
+Rscript analysis/run_all.R
+```
+
+Artifacts saved to `results/`.
+
+---
 
 ## XR Adaptive Modality — Study Overview
 

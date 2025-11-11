@@ -1,0 +1,29 @@
+column,type,allowed_values,description
+participant_id,string,,Anonymous ID
+block_number,int,1-4,Counterbalanced block index
+trial_number,int,>=1,Within-block trial index
+modality,string,hand|gaze_confirm,Input condition
+ui_mode,string,static|adaptive,UI condition
+target_amplitude_px,int,>0,Center-to-center A (px)
+target_width_px,int,>0,Nominal W (px)
+target_center_x,float,,Target center (viewport px)
+target_center_y,float,,Target center (viewport px)
+endpoint_x,float,,Selection x (viewport px)
+endpoint_y,float,,Selection y (viewport px)
+endpoint_error_px,float,>=0,Euclidean distance to center (px)
+movement_time_ms,float,>=0,Time from target onset to selection
+error,bool,true|false,Miss per ISO (outside target)
+timeout_flag,bool,true|false,True if trial timed out
+adaptation_triggered,bool,true|false,Whether policy adapted this trial
+adaptation_type,string,width_inflate|declutter|null,Adaptation used
+IDe_bits,float,,Effective difficulty computed in analysis
+zoom_level_pct,int,100 enforced,Window zoom at trial
+fullscreen_mode,bool,true|false,Fullscreen state
+device_pixel_ratio,float,>0,window.devicePixelRatio
+pointer_type,string,mouse|pen|touch|trackpad,From Pointer Events
+framerate_hz,float,>0,Estimated Hz via rAF delta
+window_w_px,int,>0,Viewport width
+window_h_px,int,>0,Viewport height
+user_agent,string,,Navigator UA snapshot
+display_stability_score,float,0-1,Composite stability metric
+

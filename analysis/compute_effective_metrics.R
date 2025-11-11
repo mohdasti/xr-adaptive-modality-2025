@@ -1,36 +1,35 @@
-library(tidyverse)
+suppressPackageStartupMessages({
+  library(tidyverse)
+})
 
-trial <- read_csv("data/clean/trial_data.csv", show_col_types = FALSE)
+# Compute ISO 9241-9 effective metrics and throughput
+compute_effective_metrics <- function(trials) {
+  stopifnot(all(trials$zoom_level_pct == 100))
+  stopifnot(all(trials$fullscreen_mode))
 
-# Exclusions (trial-level)
-trial <- trial %>%
-  mutate(exclude_RT = movement_time_ms < 150 | movement_time_ms > 5000 | timeout == TRUE)
+  # Filter valid trials
+  trials <- trials %>%
+    filter(movement_time_ms >= 150, movement_time_ms <= 5000)
 
-rt_ok <- trial %>% filter(!exclude_RT, error == 0)
+  # Per-participant×condition×A×W aggregation for We/IDe/TP
+  effective <- trials %>%
+    group_by(participant_id, modality, ui_mode, target_amplitude_px, target_width_px) %>%
+    summarise(
+      SDx = sd(suppressWarnings(as.numeric(endpoint_error_px))),  # radial axis proxy
+      We = 4.133 * SDx,
+      A = mean(target_amplitude_px),
+      IDe = log2(A / We + 1),
+      MT_s = mean(movement_time_ms) / 1000,
+      TP = IDe / MT_s,
+      n = n(),
+      .groups = "drop"
+    ) %>%
+    filter(is.finite(We), We > 0, is.finite(IDe), IDe > 0, n >= 3)
 
-# Effective width and IDe by participant × modality × ui × A
-eff <- rt_ok %>%
-  group_by(participant_id, modality, ui_mode, target_distance_A) %>%
-  summarise(
-    We = 4.133 * sd(endpoint_error_px, na.rm = TRUE),
-    IDe = log2(target_distance_A / We + 1),
-    mean_MT = mean(movement_time_ms, na.rm = TRUE),
-    throughput = IDe / (mean_MT/1000),
-    n = n(),
-    .groups = "drop"
-  )
+  # Mean-of-means throughput per participant×condition (ISO guidance)
+  tp_cond <- effective %>%
+    group_by(participant_id, modality, ui_mode) %>%
+    summarise(throughput_bits_s = mean(TP), .groups = "drop")
 
-write_csv(eff, "results/tables/effective_metrics_by_condition.csv")
-
-tp_summary <- eff %>%
-  group_by(modality, ui_mode) %>%
-  summarise(
-    mean_TP = mean(throughput), sd_TP = sd(throughput),
-    mean_We = mean(We), mean_IDe = mean(IDe), n_conds = n(),
-    .groups = "drop"
-  )
-
-write_csv(tp_summary, "results/tables/throughput_summary.csv")
-
-cat("✓ Effective metrics exported to results/tables/\n")
-
+  list(per_condition = effective, tp_condition = tp_cond)
+}
