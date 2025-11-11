@@ -56,6 +56,20 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
+### Run (production build)
+
+```bash
+cd app
+npm run build
+npm run preview
+```
+
+Open the preview URL (typically `http://localhost:4173`).
+
+Notes:
+- In production, the counterbalanced block order controls modality (HaS/GaS/HaA/GaA). HUD does not override it.
+- In development, the HUD may override modality to facilitate testing (e.g., Gaze + dwell).
+
 ## Project Structure
 
 ```
@@ -120,6 +134,11 @@ xr-adaptive-modality-2025/
 - Real-time modality switching
 - Error detection (miss, timeout, slip)
 
+#### Gaze mode UX tips
+- The system cursor is hidden inside the canvas by design in Gaze mode.
+- In dwell modes (350ms/500ms), a blue progress ring fills as you hover over the target; selection auto‑confirms at 100%.
+- In Space mode (0ms dwell), “Press SPACE” appears when hovering; press Space to confirm.
+
 ### Policy-Based Adaptation Engine
 
 - Rule-based adaptation responding to performance
@@ -162,6 +181,16 @@ git commit -m "Lock adaptation thresholds post-pilot"
 - **Participant indexing**: Automatic sequence assignment based on participant index (mod 4)
 - **Block shuffling**: Target positions randomized within each block
 - **Display requirements**: Enforced fullscreen/maximized window and 100% zoom for consistency
+
+Tip: to test a different counterbalanced sequence locally, clear the stored participant index in the browser console:
+
+```js
+localStorage.removeItem('participantIndex'); location.reload();
+```
+
+### Data Export
+- Trial CSV includes: `rt_ms`, `endpoint_error_px`, `confirm_type`, `adaptation_triggered`, plus display metadata (screen/window size, DPR, zoom, fullscreen).
+- Block TLX CSV is logged once per block with six raw subscales (performance reverse‑scored in analysis).
 
 ---
 
