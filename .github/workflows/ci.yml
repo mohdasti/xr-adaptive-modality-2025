@@ -73,15 +73,27 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgsl-dev libcurl4-openssl-dev libssl-dev libxml2-dev
+          sudo apt-get install -y libgsl-dev libcurl4-openssl-dev libssl-dev libxml2-dev libfontconfig1-dev libfreetype6-dev libfribidi-dev libharfbuzz-dev libjpeg-dev libpng-dev libtiff-dev libgit2-dev
       
       - name: Install R packages
         run: |
-          Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org")); install.packages(c("tidyverse","lme4","lmerTest","TOSTER","emmeans","afex"), dependencies=TRUE, Ncpus=2)'
+          Rscript -e '
+          options(repos = c(CRAN = "https://cloud.r-project.org"))
+          packages <- c("tidyverse", "lme4", "lmerTest", "TOSTER", "emmeans", "afex")
+          install.packages(packages, dependencies = TRUE, Ncpus = 2, quiet = FALSE)
+          '
       
       - name: Verify package installation
         run: |
-          Rscript -e 'library(tidyverse); cat("tidyverse loaded successfully\n")'
+          Rscript -e '
+          packages <- c("tidyverse", "lme4", "lmerTest", "TOSTER", "emmeans", "afex")
+          for (pkg in packages) {
+            if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+              stop("Package ", pkg, " failed to load")
+            }
+            cat("✓", pkg, "loaded successfully\n")
+          }
+          '
       
       - name: Prepare synthetic data (if none)
         run: |
