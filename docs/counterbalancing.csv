@@ -1,0 +1,6 @@
+sequence,block1,block2,block3,block4
+1,HaS,GaS,HaA,GaA
+2,GaS,HaA,GaA,HaS
+3,HaA,GaA,HaS,GaS
+4,GaA,HaS,GaS,HaA
+

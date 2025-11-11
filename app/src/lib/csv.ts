@@ -1,7 +1,7 @@
 /**
  * CSV logging utilities for experiment data
  */
-import { getDisplayMetadata } from '../utils/sessionMeta'
+import { getDisplayMetadata } from '../lib/system'
 
 /**
  * CSV schema columns in order
@@ -38,6 +38,7 @@ export const CSV_HEADERS = [
   'hover_ms',
   'confirm_type',
   'pupil_z_med',
+  'adaptation_triggered',
   'screen_width',
   'screen_height',
   'window_width',
@@ -113,6 +114,13 @@ export class CSVLogger {
     }
 
     this.participantId = String(pid)
+  }
+
+  /**
+   * Get current display metadata (captured at trial time)
+   */
+  getDisplayMetadata(): ReturnType<typeof getDisplayMetadata> {
+    return getDisplayMetadata()
   }
 
   /**
@@ -352,8 +360,15 @@ export function getLogger(): CSVLogger {
 /**
  * Helper to create row from trial event
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createRowFromTrial(payload: any, blockNumber: number = 1): CSVRow {
+export function createRowFromTrial(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any,
+  blockNumber: number = 1,
+  adaptationTriggered: boolean = false
+): CSVRow {
+  // Capture display metadata at trial time
+  const displayMeta = typeof window !== 'undefined' ? getDisplayMetadata() : null
+
   const row: CSVRow = {
     ts: payload.timestamp || Date.now(),
     trial_number: payload.trial_number || payload.globalTrialNumber || payload.trialSequenceNumber || null,
@@ -385,6 +400,16 @@ export function createRowFromTrial(payload: any, blockNumber: number = 1): CSVRo
     hover_ms: payload.hover_ms || null,
     confirm_type: payload.confirm_type || null,
     pupil_z_med: payload.pupil_z_med || null,
+    adaptation_triggered: payload.adaptation_triggered ?? adaptationTriggered,
+    // Display metadata captured at trial time
+    screen_width: displayMeta?.screen_width ?? payload.screen_width ?? null,
+    screen_height: displayMeta?.screen_height ?? payload.screen_height ?? null,
+    window_width: displayMeta?.window_width ?? payload.window_width ?? null,
+    window_height: displayMeta?.window_height ?? payload.window_height ?? null,
+    device_pixel_ratio: displayMeta?.device_pixel_ratio ?? payload.device_pixel_ratio ?? null,
+    zoom_level: displayMeta?.zoom_level ?? payload.zoom_level ?? null,
+    is_fullscreen: displayMeta?.is_fullscreen ?? payload.is_fullscreen ?? null,
+    user_agent: displayMeta?.user_agent ?? payload.user_agent ?? null,
   }
 
   return row

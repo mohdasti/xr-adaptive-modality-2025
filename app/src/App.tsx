@@ -1,38 +1,19 @@
-import { useEffect } from 'react'
-import { TaskPane } from './components/TaskPane'
-import { HUDPane } from './components/HUDPane'
-import { LoggerPane } from './components/LoggerPane'
-import { initializePolicyEngine } from './lib/policy'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import Intro from './routes/Intro'
+import SystemCheck from './routes/SystemCheck'
+import CameraCheck from './routes/CameraCheck'
+import Task from './routes/Task'
 import './App.css'
 
 function App() {
-  // Initialize policy engine on mount
-  useEffect(() => {
-    initializePolicyEngine().catch((error) => {
-      console.error('Failed to initialize policy engine:', error)
-    })
-  }, [])
-
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>XR Adaptive Modality - Control Panel</h1>
-      </header>
-      
-      <main className="app-grid">
-        <div className="grid-item task">
-          <TaskPane />
-        </div>
-        
-        <div className="grid-item hud">
-          <HUDPane />
-        </div>
-        
-        <div className="grid-item logger">
-          <LoggerPane />
-        </div>
-      </main>
-    </div>
+    <Routes>
+      <Route path="/intro" element={<Intro />} />
+      <Route path="/check" element={<SystemCheck />} />
+      <Route path="/camera-check" element={<CameraCheck />} />
+      <Route path="/task" element={<Task />} />
+      <Route path="/" element={<Navigate to="/intro" replace />} />
+    </Routes>
   )
 }
 

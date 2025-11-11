@@ -1,38 +1,37 @@
-# Preregistration (XR Adaptive Modality, 2×2 within-subjects)
+# Preregistration (Lean 2×2)
 
-**Design:** Modality (Hand vs Gaze-confirm) × UI Mode (Static vs Adaptive), within-subjects; 4 counterbalanced blocks (Williams design). N=24–30, ~160 trials/participant.
+## Design
+- Within-subjects 2×2: Modality (Hand vs Gaze-confirm) × UI Mode (Static vs Adaptive).
+- Williams Latin-square counterbalancing (4 orders).
+- N = 24–30; session 20–30 min.
 
-**Primary outcomes:** Movement Time (ms), Error (0/1), Throughput (bits/s using IDe/MT), Raw NASA-TLX (total + mental/effort/frustration).
+## Primary Outcomes
+- Movement time (log-RT, successful trials, 150ms–5000ms).
+- Error (0/1).
+- Throughput (IDe / MT) computed with **effective width** (We = 4.133 × SD of endpoint error).
+- NASA-TLX (raw sum + key subscales).
 
-**Fitts metrics:** Use effective width We = 4.133 × SD(endpoints) and IDe = log2(A/We + 1).
+## Success Thresholds
+- Error: ≥15% relative reduction with Adaptive vs Static.
+- RT: TOST equivalence within ±5% (no meaningful slowdown).
+- TLX: ≥10–15% reduction with Adaptive vs Static.
 
-**Adaptation policy:** Targets ~15–25% of trials in adaptive state. Hysteresis: 5 trials. Thresholds locked after pilot.
+## Exclusion Rules (pre-registered)
+- Trial-level (RT analysis): RT < 150ms or > 5000ms; timeouts; non-successes excluded from RT but included in error.
+- Participant-level: error rate > 40%; completion < 80%; zoom ≠ 100%; not full-screen.
+- Expect <5% trial exclusions; <15% participant exclusions.
 
-**Success thresholds (minimum meaningful effects):**
+## Adaptation Policy
+- Target trigger rate: **15–25%** (pilot tune in `policy.default.json`).
+- After pilot, freeze thresholds in `policy.locked.json`.
 
-- RT: non-inferior within ±5% margin (TOST) OR ≥5–10% faster.
-- Errors: ≥15% relative reduction (Static→Adaptive).
-- Throughput: +0.2–0.3 bits/s at medium–high IDe.
-- TLX: ≥10–15% lower with Adaptive.
+## Modeling Plan
+- LMEM: log-RT ~ Modality * UI + scale(IDe) + scale(trial_number) + block_number + (1 + UI | participant).
+- GLMM(logit): Error ~ Modality * UI + scale(IDe) + scale(trial_number) + block_number + (1 | participant).
+- Fitts: mixed slopes; Modality × IDe interaction.
+- TOST: test RT equivalence (±5%) Adaptive vs Static.
+- TLX: RM-ANOVA or LMEM at block level.
 
-**Exclusion rules (pre-registered):**
-
-- Trial-level: RT <150 ms or >5000 ms; timeouts excluded from RT models; errors included for error models.
-- Participant-level: >40% errors, <80% completion, fullscreen off, zoom ≠ 100% (DPI/zoom noncompliance), or resolution <1280×720.
-- Sensitivity: re-run models with no exclusions to check robustness.
-
-**Model plan (primary):**
-
-- RT (correct trials): lmer(logRT ~ Modality * UI + scale(IDe) + scale(trial_number) + block_number + (1 + UI|pid))
-- Errors: glmer(error ~ Modality * UI + scale(IDe) + scale(trial_number) + block_number + (1|pid), binomial)
-- Throughput: lmer(TP ~ Modality * UI + (1|pid))
-- Adaptation dynamics: lmer(logRT ~ adaptive_state * Modality + scale(IDe) + (1|pid))
-
-**Equivalence test:** TOST for Adaptive vs Static RT with ±5% margin.
-
-**Counterbalancing:** Williams sequences across 4 conditions: HaS, GaS, HaA, GaA.
-
-**Pilot:** Tune thresholds to reach 15–25% adaptive trials; then lock `policy.locked.json`.
-
-**Reporting:** Fixed effects with β/SE/p; EMMs with 95% CI; Equivalence 90% CI; effect sizes; exclusion report; prereg link.
-
+## Reporting
+- Provide effect sizes (CIs), TOST results, and pre-committed thresholds.
+- Camera metrics, if any, reported as exploratory only.

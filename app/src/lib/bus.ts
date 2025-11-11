@@ -92,6 +92,7 @@ export interface EventPayloads {
     pressure?: number
     aging?: boolean
     confirm_type?: string
+    adaptation_triggered?: boolean
     timestamp: number
   }
   'trial:error': {
@@ -121,6 +122,7 @@ export interface EventPayloads {
     index_of_difficulty_nominal?: number
     target_distance_A?: number
     confirm_type?: string
+    adaptation_triggered?: boolean
     timestamp: number
   }
   'policy:change': {

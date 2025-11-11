@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { bus } from '../lib/bus'
 import { getLogger, createRowFromTrial, initLogger } from '../lib/csv'
+import { getPolicyEngine } from '../lib/policy'
 import './LoggerPane.css'
 
 interface LogEntry {
@@ -19,6 +20,9 @@ export function LoggerPane() {
   const [csvRowCount, setCsvRowCount] = useState(0)
   const [currentBlock, setCurrentBlock] = useState(1)
   const [blockRowCount, setBlockRowCount] = useState(0)
+  // Track adaptation state: map of trial_number -> adaptation_triggered
+  const adaptationStateRef = useRef<Map<number, boolean>>(new Map())
+  const lastAdaptationStateRef = useRef(false)
 
   // Initialize CSV logger on mount
   useEffect(() => {
@@ -45,9 +49,39 @@ export function LoggerPane() {
         return updated.slice(0, MAX_LOGS)
       })
       
+      // Track adaptation state from policy changes
+      if (eventName === 'policy:change' && payload?.state) {
+        const triggered = payload.state.triggered === true
+        lastAdaptationStateRef.current = triggered
+      }
+
       // Log to CSV for trial events
       if (eventName === 'trial:end' || eventName === 'trial:error') {
-        const row = createRowFromTrial(payload, blockNumber)
+        // Get adaptation state for this trial
+        const trialNumber = payload?.trial_number
+        let adaptationState = false
+        
+        if (payload?.adaptation_triggered !== undefined) {
+          // Use explicit value from payload if provided (preferred)
+          adaptationState = payload.adaptation_triggered
+        } else {
+          // Try to get current state from policy engine
+          try {
+            const policyEngine = getPolicyEngine()
+            const policyState = policyEngine.getState()
+            adaptationState = policyState.triggered === true
+          } catch {
+            // Fall back to last known adaptation state
+            adaptationState = lastAdaptationStateRef.current
+          }
+          
+          // Store this association
+          if (trialNumber) {
+            adaptationStateRef.current.set(trialNumber, adaptationState)
+          }
+        }
+        
+        const row = createRowFromTrial(payload, blockNumber, adaptationState)
         logger.pushRow(row)
         setCsvRowCount(logger.getRowCount())
       }

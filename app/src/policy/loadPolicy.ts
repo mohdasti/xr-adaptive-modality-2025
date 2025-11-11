@@ -10,6 +10,9 @@ export type AdaptationPolicy = {
       min_trigger_gap: number
     }
   }
+  notes?: {
+    target_trigger_rate_percent?: string
+  }
 }
 
 async function fetchJSON(path: string): Promise<AdaptationPolicy> {
