@@ -107,6 +107,9 @@ jobs:
             echo "trial_data.csv already exists, skipping generation"
           fi
       
+      - name: Create results directory
+        run: mkdir -p results/tables results/figures
+      
       - name: Run analysis
         run: Rscript analysis/run_all.R
         continue-on-error: true
@@ -114,6 +117,8 @@ jobs:
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: results
           path: results/**
+          if-no-files-found: ignore

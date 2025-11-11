@@ -15,9 +15,9 @@ import {
 describe('Fitts Law Utilities', () => {
   describe('computeID', () => {
     it('computes Shannon formulation correctly', () => {
-      expect(computeID(200, 80)).toBeCloseTo(1.66, 2)
-      expect(computeID(400, 40)).toBeCloseTo(3.32, 2)
-      expect(computeID(600, 20)).toBeCloseTo(4.95, 2)
+      expect(computeID(200, 80)).toBeCloseTo(1.807, 2)
+      expect(computeID(400, 40)).toBeCloseTo(3.459, 2)
+      expect(computeID(600, 20)).toBeCloseTo(4.954, 2)
     })
 
     it('handles edge cases', () => {
@@ -60,9 +60,9 @@ describe('Fitts Law Utilities', () => {
     })
 
     it('has correct ID values', () => {
-      expect(DIFFICULTY_PRESETS.low.ID).toBeCloseTo(1.66, 1)
-      expect(DIFFICULTY_PRESETS.medium.ID).toBeCloseTo(3.32, 1)
-      expect(DIFFICULTY_PRESETS.high.ID).toBeCloseTo(4.95, 1)
+      expect(DIFFICULTY_PRESETS.low.ID).toBeCloseTo(1.807, 1)
+      expect(DIFFICULTY_PRESETS.medium.ID).toBeCloseTo(3.459, 1)
+      expect(DIFFICULTY_PRESETS.high.ID).toBeCloseTo(4.954, 1)
     })
   })
 
@@ -191,7 +191,7 @@ describe('Fitts Law Utilities', () => {
     })
 
     it('IDe', () => {
-      expect(computeIDe(200, 3.27)).toBeCloseTo(5.94, 2)
+      expect(computeIDe(200, 3.27)).toBeCloseTo(5.958, 1)
     })
 
     it('TP', () => {

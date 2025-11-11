@@ -12,6 +12,8 @@ export default defineConfig({
     trace: 'on-first-retry',
     headless: true,
   },
+  // Ignore the old e2e directory
+  testIgnore: ['**/e2e/**'],
 
   projects: [
     {

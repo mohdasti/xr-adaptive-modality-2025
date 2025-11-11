@@ -161,9 +161,12 @@ describe('Modality', () => {
 
     it('updates config partially', () => {
       const manager = new ModalityManager()
+      // Ensure initial state is correct
+      expect(manager.getDwellTime()).toBe(DWELL_TIMES.NONE)
+      // Update only modality, dwellTime should remain unchanged
       manager.updateConfig({ modality: Modality.GAZE })
       expect(manager.isGazeMode()).toBe(true)
-      expect(manager.getDwellTime()).toBe(DWELL_TIMES.NONE)
+      expect(manager.getDwellTime()).toBe(DWELL_TIMES.NONE) // Should remain 0
     })
   })
 })
