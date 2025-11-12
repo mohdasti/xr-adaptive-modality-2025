@@ -49,7 +49,8 @@ describe('Policy Engine', () => {
       
       const handTriggers = computeTriggers(history, 'hand')
       expect(handTriggers.total_trials).toBe(2)
-      expect(handTriggers.rt_p75).toBeCloseTo(550, 0)
+      // 75th percentile of [500, 600] is 575 (not 550)
+      expect(handTriggers.rt_p75).toBeCloseTo(575, 0)
       
       const gazeTriggers = computeTriggers(history, 'gaze')
       expect(gazeTriggers.total_trials).toBe(1)
@@ -123,7 +124,12 @@ describe('Policy Engine', () => {
     })
 
     it('triggers inflate_width for hand mode after error burst', () => {
-      // Add error burst
+      // Disable pressure_only mode for this test
+      const policy = getDefaultPolicy()
+      policy.pressure_only = false
+      engine.updatePolicy(policy)
+      
+      // Add error burst (need 5 consecutive errors to trigger due to hysteresis_trials: 5)
       for (let i = 0; i < 5; i++) {
         engine.addTrial({
           trialId: `${i}`,
@@ -131,6 +137,11 @@ describe('Policy Engine', () => {
           correct: false,
           error: true,
           timestamp: i * 1000,
+        })
+        // Call nextPolicyState after each trial to update hysteresis counters
+        engine.nextPolicyState({
+          modality: Modality.HAND,
+          pressure: 2.0,
         })
       }
       
@@ -145,7 +156,12 @@ describe('Policy Engine', () => {
     })
 
     it('triggers declutter for gaze mode after error burst', () => {
-      // Add error burst
+      // Disable pressure_only mode for this test
+      const policy = getDefaultPolicy()
+      policy.pressure_only = false
+      engine.updatePolicy(policy)
+      
+      // Add error burst (need 5 consecutive errors to trigger due to hysteresis_trials: 5)
       for (let i = 0; i < 5; i++) {
         engine.addTrial({
           trialId: `${i}`,
@@ -153,6 +169,11 @@ describe('Policy Engine', () => {
           correct: false,
           error: true,
           timestamp: i * 1000,
+        })
+        // Call nextPolicyState after each trial to update hysteresis counters
+        engine.nextPolicyState({
+          modality: Modality.GAZE,
+          pressure: 2.0,
         })
       }
       
@@ -166,6 +187,11 @@ describe('Policy Engine', () => {
     })
 
     it('implements hysteresis - requires N consecutive bad trials', () => {
+      // Disable pressure_only mode for this test
+      const policy = getDefaultPolicy()
+      policy.pressure_only = false
+      engine.updatePolicy(policy)
+      
       // Add 4 errors (not enough to trigger)
       for (let i = 0; i < 4; i++) {
         engine.addTrial({
@@ -202,6 +228,11 @@ describe('Policy Engine', () => {
     })
 
     it('deactivates after N consecutive good trials', () => {
+      // Disable pressure_only mode for this test
+      const policy = getDefaultPolicy()
+      policy.pressure_only = false
+      engine.updatePolicy(policy)
+      
       // Trigger activation
       for (let i = 0; i < 5; i++) {
         engine.addTrial({
@@ -210,6 +241,10 @@ describe('Policy Engine', () => {
           correct: false,
           error: true,
           timestamp: i * 1000,
+        })
+        engine.nextPolicyState({
+          modality: Modality.HAND,
+          pressure: 2.0,
         })
       }
       
