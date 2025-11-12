@@ -71,47 +71,55 @@ jobs:
           r-version: '4.4.0'
           use-public-rspm: true
       
-      - name: Install system dependencies
-        uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          packages: |
-            tidyverse
-            lme4
-            lmerTest
-            TOSTER
-            emmeans
-            afex
+      - name: Install system dependencies for R packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxml2-dev \
+            libgsl-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libfribidi-dev \
+            libharfbuzz-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev
       
-      - name: Install R packages explicitly
+      - name: Install R packages
         run: |
           Rscript -e '
           options(repos = c(CRAN = "https://cloud.r-project.org"))
-          packages <- c("tidyverse", "lme4", "lmerTest", "TOSTER", "emmeans", "afex")
-          for (pkg in packages) {
-            if (!requireNamespace(pkg, quietly = TRUE)) {
-              cat("Installing", pkg, "...\n")
-              install.packages(pkg, dependencies = TRUE, quiet = FALSE)
-            } else {
-              cat("✓", pkg, "already installed\n")
-            }
-          }
+          cat("Installing R packages...\n")
+          install.packages(
+            c("tidyverse", "lme4", "lmerTest", "TOSTER", "emmeans", "afex"),
+            dependencies = TRUE,
+            Ncpus = 2,
+            quiet = FALSE
+          )
+          cat("Package installation complete.\n")
           '
       
-      - name: Verify package installation
+      - name: Verify R packages
         run: |
           Rscript -e '
           packages <- c("tidyverse", "lme4", "lmerTest", "TOSTER", "emmeans", "afex")
-          failed <- c()
+          cat("Verifying packages...\n")
           for (pkg in packages) {
-            if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-              failed <- c(failed, pkg)
-            } else {
-              cat("✓", pkg, "loaded successfully\n")
+            result <- tryCatch({
+              library(pkg, character.only = TRUE, quietly = TRUE)
+              cat("✓", pkg, "loaded\n")
+              TRUE
+            }, error = function(e) {
+              cat("✗", pkg, "failed:", e$message, "\n")
+              FALSE
+            })
+            if (!result) {
+              stop("Package ", pkg, " failed to load")
             }
           }
-          if (length(failed) > 0) {
-            stop("Failed to load packages: ", paste(failed, collapse = ", "))
-          }
+          cat("All packages verified successfully.\n")
           '
       
       - name: Prepare synthetic data (if none)
@@ -137,3 +145,4 @@ jobs:
           name: results
           path: results/**
           if-no-files-found: ignore
+
