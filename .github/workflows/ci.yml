@@ -61,6 +61,8 @@ jobs:
 
   run-r-analysis:
     runs-on: ubuntu-latest
+    # Make this job optional - don't fail CI if R packages can't install
+    continue-on-error: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -135,7 +137,6 @@ jobs:
       
       - name: Run analysis
         run: Rscript analysis/run_all.R
-        continue-on-error: true
       
       - name: Upload results
         if: always()
