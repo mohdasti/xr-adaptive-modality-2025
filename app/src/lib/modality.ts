@@ -172,7 +172,8 @@ export class ModalityManager {
   private config: ModalityConfig
 
   constructor(config: ModalityConfig = DEFAULT_MODALITY_CONFIG) {
-    this.config = config
+    // Create a copy to avoid mutating the default
+    this.config = { ...config }
   }
 
   getConfig(): ModalityConfig {
