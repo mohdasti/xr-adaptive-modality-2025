@@ -82,6 +82,21 @@ jobs:
             emmeans
             afex
       
+      - name: Install R packages explicitly
+        run: |
+          Rscript -e '
+          options(repos = c(CRAN = "https://cloud.r-project.org"))
+          packages <- c("tidyverse", "lme4", "lmerTest", "TOSTER", "emmeans", "afex")
+          for (pkg in packages) {
+            if (!requireNamespace(pkg, quietly = TRUE)) {
+              cat("Installing", pkg, "...\n")
+              install.packages(pkg, dependencies = TRUE, quiet = FALSE)
+            } else {
+              cat("✓", pkg, "already installed\n")
+            }
+          }
+          '
+      
       - name: Verify package installation
         run: |
           Rscript -e '
