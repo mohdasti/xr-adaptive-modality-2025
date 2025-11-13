@@ -88,13 +88,17 @@
 
 .fitts-canvas {
   position: relative;
-  width: 800px;
-  height: 600px;
+  /* Responsive sizing: 70% of viewport, but min 800x600, max 1200x900 */
+  /* This ensures good visibility on laptops while maintaining ISO 9241-9 minimum */
+  width: min(1200px, max(800px, 70vw));
+  height: min(900px, max(600px, 70vh));
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
   border: 2px solid #2a2a2a;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+  /* Ensure canvas maintains aspect ratio and is centered */
+  margin: 0 auto;
 }
 
 .fitts-canvas.hand-mode {

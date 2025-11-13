@@ -10,10 +10,18 @@ let tabHiddenStartTime: number | null = null
 let tabHiddenMs = 0
 
 /**
+ * Get the initial DPR that was stored when enforcement started
+ */
+export function getInitialDPR(): number {
+  return initialDPR
+}
+
+/**
  * Check if browser is in fullscreen mode
+ * Also accepts maximized windows (covers >90% of screen) as equivalent
  */
 export function isFullscreen(): boolean {
-  if (typeof document === 'undefined') return false
+  if (typeof document === 'undefined' || typeof window === 'undefined') return false
 
   // Standard API
   if (document.fullscreenElement) return true
@@ -25,31 +33,66 @@ export function isFullscreen(): boolean {
     msFullscreenElement?: Element | null
   }
 
-  return !!(
+  if (
     doc.webkitFullscreenElement ||
     doc.mozFullScreenElement ||
     doc.msFullscreenElement
-  )
+  ) {
+    return true
+  }
+
+  // Fallback: Check if window is maximized (covers >90% of screen)
+  // This is more lenient and works better across different browsers/OS
+  if (typeof window.screen !== 'undefined') {
+    const windowCoversMostOfScreen =
+      window.innerWidth >= window.screen.width * 0.9 &&
+      window.innerHeight >= window.screen.height * 0.9
+    if (windowCoversMostOfScreen) {
+      return true
+    }
+  }
+
+  return false
 }
 
 /**
  * Get zoom percentage
- * Uses visualViewport.scale if available, otherwise infers via devicePixelRatio and CSS metrics
+ * Uses visualViewport.scale if available (most accurate), otherwise falls back to 1-inch method
+ * Returns a value that should be close to 100 at default zoom
+ * 
+ * Note: On high-DPI displays, we need to account for devicePixelRatio correctly.
+ * visualViewport.scale is the most reliable method when available.
  */
 export function getZoomPct(): number {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return 100
   }
 
-  // Prefer visualViewport.scale (most accurate)
-  if (window.visualViewport && window.visualViewport.scale) {
-    return Math.round(window.visualViewport.scale * 100)
+  // Method 1: Prefer visualViewport.scale (most accurate for browser zoom)
+  // visualViewport.scale directly represents browser zoom:
+  // - scale = 1.0 means 100% zoom
+  // - scale = 0.5 means 50% zoom (zoomed out)
+  // - scale = 2.0 means 200% zoom (zoomed in)
+  if (window.visualViewport && typeof window.visualViewport.scale === 'number') {
+    const scale = window.visualViewport.scale
+    const zoomPct = Math.round(scale * 100)
+    
+    // Debug logging
+    if (import.meta.env.DEV) {
+      console.log('[systemCheck] Zoom detection (visualViewport):', {
+        scale,
+        zoomPct,
+        dpr: window.devicePixelRatio,
+      })
+    }
+    
+    return zoomPct
   }
 
-  // Fallback: infer from devicePixelRatio and CSS pixel metrics
-  const dpr = window.devicePixelRatio ?? 1
-
-  // Create a 1-inch test element
+  // Method 2: Fallback to 1-inch test element method
+  // This measures CSS pixels, which are affected by browser zoom
+  // NOTE: On some high-DPI displays/browsers, this method can be unreliable
+  // We'll use it as a fallback but apply corrections if needed
   const div = document.createElement('div')
   div.style.width = '1in'
   div.style.height = '1in'
@@ -57,22 +100,60 @@ export function getZoomPct(): number {
   div.style.position = 'absolute'
   div.style.top = '-9999px'
   div.style.left = '-9999px'
+  div.style.padding = '0'
+  div.style.margin = '0'
+  div.style.border = 'none'
   document.body.appendChild(div)
 
+  // Force a reflow to ensure measurement is accurate
+  void div.offsetWidth
+  
   const px = div.offsetWidth
   document.body.removeChild(div)
 
-  // 96 CSS px/inch at 100% zoom
-  const zoomFromCSS = Math.round((px / 96) * 100)
-
-  // If DPR is not 1, adjust (this is approximate)
-  // At 100% zoom, 1in = 96px * DPR
-  // So if we measure px, zoom = (px / (96 * DPR)) * 100
-  if (dpr !== 1) {
-    return Math.round((px / (96 * dpr)) * 100)
+  const dpr = window.devicePixelRatio ?? 1
+  
+  // At 100% browser zoom, 1in should equal 96 CSS pixels
+  // However, on high-DPI displays, some browsers report this differently
+  // If we measure 192px when DPR=2, it might actually mean 100% zoom (not 200%)
+  // This is because the browser might be accounting for DPR in the measurement
+  
+  // Try the direct calculation first
+  let zoomPct = Math.round((px / 96) * 100)
+  
+  // Heuristic: If DPR > 1 and zoom seems too high (>150%), try dividing by DPR
+  // This handles cases where the measurement is doubled on high-DPI displays
+  if (dpr > 1 && zoomPct > 150) {
+    const correctedZoom = Math.round((px / 96 / dpr) * 100)
+    
+    // Debug logging
+    if (import.meta.env.DEV) {
+      console.log('[systemCheck] Zoom detection (1in method, DPR correction):', {
+        measuredPx: px,
+        rawZoomPct: zoomPct,
+        dpr,
+        correctedZoom,
+        usingCorrected: correctedZoom >= 50 && correctedZoom <= 150,
+      })
+    }
+    
+    // Use corrected value if it's in a reasonable range (50-150%)
+    if (correctedZoom >= 50 && correctedZoom <= 150) {
+      return correctedZoom
+    }
   }
 
-  return zoomFromCSS
+  // Debug logging
+  if (import.meta.env.DEV) {
+    console.log('[systemCheck] Zoom detection (1in method):', {
+      measuredPx: px,
+      zoomPct,
+      dpr,
+      note: 'If zoom seems wrong, check if DPR correction is needed',
+    })
+  }
+
+  return zoomPct
 }
 
 /**
@@ -94,16 +175,23 @@ export function enforceDisplayRequirements(onPause: (reason: string) => void): v
     const fullscreen = isFullscreen()
     const currentDPR = typeof window !== 'undefined' ? window.devicePixelRatio ?? 1 : 1
 
-    // Check violations
+    // Check violations (with more lenient thresholds)
     const violations: string[] = []
-    if (zoom !== 100) {
-      violations.push(`Zoom is ${zoom}% (must be 100%)`)
+    
+    // Allow zoom between 95-105% (browser zoom detection can be imprecise)
+    if (zoom < 95 || zoom > 105) {
+      violations.push(`Zoom is ${zoom}% (must be 100%, or 95-105% acceptable)`)
     }
+    
+    // Check fullscreen (includes maximized windows)
     if (!fullscreen) {
-      violations.push('Not in fullscreen mode')
+      violations.push('Not in fullscreen or maximized mode (press F11 or ⌃⌘F, or maximize window)')
     }
-    if (currentDPR !== initialDPR) {
-      violations.push(`Device pixel ratio changed from ${initialDPR} to ${currentDPR}`)
+    
+    // Only check DPR if it changes significantly (more than 0.1)
+    // DPR can fluctuate slightly on some systems
+    if (Math.abs(currentDPR - initialDPR) > 0.1) {
+      violations.push(`Device pixel ratio changed significantly from ${initialDPR} to ${currentDPR}`)
     }
 
     if (violations.length > 0) {
@@ -179,17 +267,23 @@ export function isBlockedState(): boolean {
 /**
  * Verify gates before starting trial
  * Returns true if gates pass, false if blocked
+ * Uses lenient thresholds: zoom 95-105%, accepts maximized windows, allows small DPR changes
  */
 export function verifyGates(): boolean {
   const zoom = getZoomPct()
   const fullscreen = isFullscreen()
   const currentDPR = typeof window !== 'undefined' ? window.devicePixelRatio ?? 1 : 1
 
-  if (zoom !== 100 || !fullscreen || currentDPR !== initialDPR) {
-    return false
-  }
+  // Allow zoom between 95-105% (browser zoom detection can be imprecise)
+  const zoomOk = zoom >= 95 && zoom <= 105
+  
+  // Accept fullscreen or maximized windows
+  const fullscreenOk = fullscreen
+  
+  // Allow small DPR changes (within 0.1)
+  const dprOk = Math.abs(currentDPR - initialDPR) <= 0.1
 
-  return true
+  return zoomOk && fullscreenOk && dprOk
 }
 
 /**

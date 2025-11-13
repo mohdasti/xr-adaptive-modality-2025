@@ -26,6 +26,9 @@ import {
   getDisplayMetrics,
   resetTrialMetrics,
   cleanup as cleanupSystemCheck,
+  getZoomPct,
+  isFullscreen,
+  getInitialDPR,
 } from '../lib/systemCheck'
 import { isAlignmentGateEnabled } from '../config'
 import './FittsTask.css'
@@ -81,7 +84,9 @@ export function FittsTask({
   
   // Apply width scaling
   const effectiveWidth = config.W * widthScale
-  const [startPos] = useState<Position>({ x: 400, y: 300 }) // Center of canvas
+  
+  // Start position (center of canvas) - will be updated when canvas dimensions are known
+  const [startPos, setStartPos] = useState<Position>({ x: 400, y: 300 })
   const [targetPos, setTargetPos] = useState<Position | null>(null)
   const [trialStartTime, setTrialStartTime] = useState<number | null>(null)
   const [showStart, setShowStart] = useState(true)
@@ -96,10 +101,10 @@ export function FittsTask({
   // Alignment gate state (P1 experimental feature)
   const alignmentGateEnabled = isAlignmentGateEnabled()
   const [pointerDown, setPointerDown] = useState(false)
-  const [pointerDownTime, setPointerDownTime] = useState<number | null>(null)
+  const [_pointerDownTime, setPointerDownTime] = useState<number | null>(null)
   const [hoverStartTime, setHoverStartTime] = useState<number | null>(null)
-  const [isHoveringTarget, setIsHoveringTarget] = useState(false)
-  const [falseTriggerCount, setFalseTriggerCount] = useState(0)
+  const [_isHoveringTarget, setIsHoveringTarget] = useState(false)
+  const [_falseTriggerCount, setFalseTriggerCount] = useState(0)
   const [recoveryStartTime, setRecoveryStartTime] = useState<number | null>(null)
   const alignmentGateRef = useRef<{
     falseTriggers: number
@@ -201,25 +206,46 @@ export function FittsTask({
     onTrialError('timeout')
   }, [getSpatialMetrics, onTrialError, isPaused])
 
-  // Canvas dimensions (from CSS: 800x600)
-  const CANVAS_WIDTH = 800
-  const CANVAS_HEIGHT = 600
+  // Canvas dimensions - read from actual DOM element for accuracy
+  // CSS handles responsive sizing (70vw/70vh, min 800x600, max 1200x900)
+  // We read the actual rendered size to ensure coordinate calculations match
+  const [canvasDimensions, setCanvasDimensions] = useState({ width: 800, height: 600 })
+  
+  useEffect(() => {
+    if (!canvasRef.current) return
+    
+    const updateDimensions = () => {
+      if (canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect()
+        const width = Math.floor(rect.width)
+        const height = Math.floor(rect.height)
+        setCanvasDimensions({ width, height })
+        // Update start position to center of canvas
+        setStartPos({ x: width / 2, y: height / 2 })
+      }
+    }
+    
+    // Initial measurement (with small delay to ensure CSS has applied)
+    const timeoutId = setTimeout(updateDimensions, 100)
+    
+    // Update on resize
+    window.addEventListener('resize', updateDimensions)
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', updateDimensions)
+    }
+  }, [])
+  
+  const CANVAS_WIDTH = canvasDimensions.width
+  const CANVAS_HEIGHT = canvasDimensions.height
   const targetMargin = useMemo(() => Math.max(config.W * 2, 100), [config.W]) // Ensure target + some padding fits
   
   // Generate possible target positions (constrained to canvas bounds)
-  const targetPositions = useRef(
-    generateCircularPositions(
-      startPos,
-      config.A,
-      8,
-      { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
-      targetMargin
-    )
-  )
+  // Regenerate when canvas dimensions, start position, or config changes
+  const targetPositions = useRef<Position[]>([])
   
-  // Shuffle target positions when block number changes
   useEffect(() => {
-    if (trialContext.blockNumber > 0) {
+    if (CANVAS_WIDTH > 0 && CANVAS_HEIGHT > 0 && startPos.x > 0 && startPos.y > 0) {
       const positions = generateCircularPositions(
         startPos,
         config.A,
@@ -229,7 +255,7 @@ export function FittsTask({
       )
       targetPositions.current = shuffle(positions)
     }
-  }, [trialContext.blockNumber, startPos, config.A, targetMargin])
+  }, [CANVAS_WIDTH, CANVAS_HEIGHT, startPos, config.A, targetMargin, trialContext.blockNumber])
 
   const startTrial = useCallback(() => {
     // Verify gates before starting
@@ -629,9 +655,6 @@ export function FittsTask({
     const checkHover = () => {
       if (!canvasRef.current) return
 
-      const rect = canvasRef.current.getBoundingClientRect()
-      const mouseX = mousePosRef.current.x
-      const mouseY = mousePosRef.current.y
       const isHovering = isHit(mousePosRef.current, targetPos, effectiveWidth)
 
       setIsHoveringTarget(isHovering)
@@ -934,12 +957,42 @@ export function FittsTask({
   }, [])
 
   const handleResume = useCallback(() => {
-    if (verifyGates()) {
+    // Re-check display requirements (using same lenient thresholds as verifyGates)
+    const zoom = getZoomPct()
+    const fullscreen = isFullscreen()
+    const currentDPR = typeof window !== 'undefined' ? window.devicePixelRatio ?? 1 : 1
+    const storedInitialDPR = getInitialDPR()
+    
+    // Check if requirements are met (lenient thresholds)
+    const violations: string[] = []
+    
+    // Allow zoom between 95-105% (browser zoom detection can be imprecise)
+    if (zoom < 95 || zoom > 105) {
+      violations.push(`Zoom is ${zoom}% (must be 95-105%, ideally 100%)`)
+    }
+    
+    // Accept fullscreen or maximized windows
+    if (!fullscreen) {
+      violations.push('Not in fullscreen or maximized mode (press F11 or ⌃⌘F, or maximize window)')
+    }
+    
+    // Only check DPR if it changes significantly (more than 0.1)
+    // DPR can fluctuate slightly on some systems, so we're lenient here
+    if (Math.abs(currentDPR - storedInitialDPR) > 0.1) {
+      violations.push(`Device pixel ratio changed significantly (${storedInitialDPR} → ${currentDPR})`)
+    }
+    
+    if (violations.length === 0) {
+      // Requirements met - clear blocked state and resume
       clearBlocked()
       setIsPaused(false)
       setPauseReason('')
+      console.log('[FittsTask] Display requirements met, resuming trial', { zoom, fullscreen, dpr: currentDPR, initialDPR: storedInitialDPR })
     } else {
-      setPauseReason('Display requirements still not met. Please ensure fullscreen mode and 100% zoom.')
+      // Requirements not met - update message with specific violations
+      const reason = `Display requirements still not met:\n${violations.join('\n')}\n\nPlease fix these issues and click Resume again.`
+      setPauseReason(reason)
+      console.log('[FittsTask] Display requirements not met:', violations, { zoom, fullscreen, dpr: currentDPR, initialDPR: storedInitialDPR })
     }
   }, [])
 
@@ -950,7 +1003,7 @@ export function FittsTask({
         <div className="pause-modal-overlay">
           <div className="pause-modal">
             <h3>Trial Paused</h3>
-            <p>{pauseReason}</p>
+            <p style={{ whiteSpace: 'pre-line' }}>{pauseReason}</p>
             <div className="pause-modal-actions">
               <button onClick={handleResume} className="resume-button">
                 Resume Trial
