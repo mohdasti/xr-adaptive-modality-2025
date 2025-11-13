@@ -18,6 +18,16 @@ import {
   isPointInTarget,
 } from '../lib/modality'
 import { distance as distanceBetweenPoints } from '../utils/geom'
+import {
+  verifyGates,
+  enforceDisplayRequirements,
+  clearBlocked,
+  isBlockedState,
+  getDisplayMetrics,
+  resetTrialMetrics,
+  cleanup as cleanupSystemCheck,
+} from '../lib/systemCheck'
+import { isAlignmentGateEnabled } from '../config'
 import './FittsTask.css'
 
 interface TrialContext {
@@ -80,6 +90,22 @@ export function FittsTask({
     createGazeState(modalityConfig.dwellTime)
   )
   const [countdown, setCountdown] = useState<number>(timeout / 1000)
+  const [isPaused, setIsPaused] = useState(false)
+  const [pauseReason, setPauseReason] = useState<string>('')
+  
+  // Alignment gate state (P1 experimental feature)
+  const alignmentGateEnabled = isAlignmentGateEnabled()
+  const [pointerDown, setPointerDown] = useState(false)
+  const [pointerDownTime, setPointerDownTime] = useState<number | null>(null)
+  const [hoverStartTime, setHoverStartTime] = useState<number | null>(null)
+  const [isHoveringTarget, setIsHoveringTarget] = useState(false)
+  const [falseTriggerCount, setFalseTriggerCount] = useState(0)
+  const [recoveryStartTime, setRecoveryStartTime] = useState<number | null>(null)
+  const alignmentGateRef = useRef<{
+    falseTriggers: number
+    recoveryTimes: number[]
+    lastFailureTime: number | null
+  }>({ falseTriggers: 0, recoveryTimes: [], lastFailureTime: null })
   
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
@@ -126,9 +152,11 @@ export function FittsTask({
 
   const handleTimeout = useCallback(() => {
     if (!trialDataRef.current) return
+    if (isPaused || isBlockedState()) return // Don't process if paused
 
     const trialData = trialDataRef.current
     const metrics = getSpatialMetrics(null)
+    const displayMetrics = getDisplayMetrics()
     const timestamp = Date.now()
 
     bus.emit('trial:error', {
@@ -151,6 +179,8 @@ export function FittsTask({
       ui_mode: trialData.ui_mode,
       pressure: trialData.pressure,
       aging: trialData.aging,
+      taskType: config.taskType || 'point',
+      dragDistance: config.dragDistance,
       targetPos: trialData.targetPos,
       target_center_x: metrics.targetCenter?.x ?? null,
       target_center_y: metrics.targetCenter?.y ?? null,
@@ -158,10 +188,18 @@ export function FittsTask({
       endpoint_y: metrics.endpoint?.y ?? null,
       endpoint_error_px: metrics.endpointError ?? null,
       timestamp,
+      // Display metrics
+      zoom_pct: displayMetrics.zoom_pct,
+      fullscreen: displayMetrics.fullscreen,
+      dpr: displayMetrics.dpr,
+      viewport_w: displayMetrics.viewport_w,
+      viewport_h: displayMetrics.viewport_h,
+      focus_blur_count: displayMetrics.focus_blur_count,
+      tab_hidden_ms: displayMetrics.tab_hidden_ms,
     })
 
     onTrialError('timeout')
-  }, [getSpatialMetrics, onTrialError])
+  }, [getSpatialMetrics, onTrialError, isPaused])
 
   // Canvas dimensions (from CSS: 800x600)
   const CANVAS_WIDTH = 800
@@ -194,6 +232,43 @@ export function FittsTask({
   }, [trialContext.blockNumber, startPos, config.A, targetMargin])
 
   const startTrial = useCallback(() => {
+    // Verify gates before starting
+    if (!verifyGates()) {
+      const reason = 'Display requirements not met. Please ensure fullscreen mode and 100% zoom.'
+      setPauseReason(reason)
+      setIsPaused(true)
+      enforceDisplayRequirements((pauseMsg) => {
+        setPauseReason(pauseMsg)
+        setIsPaused(true)
+      })
+      return
+    }
+
+    // Reset trial metrics
+    resetTrialMetrics()
+
+    // Reset alignment gate state
+    if (alignmentGateEnabled) {
+      setPointerDown(false)
+      setPointerDownTime(null)
+      setHoverStartTime(null)
+      setIsHoveringTarget(false)
+      setFalseTriggerCount(0)
+      setRecoveryStartTime(null)
+      alignmentGateRef.current = { falseTriggers: 0, recoveryTimes: [], lastFailureTime: null }
+    }
+
+    // Set up display requirement monitoring during trial
+    enforceDisplayRequirements((pauseMsg) => {
+      setPauseReason(pauseMsg)
+      setIsPaused(true)
+      // Clear timeout if trial is paused
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    })
+
     // Hide start button first
     setShowStart(false)
     setTargetPos(null) // Ensure target is hidden initially
@@ -268,6 +343,8 @@ export function FittsTask({
         ui_mode,
         pressure,
         aging: agingEnabled,
+        taskType: config.taskType || 'point',
+        dragDistance: config.dragDistance,
         timestamp: startTime,
       })
       
@@ -307,6 +384,7 @@ export function FittsTask({
   const completeSelection = useCallback(
     (clickPos: Position, isClick: boolean = false) => {
       if (!trialStartTime || !targetPos || !trialDataRef.current) return
+      if (isPaused || isBlockedState()) return // Don't process if paused
       
       // Clear timeout
       if (timeoutRef.current) {
@@ -323,6 +401,31 @@ export function FittsTask({
       
       if (hit) {
         const metrics = getSpatialMetrics(clickPos)
+        const displayMetrics = getDisplayMetrics()
+
+        // Alignment gate metrics (if enabled)
+        const alignmentGateMetrics = alignmentGateEnabled
+          ? {
+              alignment_gate_enabled: true,
+              alignment_gate_false_triggers: alignmentGateRef.current.falseTriggers,
+              alignment_gate_recovery_time_ms:
+                alignmentGateRef.current.recoveryTimes.length > 0
+                  ? alignmentGateRef.current.recoveryTimes[
+                      alignmentGateRef.current.recoveryTimes.length - 1
+                    ]
+                  : null,
+              alignment_gate_mean_recovery_time_ms:
+                alignmentGateRef.current.recoveryTimes.length > 0
+                  ? alignmentGateRef.current.recoveryTimes.reduce((a, b) => a + b, 0) /
+                    alignmentGateRef.current.recoveryTimes.length
+                  : null,
+            }
+          : {
+              alignment_gate_enabled: false,
+              alignment_gate_false_triggers: null,
+              alignment_gate_recovery_time_ms: null,
+              alignment_gate_mean_recovery_time_ms: null,
+            }
 
         bus.emit('trial:end', {
           trialId: trialData.trialId,
@@ -351,8 +454,20 @@ export function FittsTask({
           ui_mode: trialData.ui_mode,
           pressure: trialData.pressure,
           aging: trialData.aging,
+          taskType: config.taskType || 'point',
+          dragDistance: config.dragDistance,
           confirm_type: confirmType,
           timestamp: endTime,
+          // Display metrics
+          zoom_pct: displayMetrics.zoom_pct,
+          fullscreen: displayMetrics.fullscreen,
+          dpr: displayMetrics.dpr,
+          viewport_w: displayMetrics.viewport_w,
+          viewport_h: displayMetrics.viewport_h,
+          focus_blur_count: displayMetrics.focus_blur_count,
+          tab_hidden_ms: displayMetrics.tab_hidden_ms,
+          // Alignment gate metrics
+          ...alignmentGateMetrics,
         })
         
         onTrialComplete()
@@ -360,6 +475,7 @@ export function FittsTask({
         // Miss or slip
         const errorType = isClick ? 'miss' : 'slip'
         const metrics = getSpatialMetrics(clickPos)
+        const displayMetrics = getDisplayMetrics()
 
         bus.emit('trial:error', {
           trialId: trialData.trialId,
@@ -383,6 +499,8 @@ export function FittsTask({
           ui_mode: trialData.ui_mode,
           pressure: trialData.pressure,
           aging: trialData.aging,
+          taskType: config.taskType || 'point',
+          dragDistance: config.dragDistance,
           A: trialData.A,
           W: trialData.W,
           ID: trialData.ID,
@@ -390,13 +508,158 @@ export function FittsTask({
           target_distance_A: trialData.A,
           confirm_type: confirmType,
           timestamp: endTime,
+          // Display metrics
+          zoom_pct: displayMetrics.zoom_pct,
+          fullscreen: displayMetrics.fullscreen,
+          dpr: displayMetrics.dpr,
+          viewport_w: displayMetrics.viewport_w,
+          viewport_h: displayMetrics.viewport_h,
+          focus_blur_count: displayMetrics.focus_blur_count,
+          tab_hidden_ms: displayMetrics.tab_hidden_ms,
         })
         
         onTrialError(errorType)
       }
     },
-    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType]
+    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType, isPaused]
   )
+
+  // Alignment gate: check if selection is allowed
+  const checkAlignmentGate = useCallback(
+    (clickPos: Position): boolean => {
+      if (!alignmentGateEnabled || modalityConfig.modality !== Modality.HAND) {
+        return true // Gate disabled or not hand mode - allow selection
+      }
+
+      if (!targetPos) return false
+
+      // Check if pointer is down (hand input detected)
+      if (!pointerDown) {
+        // False trigger: attempted selection without pointer down
+        alignmentGateRef.current.falseTriggers++
+        setFalseTriggerCount((prev) => prev + 1)
+        if (recoveryStartTime === null) {
+          setRecoveryStartTime(Date.now())
+        }
+        console.log('[FittsTask] Alignment gate: false trigger (no pointer down)')
+        return false
+      }
+
+      // Check if hovering over target
+      const isInTarget = isHit(clickPos, targetPos, effectiveWidth)
+      if (!isInTarget) {
+        // False trigger: attempted selection outside target
+        alignmentGateRef.current.falseTriggers++
+        setFalseTriggerCount((prev) => prev + 1)
+        if (recoveryStartTime === null) {
+          setRecoveryStartTime(Date.now())
+        }
+        console.log('[FittsTask] Alignment gate: false trigger (not in target)')
+        return false
+      }
+
+      // Check if hovering for ≥80ms
+      const now = Date.now()
+      const hoverDuration = hoverStartTime ? now - hoverStartTime : 0
+      if (hoverDuration < 80) {
+        // False trigger: hover duration insufficient
+        alignmentGateRef.current.falseTriggers++
+        setFalseTriggerCount((prev) => prev + 1)
+        if (recoveryStartTime === null) {
+          setRecoveryStartTime(Date.now())
+        }
+        console.log(
+          `[FittsTask] Alignment gate: false trigger (hover duration ${hoverDuration}ms < 80ms)`
+        )
+        return false
+      }
+
+      // Gate passed - log recovery time if there was a previous failure
+      if (recoveryStartTime !== null) {
+        const recoveryTime = now - recoveryStartTime
+        alignmentGateRef.current.recoveryTimes.push(recoveryTime)
+        setRecoveryStartTime(null)
+        console.log(`[FittsTask] Alignment gate: passed (recovery time: ${recoveryTime}ms)`)
+      }
+
+      return true
+    },
+    [
+      alignmentGateEnabled,
+      modalityConfig.modality,
+      targetPos,
+      pointerDown,
+      hoverStartTime,
+      effectiveWidth,
+      recoveryStartTime,
+    ]
+  )
+
+  // Track pointer down/up for alignment gate
+  useEffect(() => {
+    if (!alignmentGateEnabled || modalityConfig.modality !== Modality.HAND) return
+    if (showStart || !targetPos) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!canvasRef.current?.contains(event.target as Node)) return
+      setPointerDown(true)
+      setPointerDownTime(Date.now())
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (!canvasRef.current?.contains(event.target as Node)) return
+      setPointerDown(false)
+      setPointerDownTime(null)
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [alignmentGateEnabled, modalityConfig.modality, showStart, targetPos])
+
+  // Track hover state for alignment gate
+  useEffect(() => {
+    if (!alignmentGateEnabled || modalityConfig.modality !== Modality.HAND) return
+    if (showStart || !targetPos) return
+
+    const checkHover = () => {
+      if (!canvasRef.current) return
+
+      const rect = canvasRef.current.getBoundingClientRect()
+      const mouseX = mousePosRef.current.x
+      const mouseY = mousePosRef.current.y
+      const isHovering = isHit(mousePosRef.current, targetPos, effectiveWidth)
+
+      setIsHoveringTarget(isHovering)
+
+      if (isHovering && hoverStartTime === null) {
+        setHoverStartTime(Date.now())
+      } else if (!isHovering && hoverStartTime !== null) {
+        setHoverStartTime(null)
+      }
+
+      animationFrameRef.current = requestAnimationFrame(checkHover)
+    }
+
+    animationFrameRef.current = requestAnimationFrame(checkHover)
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [
+    alignmentGateEnabled,
+    modalityConfig.modality,
+    showStart,
+    targetPos,
+    effectiveWidth,
+    hoverStartTime,
+  ])
 
   // Hand mode: click handler
   const handleClick = useCallback(
@@ -406,7 +669,7 @@ export function FittsTask({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       }
-      
+
       if (showStart) {
         // Click on start button
         if (isHit(clickPos, startPos, 60)) {
@@ -414,7 +677,13 @@ export function FittsTask({
         }
       } else if (targetPos) {
         if (modalityConfig.modality === Modality.HAND) {
-          // Hand mode: direct click
+          // Check alignment gate if enabled
+          if (!checkAlignmentGate(clickPos)) {
+            // Gate failed - selection blocked
+            return
+          }
+
+          // Hand mode: direct click (gate passed)
           completeSelection(clickPos, true)
         } else {
           // Gaze mode: clicking should not work (only dwell or space)
@@ -422,7 +691,15 @@ export function FittsTask({
         }
       }
     },
-    [showStart, startPos, targetPos, modalityConfig.modality, startTrial, completeSelection]
+    [
+      showStart,
+      startPos,
+      targetPos,
+      modalityConfig.modality,
+      startTrial,
+      completeSelection,
+      checkAlignmentGate,
+    ]
   )
 
   // Gaze mode: mouse move handler
@@ -442,12 +719,16 @@ export function FittsTask({
     [modalityConfig.modality, showStart, targetPos]
   )
 
-  // Track mouse position globally for gaze mode
+  // Track mouse position globally (for gaze mode and alignment gate)
   const mousePosRef = useRef<Position>({ x: 0, y: 0 })
   
-  // Update mouse position on move
+  // Update mouse position on move (for gaze mode and alignment gate)
   useEffect(() => {
-    if (modalityConfig.modality !== Modality.GAZE) return
+    const needsMouseTracking =
+      modalityConfig.modality === Modality.GAZE ||
+      (alignmentGateEnabled && modalityConfig.modality === Modality.HAND)
+    
+    if (!needsMouseTracking) return
     
     const handleGlobalMouseMove = (event: MouseEvent) => {
       if (!canvasRef.current) return
@@ -456,13 +737,15 @@ export function FittsTask({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       }
-      // Also update cursorPos for display purposes
-      setCursorPos(mousePosRef.current)
+      // Also update cursorPos for display purposes (gaze mode only)
+      if (modalityConfig.modality === Modality.GAZE) {
+        setCursorPos(mousePosRef.current)
+      }
     }
     
     window.addEventListener('mousemove', handleGlobalMouseMove)
     return () => window.removeEventListener('mousemove', handleGlobalMouseMove)
-  }, [modalityConfig.modality])
+  }, [modalityConfig.modality, alignmentGateEnabled])
 
   // Gaze mode: update hover state
   useEffect(() => {
@@ -646,11 +929,36 @@ export function FittsTask({
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }
+      cleanupSystemCheck()
+    }
+  }, [])
+
+  const handleResume = useCallback(() => {
+    if (verifyGates()) {
+      clearBlocked()
+      setIsPaused(false)
+      setPauseReason('')
+    } else {
+      setPauseReason('Display requirements still not met. Please ensure fullscreen mode and 100% zoom.')
     }
   }, [])
 
   return (
     <div className={`fitts-task ${agingEnabled ? 'aging-mode' : ''}`}>
+      {/* Pause modal */}
+      {isPaused && (
+        <div className="pause-modal-overlay">
+          <div className="pause-modal">
+            <h3>Trial Paused</h3>
+            <p>{pauseReason}</p>
+            <div className="pause-modal-actions">
+              <button onClick={handleResume} className="resume-button">
+                Resume Trial
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         className={`fitts-canvas ${modalityConfig.modality === Modality.GAZE ? 'gaze-mode' : 'hand-mode'}`}
         onClick={handleClick}

@@ -567,7 +567,10 @@ export function TaskPane() {
             )}
 
             <div className="status">
-              Total Trials: <strong>{selectedIDs.length * nTrialsPerID}</strong>
+              Total Trials: <strong>{selectedIDs.length * nTrialsPerID * 3}</strong>
+              <span style={{ fontSize: '0.875rem', color: '#666' }}>
+                {' '}(point + drag near + drag far per difficulty)
+              </span>
             </div>
           </div>
 

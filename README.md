@@ -6,10 +6,18 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
 > **Study status: Pre-Data (`v0.3.0-pilot`)**
-> - Design finalized & preregistered
-> - Power analysis complete (target N=26–28)
-> - Analysis pipeline implemented and validated on synthetic data
-> - **All performance metrics below are PREDICTED (literature-based) until `v1.0.0-data`**
+> 
+> **Status Checklist:**
+> - ✅ Design finalized & preregistered
+> - ✅ Power analysis complete (target N=26–28)
+> - ✅ Analysis pipeline implemented and validated on synthetic data
+> - ✅ Policy thresholds tuned (target 15–25% adaptation trigger rate)
+> - ⏳ Pilot data collection (5 participants)
+> - ⏳ Policy lock (after pilot tuning)
+> - ⏳ Main study data collection (N=26–28)
+> - ⏳ Data analysis & reporting
+> 
+> **⚠️ IMPORTANT: All performance metrics below are PREDICTED (literature-based) until `v1.0.0-data`**
 
 ## Privacy & Data Governance
 
@@ -18,6 +26,59 @@
 - Webcam/eye-tracking is **optional & exploratory**; never required to participate.  
 - Raw trial logs stored locally (gitignored); aggregated results shared via OSF/Zenodo on `v1.0.0-data`.  
 - Participants can withdraw any time; data minimization practiced.
+
+## Telemetry Tiers
+
+The study uses a tiered telemetry system to balance data richness with privacy and performance:
+
+### P0 (Minimal) — Always Collected
+
+**Default:** Enabled for all participants  
+**Data Collected:**
+- Basic trial metrics: RT, endpoint coordinates, error flags
+- Trial metadata: modality, UI mode, task parameters
+- Display metadata: zoom, fullscreen, DPR, viewport size
+- System health: focus/blur events, tab visibility
+
+**Use Case:** Standard data collection for all participants
+
+### P0+ (Full) — Default Setting
+
+**Default:** Enabled (current default: `level: 'full'`)  
+**Additional Data Beyond P0:**
+- Movement kinematics: path length, velocity, acceleration
+- Quality metrics: curvature, submovements, deviation
+- Frequency domain: power in 8–12 Hz and 12–20 Hz bands
+- Event health: coalesced event ratio, drop estimates
+- Timing landmarks: move onset, target entry, pinch onset
+
+**Use Case:** Detailed movement analysis and quality assessment
+
+### P1 (Raw) — Opt-In Only
+
+**Default:** Disabled (`enableRawStreams: false`)  
+**Additional Data Beyond P0+:**
+- High-frequency pointer samples (coalesced events, ~240 Hz)
+- RAF (requestAnimationFrame) deltas for FPS/jitter estimation
+- State snapshots at regular intervals
+- **Storage:** Gzipped JSONL files (large, compressed)
+
+**Use Case:** Deep-dive analysis, validation, debugging  
+**Note:** Requires explicit opt-in; not collected by default
+
+### Configuration
+
+Telemetry level is controlled in `/app/src/lib/telemetry/config.ts`:
+
+```typescript
+export const telemetryConfig: TelemetryConfig = {
+  level: 'full',        // 'minimal' | 'full' | 'raw'
+  sampleHz: 240,        // Target pointer sampling rate
+  enableRawStreams: false,  // true only when level === 'raw'
+}
+```
+
+**Current Default:** `level: 'full'` (P0+), `enableRawStreams: false` (P1 disabled)
 
 ## Run in one command
 
@@ -201,6 +262,7 @@ localStorage.removeItem('participantIndex'); location.reload();
 - **KPIs:** Movement Time, Error, **Throughput (IDe/MT)**, Raw NASA-TLX
 - **Adaptation:** RT p75 or 2-error burst triggers; **~15–25%** adaptive; **5-trial hysteresis**
 - **Display control:** Fullscreen + 100% zoom enforced; DPI logged
+- **Telemetry:** P0+ (Full) by default; P1 (Raw) opt-in only
 
 ### Success Criteria (Pre-Registered)
 

@@ -44,6 +44,16 @@ export function computeThroughput(ide: number, mt: number): number {
 }
 
 /**
+ * Task type: point (click) or drag
+ */
+export type TaskType = 'point' | 'drag'
+
+/**
+ * Drag distance: near or far (for drag tasks)
+ */
+export type DragDistance = 'near' | 'far'
+
+/**
  * Task difficulty configuration
  */
 export interface FittsConfig {
@@ -51,6 +61,8 @@ export interface FittsConfig {
   W: number // Width (target size in pixels)
   ID: number // Index of Difficulty (computed)
   label: string // Human-readable label
+  taskType?: TaskType // 'point' (default) or 'drag'
+  dragDistance?: DragDistance // 'near' or 'far' (only for drag tasks)
 }
 
 /**
@@ -93,9 +105,10 @@ export const ladder: FittsConfig[] = [
 ]
 
 /**
- * Generate a randomized sequence of trials
- * @param configs - Array of FittsConfig to sample from
- * @param trialsPerConfig - Number of trials per configuration
+ * Generate a randomized sequence of trials with drag tasks
+ * Creates point and drag tasks with near/far distances for drag
+ * @param configs - Array of FittsConfig to sample from (base configs, will be expanded)
+ * @param trialsPerConfig - Number of trials per configuration cell
  * @param shuffle - Whether to shuffle the sequence
  * @returns Array of FittsConfig in trial order
  */
@@ -106,9 +119,29 @@ export function generateTrialSequence(
 ): FittsConfig[] {
   const sequence: FittsConfig[] = []
   
-  for (const config of configs) {
+  // Generate all combinations: Technique × Distance × Difficulty
+  // Technique: point, drag
+  // Distance: near, far (only for drag)
+  // Difficulty: from configs
+  
+  for (const baseConfig of configs) {
+    // Point task (no distance factor)
     for (let i = 0; i < trialsPerConfig; i++) {
-      sequence.push(config)
+      sequence.push({
+        ...baseConfig,
+        taskType: 'point',
+      })
+    }
+    
+    // Drag tasks: near and far
+    for (const distance of ['near', 'far'] as DragDistance[]) {
+      for (let i = 0; i < trialsPerConfig; i++) {
+        sequence.push({
+          ...baseConfig,
+          taskType: 'drag',
+          dragDistance: distance,
+        })
+      }
     }
   }
   

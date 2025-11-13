@@ -1,0 +1,57 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-trials:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      - name: Install tsx (for running TypeScript)
+        working-directory: ./app
+        run: npm install --save-dev tsx @types/node
+
+      - name: Create samples directory if missing
+        run: mkdir -p samples
+
+      - name: Run validator on sample data
+        working-directory: ./app
+        run: |
+          if [ -f ../samples/trials_sample.csv ]; then
+            echo "Running validator on sample data..."
+            npx tsx scripts/validate_trials_schema.ts ../samples/trials_sample.csv
+          else
+            echo "Warning: samples/trials_sample.csv not found, skipping validation"
+            exit 0
+          fi
+        continue-on-error: false
+
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: validation-logs
+          path: |
+            samples/*.csv
+          retention-days: 7
+          if-no-files-found: ignore
+
