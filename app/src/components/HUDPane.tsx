@@ -48,7 +48,6 @@ export function HUDPane() {
   const [pressure, setPressure] = useState(1.0)
   const [pressureEnabled, setPressureEnabled] = useState(false)
   const [agingEnabled, setAgingEnabled] = useState(false)
-  const [cameraEnabled, setCameraEnabled] = useState(false)
   
   const handleModalityChange = (modality: Modality) => {
     const newConfig: ModalityConfig = {
@@ -90,17 +89,6 @@ export function HUDPane() {
     bus.emit('context:change', {
       pressure: pressureEnabled,
       aging: newValue,
-      timestamp: Date.now(),
-    })
-  }
-  
-  const handleCameraToggle = () => {
-    const newValue = !cameraEnabled
-    setCameraEnabled(newValue)
-    bus.emit('context:change', {
-      pressure: pressureEnabled,
-      aging: agingEnabled,
-      camera: newValue,
       timestamp: Date.now(),
     })
   }

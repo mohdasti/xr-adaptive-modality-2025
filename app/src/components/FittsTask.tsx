@@ -15,7 +15,6 @@ import {
   createGazeState,
   updateGazeState,
   isGazeSelectionComplete,
-  isPointInTarget,
 } from '../lib/modality'
 import { distance as distanceBetweenPoints } from '../utils/geom'
 import {
