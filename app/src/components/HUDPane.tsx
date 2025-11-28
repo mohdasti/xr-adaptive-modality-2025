@@ -274,8 +274,7 @@ export function HUDPane() {
               {!SHOW_DEV_MODE && <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '0.25rem' }}>(auto)</span>}
             </span>
           </label>
-          
-          {/* Pupil Proxy removed - feature not currently implemented */}
+        </div>
       </div>
       
       {/* Modality Switch - Only visible in dev mode */}
