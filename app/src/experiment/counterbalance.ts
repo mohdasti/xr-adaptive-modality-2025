@@ -77,7 +77,6 @@ export function sequenceForParticipant(participantIndex: number): Cond[] {
  * @deprecated Use sequenceForParticipant which returns 8 conditions
  */
 export function legacySequenceForParticipant(participantIndex: number): ('HaS' | 'GaS' | 'HaA' | 'GaA')[] {
-  const oldCond: ('HaS' | 'GaS' | 'HaA' | 'GaA')[] = ['HaS', 'GaS', 'HaA', 'GaA']
   const sequenceIndex = participantIndex % 4
   const baseSequence = [
     ['HaS', 'GaS', 'HaA', 'GaA'],

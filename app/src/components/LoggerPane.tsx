@@ -116,16 +116,14 @@ export function LoggerPane() {
       'tlx:submit': createLogHandler('tlx:submit'),
     }
 
-    // Subscribe to all events
-    Object.entries(handlers).forEach(([event, handler]) => {
-      bus.on(event, handler)
+    // Subscribe to all events and collect unsubscribe functions
+    const unsubscribers = Object.entries(handlers).map(([event, handler]) => {
+      return bus.on(event, handler)
     })
 
-    // Cleanup
+    // Cleanup: call all unsubscribe functions
     return () => {
-      Object.entries(handlers).forEach(([event, handler]) => {
-        bus.off(event, handler)
-      })
+      unsubscribers.forEach((unsub) => unsub())
     }
   }, [])
 

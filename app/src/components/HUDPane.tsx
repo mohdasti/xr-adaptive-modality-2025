@@ -14,6 +14,9 @@ import {
 } from '../lib/policy'
 import './HUDPane.css'
 
+// Show Manual Control only in development mode
+const SHOW_DEV_MODE = import.meta.env.DEV || import.meta.env.MODE === 'development'
+
 interface Stats {
   totalTrials: number
   activeTrials: number
@@ -205,16 +208,16 @@ export function HUDPane() {
       }))
     }
 
-    bus.on('trial:start', handleTrialStart)
-    bus.on('trial:end', handleTrialEnd)
-    bus.on('trial:error', handleTrialError)
-    bus.on('policy:change', handlePolicyChange)
+    const unsubTrialStart = bus.on('trial:start', handleTrialStart)
+    const unsubTrialEnd = bus.on('trial:end', handleTrialEnd)
+    const unsubTrialError = bus.on('trial:error', handleTrialError)
+    const unsubPolicyChange = bus.on('policy:change', handlePolicyChange)
 
     return () => {
-      bus.off('trial:start', handleTrialStart)
-      bus.off('trial:end', handleTrialEnd)
-      bus.off('trial:error', handleTrialError)
-      bus.off('policy:change', handlePolicyChange)
+      unsubTrialStart()
+      unsubTrialEnd()
+      unsubTrialError()
+      unsubPolicyChange()
     }
   }, [modalityConfig.modality, pressure, policyState.action, pressureEnabled])
 

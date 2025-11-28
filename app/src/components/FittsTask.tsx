@@ -114,6 +114,8 @@ export function FittsTask({
   
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
+  const gazeAnimationFrameRef = useRef<number | null>(null) // Separate ref for gaze smoothing
+  const hoverAnimationFrameRef = useRef<number | null>(null) // Separate ref for hover detection
   const trialDataRef = useRef<TrialData | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const targetRef = useRef<HTMLDivElement | null>(null)
@@ -162,24 +164,24 @@ export function FittsTask({
     const trialData = trialDataRef.current
     const metrics = getSpatialMetrics(null)
     const displayMetrics = getDisplayMetrics()
-    const timestamp = Date.now()
+    const timestamp = performance.now()
 
-        bus.emit('trial:error', {
-          trialId: trialData.trialId,
-          trial: trialData.trialNumber,
-          trial_in_block: trialData.trialInBlock,
-          trial_number: trialData.globalTrialNumber,
-          block_number: trialData.blockNumber,
-          block_order: trialData.blockOrder,
-          block_trial_count: trialData.blockTrialCount,
-          error: 'timeout',
-          err_type: 'timeout',
-          rt_ms: timestamp - trialData.timestamp,
-          A: trialData.A,
-          W: trialData.W,
-          ID: trialData.ID,
-          index_of_difficulty_nominal: trialData.ID,
-          target_distance_A: trialData.A,
+    bus.emit('trial:error', {
+      trialId: trialData.trialId,
+      trial: trialData.trialNumber,
+      trial_in_block: trialData.trialInBlock,
+      trial_number: trialData.globalTrialNumber,
+      block_number: trialData.blockNumber,
+      block_order: trialData.blockOrder,
+      block_trial_count: trialData.blockTrialCount,
+      error: 'timeout',
+      err_type: 'timeout',
+      rt_ms: timestamp - trialData.timestamp,
+      A: trialData.A,
+      W: trialData.W,
+      ID: trialData.ID,
+      index_of_difficulty_nominal: trialData.ID,
+      target_distance_A: trialData.A,
           // Width logging: both nominal (design) and displayed (actual rendered size)
           nominal_width_px: trialData.W,
           displayed_width_px: effectiveWidth,
@@ -328,11 +330,11 @@ export function FittsTask({
       setGazeState(createGazeState(modalityConfig.dwellTime))
       setCountdown(timeout / 1000)
       
-      const startTime = Date.now()
+      const startTime = performance.now()
       setTrialStartTime(startTime)
       
       // Create trial data
-      const trialId = `trial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const trialId = `trial-${performance.now()}-${Math.random().toString(36).substr(2, 9)}`
       const trialData: TrialData = {
         trialId,
         trialNumber: trialContext.trialInBlock,
@@ -422,7 +424,7 @@ export function FittsTask({
         timeoutRef.current = null
       }
       
-      const endTime = Date.now()
+      const endTime = performance.now()
       const rt_ms = endTime - trialStartTime
       const trialData = trialDataRef.current
       const confirmType = getConfirmType(isClick)
@@ -577,7 +579,7 @@ export function FittsTask({
         alignmentGateRef.current.falseTriggers++
         setFalseTriggerCount((prev) => prev + 1)
         if (recoveryStartTime === null) {
-          setRecoveryStartTime(Date.now())
+          setRecoveryStartTime(performance.now())
         }
         console.log('[FittsTask] Alignment gate: false trigger (no pointer down)')
         return false
@@ -590,21 +592,21 @@ export function FittsTask({
         alignmentGateRef.current.falseTriggers++
         setFalseTriggerCount((prev) => prev + 1)
         if (recoveryStartTime === null) {
-          setRecoveryStartTime(Date.now())
+          setRecoveryStartTime(performance.now())
         }
         console.log('[FittsTask] Alignment gate: false trigger (not in target)')
         return false
       }
 
       // Check if hovering for ≥80ms
-      const now = Date.now()
+      const now = performance.now()
       const hoverDuration = hoverStartTime ? now - hoverStartTime : 0
       if (hoverDuration < 80) {
         // False trigger: hover duration insufficient
         alignmentGateRef.current.falseTriggers++
         setFalseTriggerCount((prev) => prev + 1)
         if (recoveryStartTime === null) {
-          setRecoveryStartTime(Date.now())
+          setRecoveryStartTime(performance.now())
         }
         console.log(
           `[FittsTask] Alignment gate: false trigger (hover duration ${hoverDuration}ms < 80ms)`
@@ -641,7 +643,7 @@ export function FittsTask({
     const handlePointerDown = (event: PointerEvent) => {
       if (!canvasRef.current?.contains(event.target as Node)) return
       setPointerDown(true)
-      setPointerDownTime(Date.now())
+      setPointerDownTime(performance.now())
     }
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -672,7 +674,7 @@ export function FittsTask({
       setIsHoveringTarget(isHovering)
 
       if (isHovering && hoverStartTime === null) {
-        setHoverStartTime(Date.now())
+        setHoverStartTime(performance.now())
       } else if (!isHovering && hoverStartTime !== null) {
         setHoverStartTime(null)
       }
@@ -757,6 +759,24 @@ export function FittsTask({
   // Track mouse position globally (for gaze mode and alignment gate)
   const mousePosRef = useRef<Position>({ x: 0, y: 0 })
   
+  // Gaze proxy: smoothed cursor position (for simulating eye-tracking characteristics)
+  const smoothedGazePosRef = useRef<Position>({ x: 0, y: 0 })
+  const rawMousePosRef = useRef<Position>({ x: 0, y: 0 })
+  
+  // Linear interpolation helper (lerp)
+  const lerp = useCallback((a: number, b: number, t: number): number => {
+    return a + (b - a) * t
+  }, [])
+  
+  // Gaussian noise generator (for simulating microsaccades)
+  const gaussianNoise = useCallback((): number => {
+    // Box-Muller transform for Gaussian distribution
+    const u1 = Math.random()
+    const u2 = Math.random()
+    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    return z0
+  }, [])
+  
   // Update mouse position on move (for gaze mode and alignment gate)
   useEffect(() => {
     const needsMouseTracking =
@@ -768,19 +788,123 @@ export function FittsTask({
     const handleGlobalMouseMove = (event: MouseEvent) => {
       if (!canvasRef.current) return
       const rect = canvasRef.current.getBoundingClientRect()
-      mousePosRef.current = {
+      const rawPos = {
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       }
-      // Also update cursorPos for display purposes (gaze mode only)
-      if (modalityConfig.modality === Modality.GAZE) {
-        setCursorPos(mousePosRef.current)
+      rawMousePosRef.current = rawPos
+      
+      // Debug: log mouse moves occasionally in gaze mode
+      if (modalityConfig.modality === Modality.GAZE && Math.random() < 0.05) {
+        console.log('[FittsTask] Mouse move (gaze mode):', rawPos)
       }
+      
+      // For hand mode, use raw position directly
+      if (modalityConfig.modality === Modality.HAND) {
+        mousePosRef.current = rawPos
+        return
+      }
+      
+      // For gaze mode, the smoothing loop will handle cursor updates
+      // Don't update cursorPos here - let the smoothing loop do it for consistent jitter
     }
     
     window.addEventListener('mousemove', handleGlobalMouseMove)
     return () => window.removeEventListener('mousemove', handleGlobalMouseMove)
   }, [modalityConfig.modality, alignmentGateEnabled])
+  
+  // Gaze mode: smoothing and jitter animation loop
+  useEffect(() => {
+    if (modalityConfig.modality !== Modality.GAZE) {
+      // Reset smoothed position when not in gaze mode
+      smoothedGazePosRef.current = { x: 0, y: 0 }
+      setCursorPos({ x: 0, y: 0 })
+      return
+    }
+    
+    console.log('[FittsTask] Starting gaze smoothing loop')
+    
+    // Don't initialize to a fixed position - wait for mouse to move
+    // Reset smoothed position to zero so we know it hasn't been initialized yet
+    smoothedGazePosRef.current = { x: 0, y: 0 }
+    
+    const smoothingFactor = 0.15 // Lerp factor for smoothing (lower = more lag)
+    const jitterStdDev = 2.0 // Standard deviation of jitter in pixels (simulates microsaccades)
+    
+    const updateGazeCursor = () => {
+      const rawPos = rawMousePosRef.current
+      const currentSmoothed = smoothedGazePosRef.current
+      
+      // Check if we haven't initialized yet (both are zero)
+      const isInitialized = !(currentSmoothed.x === 0 && currentSmoothed.y === 0)
+      
+      if (!isInitialized) {
+        // Wait for mouse to move before initializing
+        if (rawPos.x > 0 || rawPos.y > 0) {
+          console.log('[FittsTask] Initializing gaze cursor at mouse position:', rawPos)
+          smoothedGazePosRef.current = rawPos
+          mousePosRef.current = rawPos
+          setCursorPos(rawPos)
+          gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
+          return
+        } else {
+          // Mouse hasn't moved yet - keep cursor invisible (at 0,0)
+          gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
+          return
+        }
+      }
+      
+      // If raw position is zero after initialization, something went wrong - reset
+      if (rawPos.x === 0 && rawPos.y === 0) {
+        gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
+        return
+      }
+      
+      // After initialization, apply smoothing and jitter
+      // Linear interpolation (smoothing) - lag behind raw mouse
+      const smoothedX = lerp(currentSmoothed.x, rawPos.x, smoothingFactor)
+      const smoothedY = lerp(currentSmoothed.y, rawPos.y, smoothingFactor)
+      
+      // Add Gaussian noise (jitter) to simulate microsaccades
+      const jitterX = gaussianNoise() * jitterStdDev
+      const jitterY = gaussianNoise() * jitterStdDev
+      
+      // Final gaze position = smoothed + jitter
+      const gazePos = {
+        x: smoothedX + jitterX,
+        y: smoothedY + jitterY,
+      }
+      
+      smoothedGazePosRef.current = gazePos
+      mousePosRef.current = gazePos // Use smoothed+jittered position for hit detection
+      
+      // Update display cursor (for visual feedback)
+      setCursorPos(gazePos)
+      
+      // Debug: log position updates occasionally
+      if (Math.random() < 0.01) { // Log ~1% of frames
+        console.log('[FittsTask] Gaze cursor update:', {
+          raw: rawPos,
+          smoothed: { x: smoothedX.toFixed(1), y: smoothedY.toFixed(1) },
+          jitter: { x: jitterX.toFixed(2), y: jitterY.toFixed(2) },
+          final: gazePos
+        })
+      }
+      
+      gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
+    }
+    
+    // Start the animation loop immediately
+    gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
+    
+    return () => {
+      console.log('[FittsTask] Stopping gaze smoothing loop')
+      if (gazeAnimationFrameRef.current) {
+        cancelAnimationFrame(gazeAnimationFrameRef.current)
+        gazeAnimationFrameRef.current = null
+      }
+    }
+  }, [modalityConfig.modality, lerp, gaussianNoise, canvasDimensions.width, canvasDimensions.height])
 
   // Gaze mode: update hover state
   useEffect(() => {
@@ -796,10 +920,24 @@ export function FittsTask({
     console.log('[FittsTask] Starting gaze hover detection, dwellTime:', modalityConfig.dwellTime)
     
     const updateHover = () => {
-      // Use the ref for current mouse position (always up-to-date)
+      // Use the ref for current smoothed gaze position (always up-to-date)
       const currentMousePos = mousePosRef.current
-      const isHovering = isPointInTarget(currentMousePos, targetPos, effectiveWidth)
-      const currentTime = Date.now()
+      
+      // Skip if position hasn't been initialized yet (wait for mouse to move)
+      if (currentMousePos.x === 0 && currentMousePos.y === 0) {
+        hoverAnimationFrameRef.current = requestAnimationFrame(updateHover)
+        return
+      }
+      
+      // Calculate distance to target for debugging
+      const distance = Math.sqrt(
+        Math.pow(currentMousePos.x - targetPos.x, 2) + 
+        Math.pow(currentMousePos.y - targetPos.y, 2)
+      )
+      const targetRadius = effectiveWidth / 2
+      const isHovering = distance <= targetRadius
+      const currentTime = performance.now()
+      
       
       setGazeState((prev) => {
         const newState = updateGazeState(
@@ -809,17 +947,36 @@ export function FittsTask({
           modalityConfig.dwellTime
         )
         
-        // Debug: log hover state changes
-        if (isHovering !== prev.isHovering) {
-          console.log('[FittsTask] Hover state changed:', isHovering, 'dwellProgress:', newState.dwellProgress.toFixed(2))
+        // Debug: log hover state changes and progress
+        if (isHovering !== prev.isHovering || (isHovering && newState.dwellProgress > 0 && Math.abs(newState.dwellProgress - prev.dwellProgress) > 0.1)) {
+          console.log('[FittsTask] Hover update:', {
+            isHovering,
+            wasHovering: prev.isHovering,
+            dwellProgress: newState.dwellProgress.toFixed(3),
+            dwellTime: modalityConfig.dwellTime,
+            hoverStartTime: newState.hoverStartTime,
+            currentPos: currentMousePos,
+            targetPos,
+            effectiveWidth,
+            targetRadius,
+            distance: distance.toFixed(1),
+            insideTarget: isHovering
+          })
         }
         
         // Check if selection is complete (dwell-based)
+        // Only auto-select if dwellTime > 0 (dwell mode, not confirmation mode)
         if (
           modalityConfig.dwellTime > 0 &&
           isGazeSelectionComplete(newState, modalityConfig.dwellTime, false)
         ) {
-          console.log('[FittsTask] Dwell complete! Auto-selecting...')
+          console.log('[FittsTask] Dwell complete! Auto-selecting...', {
+            dwellProgress: newState.dwellProgress,
+            dwellTime: modalityConfig.dwellTime,
+            isHovering: newState.isHovering,
+            hoverStartTime: newState.hoverStartTime,
+            elapsed: newState.hoverStartTime ? currentTime - newState.hoverStartTime : 0
+          })
           completeSelection(currentMousePos, false)
           return prev // Don't update state, trial is ending
         }
@@ -827,14 +984,15 @@ export function FittsTask({
         return newState
       })
       
-      animationFrameRef.current = requestAnimationFrame(updateHover)
+      hoverAnimationFrameRef.current = requestAnimationFrame(updateHover)
     }
     
-    animationFrameRef.current = requestAnimationFrame(updateHover)
+    hoverAnimationFrameRef.current = requestAnimationFrame(updateHover)
     
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current)
+      if (hoverAnimationFrameRef.current) {
+        cancelAnimationFrame(hoverAnimationFrameRef.current)
+        hoverAnimationFrameRef.current = null
       }
     }
   }, [
@@ -846,24 +1004,48 @@ export function FittsTask({
     completeSelection,
   ])
 
-  // Gaze mode: space key handler
+  // Gaze mode: space key handler (for confirmation mode when dwellTime === 0)
+  // Also prevent space from scrolling in all gaze modes
   useEffect(() => {
     if (modalityConfig.modality !== Modality.GAZE) return
-    if (modalityConfig.dwellTime > 0) return // Only for confirmation mode
-    if (showStart || !targetPos) return
     
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === 'Space') {
+      if (event.code === 'Space' || event.key === ' ') {
         event.preventDefault()
+        event.stopPropagation()
         
-        // Check if hovering over target
-        if (gazeState.isHovering) {
-          completeSelection(cursorPos, false)
-        } else {
+        console.log('[FittsTask] Space key pressed', {
+          dwellTime: modalityConfig.dwellTime,
+          showStart,
+          hasTarget: !!targetPos,
+          isHovering: gazeState.isHovering,
+          cursorPos,
+          mousePos: mousePosRef.current
+        })
+        
+        // Only handle selection if in confirmation mode (dwellTime === 0) and trial is active
+        if (modalityConfig.dwellTime === 0 && !showStart && targetPos) {
+          // Use current mouse position for hit detection
+          const currentPos = mousePosRef.current
+          const isHovering = isPointInTarget(currentPos, targetPos, effectiveWidth)
+          
+          console.log('[FittsTask] Space key - checking hover', {
+            currentPos,
+            targetPos,
+            effectiveWidth,
+            isHovering,
+            gazeStateIsHovering: gazeState.isHovering
+          })
+          
+          // Check if hovering over target (use both state and real-time check)
+          if (isHovering || gazeState.isHovering) {
+            console.log('[FittsTask] Space key - selecting target')
+            completeSelection(currentPos, false)
+          } else {
           // Premature confirmation (slip)
           if (trialDataRef.current) {
             const trialData = trialDataRef.current
-            const timestamp = Date.now()
+            const timestamp = performance.now()
             const metrics = getSpatialMetrics(cursorPos)
 
             bus.emit('trial:error', {
@@ -902,12 +1084,21 @@ export function FittsTask({
             })
             onTrialError('slip')
           }
+          }
         }
       }
     }
     
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    // Add event listener with capture to catch space key early
+    window.addEventListener('keydown', handleKeyDown, true)
+    
+    // Also add to document to catch even if window doesn't have focus
+    document.addEventListener('keydown', handleKeyDown, true)
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('keydown', handleKeyDown, true)
+    }
   }, [
     modalityConfig.modality,
     modalityConfig.dwellTime,
@@ -919,6 +1110,8 @@ export function FittsTask({
     onTrialError,
     getSpatialMetrics,
     getConfirmType,
+    effectiveWidth,
+    widthScale,
   ])
 
   // Reset state when trial context changes (new trial starts)
@@ -930,6 +1123,16 @@ export function FittsTask({
     setGazeState(createGazeState(modalityConfig.dwellTime))
     setCountdown(timeout / 1000)
     
+    // Reset cursor position for gaze mode (reset to uninitialized state)
+    // Don't cancel gazeAnimationFrameRef - let the smoothing loop keep running
+    // It will re-initialize when mouse moves
+    if (modalityConfig.modality === Modality.GAZE) {
+      smoothedGazePosRef.current = { x: 0, y: 0 }
+      mousePosRef.current = { x: 0, y: 0 }
+      setCursorPos({ x: 0, y: 0 })
+      console.log('[FittsTask] Reset gaze cursor position for new trial')
+    }
+    
     // Clear any pending timeouts
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
@@ -939,7 +1142,24 @@ export function FittsTask({
       cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
     }
-  }, [trialContext.trialInBlock, trialContext.globalTrialNumber, modalityConfig.dwellTime, timeout])
+    if (hoverAnimationFrameRef.current) {
+      cancelAnimationFrame(hoverAnimationFrameRef.current)
+      hoverAnimationFrameRef.current = null
+    }
+    // Don't cancel gazeAnimationFrameRef - smoothing loop should keep running
+  }, [trialContext.trialInBlock, trialContext.globalTrialNumber, modalityConfig.dwellTime, timeout, modalityConfig.modality, canvasDimensions.width, canvasDimensions.height])
+
+  // Reset cursor position when returning to start state (showStart becomes true)
+  useEffect(() => {
+    if (modalityConfig.modality === Modality.GAZE && showStart) {
+      // Reset to uninitialized state - cursor will follow mouse when it moves
+      // This ensures cursor doesn't get stuck at the last target position
+      smoothedGazePosRef.current = { x: 0, y: 0 }
+      mousePosRef.current = { x: 0, y: 0 }
+      setCursorPos({ x: 0, y: 0 })
+      console.log('[FittsTask] Reset gaze cursor for start state - waiting for mouse movement')
+    }
+  }, [showStart, modalityConfig.modality])
 
   // Countdown timer for pressure mode
   useEffect(() => {
@@ -967,6 +1187,12 @@ export function FittsTask({
       }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
+      }
+      if (hoverAnimationFrameRef.current) {
+        cancelAnimationFrame(hoverAnimationFrameRef.current)
+      }
+      if (gazeAnimationFrameRef.current) {
+        cancelAnimationFrame(gazeAnimationFrameRef.current)
       }
       cleanupSystemCheck()
     }
@@ -1033,7 +1259,37 @@ export function FittsTask({
         onClick={handleClick}
         onMouseMove={handleMouseMove}
         ref={canvasRef}
+        onKeyDown={(e) => {
+          // Prevent space key from scrolling the page in gaze mode
+          if (modalityConfig.modality === Modality.GAZE && e.code === 'Space') {
+            e.preventDefault()
+          }
+        }}
+        tabIndex={-1}
       >
+        {/* Gaze cursor indicator - visible cursor for gaze mode (only visible after mouse moves) */}
+        {modalityConfig.modality === Modality.GAZE && cursorPos.x > 0 && cursorPos.y > 0 && (
+          <div
+            className="gaze-cursor-indicator"
+            style={{
+              position: 'absolute',
+              left: `${cursorPos.x}px`,
+              top: `${cursorPos.y}px`,
+              transform: 'translate(-50%, -50%)',
+              width: '12px',
+              height: '12px',
+              background: 'rgba(0, 217, 255, 0.8)',
+              border: '2px solid #00ffff',
+              borderRadius: '50%',
+              pointerEvents: 'none',
+              boxShadow: '0 0 10px rgba(0, 217, 255, 0.6)',
+              zIndex: 1000,
+              transition: 'none', // No transition for smooth following
+              opacity: 1,
+            }}
+            title={`Gaze cursor: (${cursorPos.x.toFixed(0)}, ${cursorPos.y.toFixed(0)})`}
+          />
+        )}
         {/* Countdown overlay for pressure mode */}
         {pressureEnabled && !showStart && targetPos && (
           <div className={`countdown-overlay ${countdown <= 3 ? 'warning' : ''}`}>

@@ -299,8 +299,8 @@ export class PolicyEngine {
   private policy: PolicyConfig
   private currentState: PolicyState
   private history: TrialHistoryEntry[]
-  private goodTrialCount: number = 0
-  private badTrialCount: number = 0
+  // Namespace counters by modality to prevent cross-contamination
+  private counters: Record<string, { good: number; bad: number }> = {}
   
   constructor(policy: PolicyConfig) {
     this.policy = policy
@@ -311,6 +311,16 @@ export class PolicyEngine {
       hysteresis_count: 0,
     }
     this.history = []
+  }
+  
+  /**
+   * Get or initialize counters for a modality
+   */
+  private getCounters(modality: string): { good: number; bad: number } {
+    if (!this.counters[modality]) {
+      this.counters[modality] = { good: 0, bad: 0 }
+    }
+    return this.counters[modality]
   }
   
   /**
@@ -382,18 +392,20 @@ export class PolicyEngine {
     // Check if triggers are met
     const triggered = checkTriggers(triggers, config.trigger, currentRT)
     
-    // Hysteresis logic
+    // Hysteresis logic (modality-specific)
+    const counters = this.getCounters(modalityStr)
+    
     if (triggered) {
-      this.badTrialCount++
-      this.goodTrialCount = 0
+      counters.bad++
+      counters.good = 0
       
       // Need N consecutive bad trials to activate
-      if (this.badTrialCount >= this.policy.hysteresis_trials) {
+      if (counters.bad >= this.policy.hysteresis_trials) {
         const newState: PolicyState = {
           action: config.action,
           reason: `Triggered: RT p75=${triggers.rt_p75?.toFixed(0)}ms, err_burst=${triggers.err_burst}`,
           triggered: true,
-          hysteresis_count: this.badTrialCount,
+          hysteresis_count: counters.bad,
         }
         
         // Add delta_w for inflate_width action
@@ -405,19 +417,19 @@ export class PolicyEngine {
         return newState
       }
     } else {
-      this.goodTrialCount++
-      this.badTrialCount = 0
+      counters.good++
+      counters.bad = 0
       
       // Need N consecutive good trials to deactivate
       if (
         this.currentState.action !== 'none' &&
-        this.goodTrialCount >= this.policy.hysteresis_trials
+        counters.good >= this.policy.hysteresis_trials
       ) {
         this.currentState = {
           action: 'none',
           reason: 'Performance improved',
           triggered: false,
-          hysteresis_count: this.goodTrialCount,
+          hysteresis_count: counters.good,
         }
       }
     }
@@ -426,7 +438,7 @@ export class PolicyEngine {
   }
   
   /**
-   * Reset policy state
+   * Reset policy state and counters
    */
   reset(): void {
     this.currentState = {
@@ -435,8 +447,15 @@ export class PolicyEngine {
       triggered: false,
       hysteresis_count: 0,
     }
-    this.goodTrialCount = 0
-    this.badTrialCount = 0
+    // Clear all modality-specific counters
+    this.counters = {}
+  }
+  
+  /**
+   * Reset counters for a specific modality
+   */
+  resetModality(modality: string): void {
+    delete this.counters[modality]
   }
   
   /**

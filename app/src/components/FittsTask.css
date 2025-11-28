@@ -107,6 +107,8 @@
 
 .fitts-canvas.gaze-mode {
   cursor: none;
+  /* Prevent space key from scrolling */
+  outline: none;
 }
 
 /* Ensure cursor remains visible in hand mode even with pressure/aging enabled */
@@ -114,18 +116,9 @@
   pointer-events: none;
 }
 
-.fitts-canvas.gaze-mode::after {
-  content: '';
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: rgba(0, 217, 255, 0.8);
-  border: 2px solid #00ffff;
-  border-radius: 50%;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 10px rgba(0, 217, 255, 0.6);
-  z-index: 1000;
+/* Gaze cursor indicator - now handled by React component, not CSS pseudo-element */
+.gaze-cursor-indicator {
+  /* Styles are inline for dynamic positioning */
 }
 
 .fitts-start-button {

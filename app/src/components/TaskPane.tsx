@@ -19,6 +19,7 @@ import {
   DisplayMetadata,
 } from '../utils/sessionMeta'
 import { sequenceForParticipant, parseCondition, type Cond } from '../experiment/counterbalance'
+import { getPolicyEngine } from '../lib/policy'
 import './TaskPane.css'
 
 type TaskMode = 'manual' | 'fitts'
@@ -103,8 +104,8 @@ export function TaskPane() {
       setModalityConfig(payload.config)
     }
     
-    bus.on('modality:change', handleModalityChange)
-    return () => bus.off('modality:change', handleModalityChange)
+    const unsub = bus.on('modality:change', handleModalityChange)
+    return unsub
   }, [])
   
   // Listen for policy changes
@@ -119,8 +120,8 @@ export function TaskPane() {
       }
     }
     
-    bus.on('policy:change', handlePolicyChange)
-    return () => bus.off('policy:change', handlePolicyChange)
+    const unsub = bus.on('policy:change', handlePolicyChange)
+    return unsub
   }, [])
   
   // Listen for context changes
@@ -134,8 +135,8 @@ export function TaskPane() {
       }
     }
     
-    bus.on('context:change', handleContextChange)
-    return () => bus.off('context:change', handleContextChange)
+    const unsub = bus.on('context:change', handleContextChange)
+    return unsub
   }, [])
 
   // Manual mode handlers
@@ -185,6 +186,10 @@ export function TaskPane() {
 
   // Fitts task handlers
   const startFittsBlockInternal = () => {
+    // Reset policy engine to prevent state pollution between blocks
+    const policyEngine = getPolicyEngine()
+    policyEngine.reset()
+    
     // Get block order from counterbalanced sequence
     if (blockSequence.length === 0 || blockNumber > blockSequence.length) {
       console.warn('Block sequence not initialized or block number out of range')

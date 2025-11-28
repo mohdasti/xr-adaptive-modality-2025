@@ -4,11 +4,16 @@ type EventHandler = (payload: any) => void
 class EventBus {
   private events: Map<string, Set<EventHandler>> = new Map()
 
-  on(event: string, handler: EventHandler): void {
+  on(event: string, handler: EventHandler): () => void {
     if (!this.events.has(event)) {
       this.events.set(event, new Set())
     }
     this.events.get(event)!.add(handler)
+    
+    // Return unsubscribe function for automatic cleanup
+    return () => {
+      this.off(event, handler)
+    }
   }
 
   off(event: string, handler: EventHandler): void {
