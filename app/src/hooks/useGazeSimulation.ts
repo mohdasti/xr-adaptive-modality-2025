@@ -22,25 +22,21 @@ export interface Position {
 export interface GazeSimulationConfig {
   /** Lerp factor for smoothing (0-1, lower = more lag). Default: 0.15 */
   smoothingFactor?: number
-  /** Base standard deviation of fixation noise in pixels. Default: 3.5 (reduced for better dwell accuracy) */
+  /** Standard deviation of fixation noise in pixels (fixed, no adaptation). Default: 5.0 */
   fixationNoiseStdDev?: number
   /** Velocity threshold (px/s) below which fixation noise is applied. Default: 50 */
   fixationVelocityThreshold?: number
-  /** Velocity threshold (px/s) above which saccadic suppression activates. Default: 1000 */
+  /** Velocity threshold (px/s) above which saccadic suppression activates. Default: 2000 */
   saccadeVelocityThreshold?: number
   /** Whether to enable saccadic suppression. Default: true */
   enableSaccadicSuppression?: boolean
-  /** Target size in pixels (for adaptive noise scaling). If provided, noise scales down for smaller targets */
-  targetSize?: number
-  /** Target position (for adaptive noise scaling near target). If provided, noise reduces when near target */
-  targetPosition?: Position | null
 }
 
-const DEFAULT_CONFIG: Required<Omit<GazeSimulationConfig, 'targetSize' | 'targetPosition'>> = {
+const DEFAULT_CONFIG: Required<GazeSimulationConfig> = {
   smoothingFactor: 0.15,
-  fixationNoiseStdDev: 3.5, // Reduced from 7.5 for better dwell accuracy on small targets
+  fixationNoiseStdDev: 5.0, // Fixed noise for high-end eye tracker simulation (~0.12°)
   fixationVelocityThreshold: 50,
-  saccadeVelocityThreshold: 1000,
+  saccadeVelocityThreshold: 2000, // Increased to prevent false freezes in mouse simulation
   enableSaccadicSuppression: true,
 }
 
@@ -213,44 +209,15 @@ export function useGazeSimulation(
     )
     
     // Fixation Noise: Add Gaussian noise when relatively still
-    // Adaptive noise scaling: reduce noise for smaller targets and when near target
+    // Fixed noise level (no adaptation) to preserve Fitts' Law validity
     let finalX = smoothedX
     let finalY = smoothedY
     
     if (velocity < finalConfig.fixationVelocityThreshold) {
-      // Calculate adaptive noise scale based on target size and proximity
-      let noiseScale = 1.0
-      
-      if (config.targetSize !== undefined && config.targetSize > 0) {
-        // Scale noise based on target size: smaller targets get less noise
-        // For targets < 30px, scale noise down significantly
-        // For targets >= 30px, use full noise
-        const minTargetSize = 30 // pixels
-        if (config.targetSize < minTargetSize) {
-          // Scale noise proportionally: 10px target gets ~33% noise, 20px gets ~67%
-          noiseScale = Math.max(0.2, config.targetSize / minTargetSize)
-        }
-      }
-      
-      // Further reduce noise when near/over the target
-      if (config.targetPosition) {
-        const dx = smoothedX - config.targetPosition.x
-        const dy = smoothedY - config.targetPosition.y
-        const distanceToTarget = Math.sqrt(dx * dx + dy * dy)
-        const targetRadius = (config.targetSize && config.targetSize > 0) ? config.targetSize / 2 : 20
-        
-        // If within 1.5x target radius, reduce noise further
-        if (distanceToTarget < targetRadius * 1.5) {
-          // Scale noise down linearly: at target center (0 distance) = 0.3x, at 1.5x radius = 1.0x
-          const proximityScale = 0.3 + (distanceToTarget / (targetRadius * 1.5)) * 0.7
-          noiseScale *= proximityScale
-        }
-      }
-      
-      // Apply fixation noise (drift/tremor) with adaptive scaling
-      const adaptiveNoiseStdDev = finalConfig.fixationNoiseStdDev * noiseScale
-      const noiseX = gaussianRandom(0, adaptiveNoiseStdDev)
-      const noiseY = gaussianRandom(0, adaptiveNoiseStdDev)
+      // Apply fixed fixation noise (drift/tremor)
+      // No adaptive scaling - noise is constant to maintain scientific validity
+      const noiseX = gaussianRandom(0, finalConfig.fixationNoiseStdDev)
+      const noiseY = gaussianRandom(0, finalConfig.fixationNoiseStdDev)
       
       finalX = smoothedX + noiseX
       finalY = smoothedY + noiseY

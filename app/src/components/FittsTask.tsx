@@ -789,13 +789,10 @@ export function FittsTask({
     isSaccading,
   } = useGazeSimulation(rawMousePosition, isGazeMode, {
     smoothingFactor: 0.15,
-    fixationNoiseStdDev: 3.5, // Reduced from 7.5 for better dwell accuracy
+    fixationNoiseStdDev: 5.0, // Fixed noise for high-end eye tracker simulation (~0.12°)
     fixationVelocityThreshold: 50,
-    saccadeVelocityThreshold: 1000,
+    saccadeVelocityThreshold: 2000, // Increased to prevent false freezes in mouse simulation
     enableSaccadicSuppression: true,
-    // Adaptive noise: scale down for smaller targets and when near target
-    targetSize: targetPos ? effectiveWidth : undefined,
-    targetPosition: targetPos,
   })
   
   // Update mouse position on move (for gaze mode and alignment gate)
@@ -889,7 +886,11 @@ export function FittsTask({
         Math.pow(currentMousePos.y - targetPos.y, 2)
       )
       const targetRadius = effectiveWidth / 2
-      const isHovering = distance <= targetRadius
+      // Forgiving dwell: Add 10px tolerance margin for gaze mode
+      // This allows cursor to jitter slightly over the edge without resetting the timer
+      // Preserves Fitts' Law validity while making small targets selectable
+      const DWELL_TOLERANCE_PX = 10
+      const isHovering = distance <= (targetRadius + DWELL_TOLERANCE_PX)
       const currentTime = performance.now()
       
       
@@ -913,6 +914,8 @@ export function FittsTask({
             targetPos,
             effectiveWidth,
             targetRadius,
+            dwellTolerance: DWELL_TOLERANCE_PX,
+            effectiveRadius: targetRadius + DWELL_TOLERANCE_PX,
             distance: distance.toFixed(1),
             insideTarget: isHovering
           })
@@ -981,7 +984,14 @@ export function FittsTask({
         if (modalityConfig.dwellTime === 0 && !showStart && targetPos) {
           // Use current mouse position for hit detection
           const currentPos = mousePosRef.current
-          const isHovering = isPointInTarget(currentPos, targetPos, effectiveWidth)
+          // Forgiving dwell: Use 10px tolerance for space key confirmation (same as dwell mode)
+          const DWELL_TOLERANCE_PX = 10
+          const targetRadius = effectiveWidth / 2
+          const distance = Math.sqrt(
+            Math.pow(currentPos.x - targetPos.x, 2) + 
+            Math.pow(currentPos.y - targetPos.y, 2)
+          )
+          const isHovering = distance <= (targetRadius + DWELL_TOLERANCE_PX)
           
           console.log('[FittsTask] Space key - checking hover', {
             currentPos,
