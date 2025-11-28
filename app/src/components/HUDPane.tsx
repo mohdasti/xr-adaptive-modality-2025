@@ -228,7 +228,16 @@ export function HUDPane() {
       <div className="context-controls">
         <h3>Contextual Factors</h3>
         {!SHOW_DEV_MODE && (
-          <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+          <div style={{ 
+            padding: '0.75rem', 
+            backgroundColor: 'rgba(255, 193, 7, 0.15)', 
+            border: '1px solid rgba(255, 193, 7, 0.4)',
+            borderRadius: '4px', 
+            marginBottom: '0.75rem', 
+            fontSize: '0.875rem',
+            color: '#ffc107',
+            lineHeight: '1.5'
+          }}>
             <strong>Note:</strong> Pressure and Aging are automatically controlled by the block sequence. These toggles are disabled in production mode.
           </div>
         )}
@@ -284,7 +293,7 @@ export function HUDPane() {
                 onChange={() => handleModalityChange(Modality.HAND)}
               />
               <span className="radio-label">
-                <span className="radio-icon">👆</span>
+                <span className="radio-icon">🖱️</span>
                 {getModalityLabel(Modality.HAND)}
               </span>
             </label>
@@ -333,7 +342,7 @@ export function HUDPane() {
             border: '1px solid rgba(0, 217, 255, 0.3)'
           }}>
             <span style={{ fontSize: '1.25rem', marginRight: '0.5rem' }}>
-              {modalityConfig.modality === Modality.GAZE ? '👁️' : '👆'}
+              {modalityConfig.modality === Modality.GAZE ? '👁️' : '🖱️'}
             </span>
             <strong>{getModalityLabel(modalityConfig.modality)}</strong>
             {modalityConfig.modality === Modality.GAZE && (
