@@ -7,6 +7,9 @@ This document describes the optional pupil diameter proxy system using webcam an
 **This is a simplified proxy system and should NOT be used for medical diagnosis.**
 Use only for research purposes with informed consent.
 
+**Scientific Validity Warning:**
+This luminance-based proxy is **not scientifically valid for measuring cognitive workload** in uncontrolled remote settings due to the dominant influence of the Pupillary Light Reflex. Use NASA-TLX for workload assessment instead. See [Limitations](#scientific-validity) section for details.
+
 **Privacy Protection:**
 - No video frames are stored or transmitted
 - Only a scalar z-score value is logged
@@ -288,11 +291,31 @@ useEffect(() => {
 
 ## Limitations
 
+### Scientific Validity
+
+⚠️ **CRITICAL LIMITATION: Luminance Confound**
+
+This pupil proxy system has a **fundamental scientific limitation** that must be acknowledged:
+
+- **Primary Driver**: In uncontrolled lighting environments (remote studies), pupil diameter is driven **90%+ by the Pupillary Light Reflex**, not cognitive load (Locus Coeruleus activity).
+- **Confounding Factors**: 
+  - User movement (leaning back/forward changes face illumination)
+  - UI changes (dark/light button appearances)
+  - Ambient lighting variations
+  - Screen brightness changes
+- **Signal Validity**: The luminance-based z-score is **scientifically invalid for measuring cognitive workload** in this context.
+
+**Recommendation for Research Use:**
+- **DO NOT** use `pupil_z_med` as a primary or secondary outcome for "Cognitive Load" claims
+- **DO** use NASA-TLX (H5) for workload assessment
+- **Optional Use**: Consider using pupil proxy only as a "movement artifact" detector or remove it entirely to save bandwidth/processing power
+- **Reporting**: If used, explicitly state limitations and do not claim it measures cognitive load
+
 ### Accuracy
 
 - **Proxy Measure**: Not true pupil diameter
 - **Simplified Model**: Luminance-only estimation
-- **Environmental Factors**: Lighting affects readings
+- **Environmental Factors**: Lighting affects readings (dominant factor)
 - **Individual Variation**: Baseline varies by person
 
 ### Constraints
@@ -301,6 +324,7 @@ useEffect(() => {
 - **Privacy Concerns**: Some users may decline
 - **Browser Permissions**: Subject to browser policy
 - **Performance Impact**: Slight CPU/GPU usage
+- **Scientific Validity**: Limited by luminance confound in uncontrolled settings
 
 ## Future Enhancements
 

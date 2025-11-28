@@ -164,22 +164,26 @@ export function FittsTask({
     const displayMetrics = getDisplayMetrics()
     const timestamp = Date.now()
 
-    bus.emit('trial:error', {
-      trialId: trialData.trialId,
-      trial: trialData.trialNumber,
-      trial_in_block: trialData.trialInBlock,
-      trial_number: trialData.globalTrialNumber,
-      block_number: trialData.blockNumber,
-      block_order: trialData.blockOrder,
-      block_trial_count: trialData.blockTrialCount,
-      error: 'timeout',
-      err_type: 'timeout',
-      rt_ms: timestamp - trialData.timestamp,
-      A: trialData.A,
-      W: trialData.W,
-      ID: trialData.ID,
-      index_of_difficulty_nominal: trialData.ID,
-      target_distance_A: trialData.A,
+        bus.emit('trial:error', {
+          trialId: trialData.trialId,
+          trial: trialData.trialNumber,
+          trial_in_block: trialData.trialInBlock,
+          trial_number: trialData.globalTrialNumber,
+          block_number: trialData.blockNumber,
+          block_order: trialData.blockOrder,
+          block_trial_count: trialData.blockTrialCount,
+          error: 'timeout',
+          err_type: 'timeout',
+          rt_ms: timestamp - trialData.timestamp,
+          A: trialData.A,
+          W: trialData.W,
+          ID: trialData.ID,
+          index_of_difficulty_nominal: trialData.ID,
+          target_distance_A: trialData.A,
+          // Width logging: both nominal (design) and displayed (actual rendered size)
+          nominal_width_px: trialData.W,
+          displayed_width_px: effectiveWidth,
+          width_scale_factor: widthScale,
       modality: trialData.modality,
       ui_mode: trialData.ui_mode,
       pressure: trialData.pressure,
@@ -469,6 +473,10 @@ export function FittsTask({
           ID: trialData.ID,
           index_of_difficulty_nominal: trialData.ID,
           target_distance_A: trialData.A,
+          // Width logging: both nominal (design) and displayed (actual rendered size)
+          nominal_width_px: trialData.W,
+          displayed_width_px: effectiveWidth,
+          width_scale_factor: widthScale,
           clickPos,
           targetPos: trialData.targetPos,
           target_center_x: metrics.targetCenter?.x ?? null,
@@ -532,6 +540,10 @@ export function FittsTask({
           ID: trialData.ID,
           index_of_difficulty_nominal: trialData.ID,
           target_distance_A: trialData.A,
+          // Width logging: both nominal (design) and displayed (actual rendered size)
+          nominal_width_px: trialData.W,
+          displayed_width_px: effectiveWidth,
+          width_scale_factor: widthScale,
           confirm_type: confirmType,
           timestamp: endTime,
           // Display metrics
@@ -881,6 +893,10 @@ export function FittsTask({
               ID: trialData.ID,
               index_of_difficulty_nominal: trialData.ID,
               target_distance_A: trialData.A,
+              // Width logging: both nominal (design) and displayed (actual rendered size)
+              nominal_width_px: trialData.W,
+              displayed_width_px: effectiveWidth,
+              width_scale_factor: widthScale,
               confirm_type: getConfirmType(false),
               timestamp,
             })

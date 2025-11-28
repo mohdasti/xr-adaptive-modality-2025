@@ -18,7 +18,7 @@ import {
   meetsDisplayRequirements,
   DisplayMetadata,
 } from '../utils/sessionMeta'
-import { sequenceForParticipant, type Cond } from '../experiment/counterbalance'
+import { sequenceForParticipant, parseCondition, type Cond } from '../experiment/counterbalance'
 import './TaskPane.css'
 
 type TaskMode = 'manual' | 'fitts'
@@ -61,7 +61,7 @@ export function TaskPane() {
   const [blockNumber, setBlockNumber] = useState(1)
   const [globalTrialNumber, setGlobalTrialNumber] = useState(1)
   const [trialInBlock, setTrialInBlock] = useState(1)
-  const [blockOrderCode, setBlockOrderCode] = useState<'HaS' | 'GaS' | 'HaA' | 'GaA'>('HaS')
+  const [blockOrderCode, setBlockOrderCode] = useState<Cond>('HaS_P0')
   const [displayMetadata, setDisplayMetadata] = useState<DisplayMetadata | null>(null)
   const [showDisplayWarning, setShowDisplayWarning] = useState(false)
   const [activeBlockContext, setActiveBlockContext] = useState<{ modality: string; uiMode: string } | null>(null)
@@ -170,11 +170,17 @@ export function TaskPane() {
     bus.emit('policy:change', { policy: newPolicy, timestamp: Date.now() })
   }
 
-  // Parse condition code to modality and UI mode
-  const parseCondition = (cond: Cond): { modality: Modality; uiMode: string } => {
-    const modality = cond.startsWith('H') ? Modality.HAND : Modality.GAZE
-    const uiMode = cond.endsWith('A') ? 'adaptive' : 'static'
-    return { modality, uiMode }
+  // Parse condition code to modality, UI mode, and pressure
+  const parseConditionCode = (cond: Cond): { modality: Modality; uiMode: string; pressure: boolean; aging: boolean } => {
+    const parsed = parseCondition(cond)
+    const modality = parsed.modality === 'hand' ? Modality.HAND : Modality.GAZE
+    const uiMode = parsed.intervention === 'adaptive' ? 'adaptive' : 'static'
+    // Pressure is now part of the condition code
+    const pressure = parsed.pressure
+    // Aging is optional and not part of the base design - default to false
+    // Can be enabled per-participant or per-session if needed
+    const aging = false
+    return { modality, uiMode, pressure, aging }
   }
 
   // Fitts task handlers
@@ -188,7 +194,37 @@ export function TaskPane() {
     const currentCond = blockSequence[blockNumber - 1]
     setBlockOrderCode(currentCond)
     
-    const { modality: targetModality, uiMode: targetUiMode } = parseCondition(currentCond)
+    const { modality: targetModality, uiMode: targetUiMode, pressure: targetPressure, aging: targetAging } = parseConditionCode(currentCond)
+    
+    // Automatically set pressure and aging based on block condition
+    // This ensures they are controlled by the experimental design, not manual toggles
+    if (pressureEnabled !== targetPressure) {
+      console.log('[TaskPane] Block forcing pressure change:', {
+        from: pressureEnabled,
+        to: targetPressure,
+        blockCondition: currentCond,
+      })
+      setPressureEnabled(targetPressure)
+      bus.emit('context:change', {
+        pressure: targetPressure,
+        aging: targetAging, // Will be set next
+        timestamp: Date.now(),
+      })
+    }
+    
+    if (agingEnabled !== targetAging) {
+      console.log('[TaskPane] Block forcing aging change:', {
+        from: agingEnabled,
+        to: targetAging,
+        blockCondition: currentCond,
+      })
+      setAgingEnabled(targetAging)
+      bus.emit('context:change', {
+        pressure: targetPressure,
+        aging: targetAging,
+        timestamp: Date.now(),
+      })
+    }
     
     // Update modality if needed
     // In development, respect HUD selection to allow testing Gaze+dwell regardless of block order
@@ -529,24 +565,33 @@ export function TaskPane() {
                 </span>
               )}
               <br />
-              Block #{blockNumber} · Condition: <strong>{blockOrderCode}</strong>
+              Block #{blockNumber} of {blockSequence.length} · Condition: <strong>{blockOrderCode}</strong>
               <br />
               Next global trial #: <strong>{globalTrialNumber}</strong>
               <br />
-              <small>Change modality in System HUD</small>
+              {!SHOW_DEV_MODE && (
+                <small>All experimental factors (modality, UI mode, pressure) are automatically set by block sequence.</small>
+              )}
+              {SHOW_DEV_MODE && (
+                <small>Dev mode: Modality can be changed in HUD for testing, but will be overridden by block sequence in production.</small>
+              )}
             </div>
 
             <div className="status" style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
               <strong>Current Block:</strong> {blockOrderCode} — {
-                blockOrderCode === 'HaS' ? 'Hand · Static' :
-                blockOrderCode === 'GaS' ? 'Gaze · Static' :
-                blockOrderCode === 'HaA' ? 'Hand · Adaptive' :
-                'Gaze · Adaptive'
+                (() => {
+                  const parsed = parseConditionCode(blockOrderCode)
+                  const modalityLabel = parsed.modality === Modality.HAND ? 'Hand' : 'Gaze'
+                  const interventionLabel = parsed.uiMode === 'adaptive' ? 'Adaptive' : 'Static'
+                  const pressureLabel = parsed.pressure ? 'Pressure ON' : 'Pressure OFF'
+                  return `${modalityLabel} · ${interventionLabel} · ${pressureLabel}`
+                })()
               }
               <br />
               <small style={{ color: '#666' }}>
                 Block order is automatically set based on your participant index (Williams counterbalancing).
-                UI mode (Static/Adaptive) is controlled by the block sequence.
+                Modality, UI mode (Static/Adaptive), and Pressure are all controlled by the block sequence.
+                {SHOW_DEV_MODE && ' (Dev mode: HUD toggles are overridden by block sequence in production.)'}
               </small>
             </div>
 

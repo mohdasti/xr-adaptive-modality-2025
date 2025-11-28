@@ -236,16 +236,24 @@ export function HUDPane() {
       {/* Contextual Factors */}
       <div className="context-controls">
         <h3>Contextual Factors</h3>
+        {!SHOW_DEV_MODE && (
+          <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+            <strong>Note:</strong> Pressure and Aging are automatically controlled by the block sequence. These toggles are disabled in production mode.
+          </div>
+        )}
         <div className="context-toggles">
           <label className="context-toggle">
             <input
               type="checkbox"
               checked={pressureEnabled}
               onChange={handlePressureToggle}
+              disabled={!SHOW_DEV_MODE}
+              title={!SHOW_DEV_MODE ? 'Automatically set by block sequence' : 'Toggle pressure mode'}
             />
             <span className="toggle-label">
               <span className="toggle-icon">⏱️</span>
               Pressure (Countdown Timer)
+              {!SHOW_DEV_MODE && <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '0.25rem' }}>(auto)</span>}
             </span>
           </label>
           
@@ -254,10 +262,13 @@ export function HUDPane() {
               type="checkbox"
               checked={agingEnabled}
               onChange={handleAgingToggle}
+              disabled={!SHOW_DEV_MODE}
+              title={!SHOW_DEV_MODE ? 'Automatically set by block sequence' : 'Toggle aging proxy'}
             />
             <span className="toggle-label">
               <span className="toggle-icon">👓</span>
               Aging Proxy (Reduced Contrast)
+              {!SHOW_DEV_MODE && <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '0.25rem' }}>(auto)</span>}
             </span>
           </label>
           
@@ -270,6 +281,7 @@ export function HUDPane() {
             <span className="toggle-label">
               <span className="toggle-icon">📷</span>
               Pupil Proxy (Camera Required)
+              <span style={{ fontSize: '0.75rem', color: '#d32f2f', marginLeft: '0.25rem' }}>(experimental)</span>
             </span>
           </label>
         </div>

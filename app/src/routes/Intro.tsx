@@ -43,6 +43,10 @@ export default function Intro() {
           <li>
             Keep your browser at <b>100% zoom</b> and <b>full-screen</b> (we&apos;ll check this).
           </li>
+          <li>
+            <b>Do not resize your browser window</b> during the experiment. This can affect measurement accuracy.
+            Set your window size before starting and keep it fixed throughout.
+          </li>
           <li>Use Chrome desktop on a laptop/desktop; close other heavy apps.</li>
           <li>
             If we try an optional camera quality check, please turn <b>off</b> Zoom video or
