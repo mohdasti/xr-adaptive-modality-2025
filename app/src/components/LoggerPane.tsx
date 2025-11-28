@@ -3,6 +3,7 @@ import { bus } from '../lib/bus'
 import { getLogger, createRowFromTrial, initLogger } from '../lib/csv'
 import { getPolicyEngine } from '../lib/policy'
 import { submitDataViaEmail, submitDataToServer, getAvailableSubmissionMethod } from '../lib/dataSubmission'
+import { getSessionInfoFromURL, getSessionProgress } from '../utils/sessionTracking'
 import './LoggerPane.css'
 
 interface LogEntry {
@@ -27,11 +28,50 @@ export function LoggerPane() {
   const adaptationStateRef = useRef<Map<number, boolean>>(new Map())
   const lastAdaptationStateRef = useRef(false)
 
-  // Initialize CSV logger on mount
+  // Initialize CSV logger on mount - check URL first, then prompt
   useEffect(() => {
-    const pid = prompt('Enter Participant ID (or leave blank for auto-generated):')
+    const urlInfo = getSessionInfoFromURL()
+    if (urlInfo.participantId) {
+      initLogger(urlInfo.participantId)
+      return
+    }
+    
+    // Check localStorage for existing participant ID
+    const storedPid = localStorage.getItem('participantId')
+    if (storedPid) {
+      initLogger(storedPid)
+      return
+    }
+    
+    // Prompt if not found
+    const pid = prompt('Enter Participant ID (e.g., P001) or leave blank for auto-generated:')
+    if (pid) {
+      localStorage.setItem('participantId', pid)
+    }
     initLogger(pid || undefined)
   }, [])
+  
+  // Track session info
+  const [sessionInfo, setSessionInfo] = useState<{
+    participantId: string | null
+    sessionNumber: number | null
+    progress: { completed: number; remaining: number; percentage: number; nextBlock: number } | null
+  } | null>(null)
+  
+  // Update session info
+  useEffect(() => {
+    const urlInfo = getSessionInfoFromURL()
+    const pid = urlInfo.participantId || localStorage.getItem('participantId')
+    
+    if (pid) {
+      const progress = getSessionProgress(pid, 8) // 8 blocks total
+      setSessionInfo({
+        participantId: pid,
+        sessionNumber: urlInfo.sessionNumber,
+        progress,
+      })
+    }
+  }, [csvRowCount]) // Update when data changes
 
   useEffect(() => {
     const logger = getLogger()
@@ -165,53 +205,72 @@ export function LoggerPane() {
     }
   }
 
-  const handleAutoSubmit = async () => {
+  const handleEndSession = async () => {
     const logger = getLogger()
     
     if (csvRowCount === 0) {
-      setSubmitStatus('⚠️ No data to submit')
+      setSubmitStatus('⚠️ No data to submit for this session')
+      return
+    }
+    
+    const participantId = logger.getParticipantId()
+    const sessionNum = sessionInfo?.sessionNumber || 1
+    const progress = sessionInfo?.progress
+    
+    // Confirm before submitting
+    const confirmMessage = `Submit data for Session ${sessionNum}?\n\n` +
+      `Participant: ${participantId}\n` +
+      `Trials: ${csvRowCount}\n` +
+      `Blocks: ${blockRowCount}\n` +
+      (progress ? `Progress: ${progress.completed} of 8 blocks completed\n` : '') +
+      `\nThis will send all data from this session via email.`
+    
+    if (!confirm(confirmMessage)) {
       return
     }
     
     const csvData = logger.toCSV()
     const blockData = logger.getBlockRowCount() > 0 ? logger.toBlockCSV() : null
-    const participantId = logger.getParticipantId()
     
     setSubmitting(true)
-    setSubmitStatus('Submitting data...')
+    setSubmitStatus(`Submitting Session ${sessionNum} data...`)
     
     try {
       const submissionMethod = getAvailableSubmissionMethod()
       
       let result: { success: boolean; message?: string; error?: string }
       
+      // Include session info in participant ID for email filename
+      const sessionParticipantId = `${participantId}_session${sessionNum}`
+      
       if (submissionMethod === 'email') {
-        result = await submitDataViaEmail(csvData, blockData, participantId)
+        result = await submitDataViaEmail(csvData, blockData, sessionParticipantId)
       } else if (submissionMethod === 'server') {
-        result = await submitDataToServer(csvData, blockData, participantId)
+        result = await submitDataToServer(csvData, blockData, sessionParticipantId)
       } else {
         throw new Error('No submission method configured. Please set up EmailJS or API endpoint.')
       }
       
       if (result.success) {
-        setSubmitStatus('✅ Data submitted successfully!')
+        setSubmitStatus(`✅ Session ${sessionNum} data submitted successfully!`)
         // Still offer download as backup
         setTimeout(() => {
-          logger.downloadCSV(`backup_${participantId}_${Date.now()}.csv`)
+          logger.downloadCSV(`backup_${sessionParticipantId}_${Date.now()}.csv`)
           if (blockData) {
-            logger.downloadBlockCSV(`backup_blocks_${participantId}_${Date.now()}.csv`)
+            logger.downloadBlockCSV(`backup_blocks_${sessionParticipantId}_${Date.now()}.csv`)
           }
         }, 2000)
       } else {
         throw new Error(result.error || 'Submission failed')
       }
     } catch (error) {
-      setSubmitStatus(`⚠️ Auto-submit failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please download manually.`)
+      setSubmitStatus(`⚠️ Session submission failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please download manually.`)
       console.error('Submission error:', error)
     } finally {
       setSubmitting(false)
     }
   }
+
 
   const getEventClass = (event: string): string => {
     if (event.includes('error')) return 'event-error'
@@ -242,14 +301,19 @@ export function LoggerPane() {
           <div className="csv-actions">
             <span className="csv-count">{csvRowCount} trial rows</span>
             <span className="csv-count secondary">{blockRowCount} block rows</span>
+            {sessionInfo && sessionInfo.progress && (
+              <span className="csv-count" style={{ color: '#00ff88' }}>
+                {sessionInfo.progress.completed}/8 blocks
+              </span>
+            )}
             {getAvailableSubmissionMethod() !== 'none' && (
               <button 
-                onClick={handleAutoSubmit} 
+                onClick={handleEndSession} 
                 disabled={submitting || csvRowCount === 0}
                 className="submit-btn"
-                title="Automatically submit data via email or server"
+                title="Submit all data from current session (recommended: use at end of session)"
               >
-                {submitting ? '⏳ Submitting...' : '📤 Auto-Submit'}
+                {submitting ? '⏳ Submitting...' : `📤 End Session ${sessionInfo?.sessionNumber || ''}`}
               </button>
             )}
             <button onClick={handleDownloadCSV} className="download-btn">
@@ -272,6 +336,25 @@ export function LoggerPane() {
           )}
         </div>
       </div>
+      
+      {/* Session Info Display */}
+      {sessionInfo && (
+        <div className="session-info" style={{ 
+          marginBottom: '1rem', 
+          padding: '0.75rem', 
+          backgroundColor: 'rgba(0, 217, 255, 0.1)', 
+          borderRadius: '4px',
+          border: '1px solid rgba(0, 217, 255, 0.3)'
+        }}>
+          <strong>Session Info:</strong> {sessionInfo.participantId}
+          {sessionInfo.sessionNumber && <span> · Session {sessionInfo.sessionNumber}</span>}
+          {sessionInfo.progress && (
+            <span style={{ marginLeft: '1rem' }}>
+              Progress: {sessionInfo.progress.completed} of 8 blocks completed ({sessionInfo.progress.percentage.toFixed(0)}%)
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="log-info">
         Showing last {logs.length} of {MAX_LOGS} events | Block: {currentBlock}

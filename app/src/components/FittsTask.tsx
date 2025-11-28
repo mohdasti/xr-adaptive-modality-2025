@@ -1322,6 +1322,15 @@ export function FittsTask({
               left: `${startPos.x}px`,
               top: `${startPos.y}px`,
             }}
+            onPointerDown={(e) => {
+              e.stopPropagation() // CRITICAL: Stop the background from hearing this click
+              e.preventDefault() // Prevent text selection or other side effects
+              startTrial() // Start the trial immediately
+            }}
+            onMouseDown={(e) => {
+              // Also stop propagation on mousedown as a fallback
+              e.stopPropagation()
+            }}
           >
             START
           </button>

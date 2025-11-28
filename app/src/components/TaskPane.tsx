@@ -20,6 +20,11 @@ import {
 } from '../utils/sessionMeta'
 import { sequenceForParticipant, parseCondition, type Cond } from '../experiment/counterbalance'
 import { getPolicyEngine } from '../lib/policy'
+import { 
+  getSessionInfoFromURL, 
+  markBlockCompleted,
+  getSessionProgress
+} from '../utils/sessionTracking'
 import './TaskPane.css'
 
 type TaskMode = 'manual' | 'fitts'
@@ -67,32 +72,110 @@ export function TaskPane() {
   const [showDisplayWarning, setShowDisplayWarning] = useState(false)
   const [activeBlockContext, setActiveBlockContext] = useState<{ modality: string; uiMode: string } | null>(null)
   
-  // Participant index for counterbalancing (stored in localStorage)
+  // Participant and session tracking
+  const [participantId, setParticipantId] = useState<string | null>(null)
   const [, setParticipantIndex] = useState<number | null>(null)
+  const [sessionNumber, setSessionNumber] = useState<number | null>(null)
   const [blockSequence, setBlockSequence] = useState<Cond[]>([])
+  const [sessionProgress, setSessionProgress] = useState<{
+    completed: number
+    remaining: number
+    percentage: number
+    nextBlock: number
+  } | null>(null)
   
-  // Initialize participant index and block sequence on mount
+  // Initialize participant and session from URL or prompt
   useEffect(() => {
+    const urlInfo = getSessionInfoFromURL()
+    
+    // Try to get participant ID from URL first
+    if (urlInfo.participantId) {
+      setParticipantId(urlInfo.participantId)
+      // Extract participant index from ID (P001 -> 0, P002 -> 1, etc.)
+      const match = urlInfo.participantId.match(/P(\d+)/)
+      if (match) {
+        const idx = parseInt(match[1], 10) - 1 // Convert P001 to index 0
+        if (!isNaN(idx) && idx >= 0 && idx < 100) {
+          setParticipantIndex(idx)
+          localStorage.setItem('participantIndex', String(idx))
+          const sequence = sequenceForParticipant(idx)
+          setBlockSequence(sequence)
+          
+          // Set session number from URL
+          if (urlInfo.sessionNumber) {
+            setSessionNumber(urlInfo.sessionNumber)
+          }
+          
+          // Get session progress
+          const progress = getSessionProgress(urlInfo.participantId, sequence.length)
+          setSessionProgress(progress)
+          
+          // Initialize logger with participant ID
+          const { initLogger } = require('../lib/csv')
+          initLogger(urlInfo.participantId)
+          
+          return
+        }
+      }
+    }
+    
+    // Fallback: prompt for participant info
     const storedIndex = localStorage.getItem('participantIndex')
-    if (storedIndex !== null) {
+    const storedPid = localStorage.getItem('participantId')
+    
+    if (storedIndex !== null && storedPid) {
       const idx = parseInt(storedIndex, 10)
       if (!isNaN(idx)) {
         setParticipantIndex(idx)
+        setParticipantId(storedPid)
         const sequence = sequenceForParticipant(idx)
         setBlockSequence(sequence)
+        const progress = getSessionProgress(storedPid, sequence.length)
+        setSessionProgress(progress)
         return
       }
     }
     
-    // Prompt for participant index if not stored
-    const input = prompt('Enter Participant Index (0-99) for counterbalancing:')
-    if (input !== null) {
-      const idx = parseInt(input, 10)
-      if (!isNaN(idx) && idx >= 0) {
-        setParticipantIndex(idx)
-        localStorage.setItem('participantIndex', String(idx))
-        const sequence = sequenceForParticipant(idx)
-        setBlockSequence(sequence)
+    // Prompt for participant ID
+    const pidInput = prompt('Enter Participant ID (e.g., P001) or Participant Index (0-99):')
+    if (pidInput !== null) {
+      // Check if it's a participant ID (P001) or index
+      const pidMatch = pidInput.match(/P(\d+)/i)
+      if (pidMatch) {
+        const pid = pidInput.toUpperCase()
+        const idx = parseInt(pidMatch[1], 10) - 1
+        if (!isNaN(idx) && idx >= 0 && idx < 100) {
+          setParticipantId(pid)
+          setParticipantIndex(idx)
+          localStorage.setItem('participantId', pid)
+          localStorage.setItem('participantIndex', String(idx))
+          const sequence = sequenceForParticipant(idx)
+          setBlockSequence(sequence)
+          const progress = getSessionProgress(pid, sequence.length)
+          setSessionProgress(progress)
+          
+          // Initialize logger
+          const { initLogger } = require('../lib/csv')
+          initLogger(pid)
+        }
+      } else {
+        // It's an index
+        const idx = parseInt(pidInput, 10)
+        if (!isNaN(idx) && idx >= 0 && idx < 100) {
+          const pid = `P${String(idx + 1).padStart(3, '0')}`
+          setParticipantId(pid)
+          setParticipantIndex(idx)
+          localStorage.setItem('participantId', pid)
+          localStorage.setItem('participantIndex', String(idx))
+          const sequence = sequenceForParticipant(idx)
+          setBlockSequence(sequence)
+          const progress = getSessionProgress(pid, sequence.length)
+          setSessionProgress(progress)
+          
+          // Initialize logger
+          const { initLogger } = require('../lib/csv')
+          initLogger(pid)
+        }
       }
     }
   }, [])
@@ -138,6 +221,19 @@ export function TaskPane() {
     const unsub = bus.on('context:change', handleContextChange)
     return unsub
   }, [])
+  
+  // Initialize block number based on session progress
+  useEffect(() => {
+    if (participantId && blockSequence.length > 0 && sessionProgress) {
+      // Set block number to next uncompleted block
+      const nextBlock = sessionProgress.nextBlock
+      if (nextBlock > 0 && nextBlock <= blockSequence.length && nextBlock !== blockNumber) {
+        console.log(`[TaskPane] Setting block number to ${nextBlock} based on session progress (${sessionProgress.completed} blocks completed)`)
+        setBlockNumber(nextBlock)
+        setBlockOrderCode(blockSequence[nextBlock - 1])
+      }
+    }
+  }, [participantId, blockSequence.length]) // Only run when participant or sequence changes
 
   // Manual mode handlers
   const handleStartTrial = () => {
@@ -342,6 +438,16 @@ export function TaskPane() {
       setCurrentTrialIndex(nextIndex)
       setTrialInBlock((prev) => prev + 1)
     } else {
+      // Block complete - mark as completed in session tracking
+      if (participantId) {
+        markBlockCompleted(participantId, blockNumber)
+        // Update progress
+        if (blockSequence.length > 0) {
+          const progress = getSessionProgress(participantId, blockSequence.length)
+          setSessionProgress(progress)
+        }
+      }
+      
       // Block complete - show TLX modal
       setFittsActive(false)
       setShowTlxModal(true)
@@ -375,7 +481,20 @@ export function TaskPane() {
     setShowTlxModal(false)
     setCurrentTrialIndex(0)
     setTrialSequence([])
-    setBlockNumber((prev) => prev + 1)
+    
+    // Move to next block, but don't exceed total blocks
+    if (blockSequence.length > 0 && blockNumber < blockSequence.length) {
+      const nextBlock = blockNumber + 1
+      setBlockNumber(nextBlock)
+      setBlockOrderCode(blockSequence[nextBlock - 1])
+      
+      // Update session progress
+      if (participantId && blockSequence.length > 0) {
+        const progress = getSessionProgress(participantId, blockSequence.length)
+        setSessionProgress(progress)
+      }
+    }
+    
     setActiveBlockContext(null)
   }
   
@@ -563,6 +682,25 @@ export function TaskPane() {
             </div>
 
             <div className="status">
+              {participantId && (
+                <>
+                  <div style={{ marginBottom: '0.5rem', padding: '0.75rem', backgroundColor: '#e8f4f8', borderRadius: '4px', border: '1px solid #00d9ff' }}>
+                    <strong>Participant:</strong> {participantId}
+                    {sessionNumber && <span> · <strong>Session:</strong> {sessionNumber}</span>}
+                    {sessionProgress && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                        <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
+                        {sessionProgress.remaining > 0 && (
+                          <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
+                        )}
+                        {sessionProgress.remaining === 0 && (
+                          <span style={{ color: '#00ff88', fontWeight: 'bold' }}> · All blocks completed! 🎉</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
               Modality: <strong>{modalityConfig.modality}</strong>
               {modalityConfig.modality === Modality.GAZE && (
                 <span>

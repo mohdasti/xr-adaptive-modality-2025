@@ -109,10 +109,36 @@ Artifacts saved to `results/`.
 
 ## Quick Start
 
+### Local Development
+
 ```bash
 cd app
 npm install
 npm run dev
+```
+
+The app will be available at `http://localhost:5173`
+
+### Deploy for Data Collection
+
+**⚠️ For remote participants, you MUST deploy first!**
+
+See `DEPLOYMENT_GUIDE.md` for step-by-step instructions.
+
+**Quick deploy to Vercel:**
+```bash
+cd app
+npm run build
+npm install -g vercel
+vercel
+```
+
+After deployment, generate participant links:
+```bash
+python scripts/generate_participant_links.py \
+  --base-url "https://your-project.vercel.app" \
+  --participants 25 \
+  --sessions 3
 ```
 
 The app will be available at `http://localhost:5173`
