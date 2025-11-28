@@ -330,6 +330,9 @@ export function FittsTask({
       setGazeState(createGazeState(modalityConfig.dwellTime))
       setCountdown(timeout / 1000)
       
+      // Reset trial completion guard for new trial
+      trialCompletedRef.current = false
+      
       const startTime = performance.now()
       setTrialStartTime(startTime)
       
@@ -413,10 +416,22 @@ export function FittsTask({
     [modalityConfig.modality, modalityConfig.dwellTime]
   )
 
+  // Guard to prevent duplicate trial completions
+  const trialCompletedRef = useRef(false)
+  
   const completeSelection = useCallback(
     (clickPos: Position, isClick: boolean = false) => {
       if (!trialStartTime || !targetPos || !trialDataRef.current) return
       if (isPaused || isBlockedState()) return // Don't process if paused
+      
+      // Prevent duplicate completions
+      if (trialCompletedRef.current) {
+        console.warn('[FittsTask] Trial already completed, ignoring duplicate completion')
+        return
+      }
+      
+      // Mark trial as completed immediately to prevent race conditions
+      trialCompletedRef.current = true
       
       // Clear timeout
       if (timeoutRef.current) {
@@ -506,6 +521,8 @@ export function FittsTask({
           ...alignmentGateMetrics,
         })
         
+        // Clear trial start time to prevent duplicate completions
+        setTrialStartTime(null)
         onTrialComplete()
       } else {
         // Miss or slip
@@ -558,6 +575,8 @@ export function FittsTask({
           tab_hidden_ms: displayMetrics.tab_hidden_ms,
         })
         
+        // Clear trial start time to prevent duplicate completions
+        setTrialStartTime(null)
         onTrialError(errorType)
       }
     },

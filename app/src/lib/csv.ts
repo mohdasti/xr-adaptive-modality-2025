@@ -130,6 +130,13 @@ export class CSVLogger {
   }
 
   /**
+   * Get participant ID
+   */
+  getParticipantId(): string {
+    return this.participantId
+  }
+
+  /**
    * Get browser information
    */
   private getBrowser(): string {
@@ -295,7 +302,7 @@ export class CSVLogger {
     this.blockRows = []
   }
 
-  private toBlockCSV(): string {
+  toBlockCSV(): string {
     const lines: string[] = []
     lines.push(BLOCK_HEADERS.join(','))
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { bus } from '../lib/bus'
 import { getLogger, createRowFromTrial, initLogger } from '../lib/csv'
 import { getPolicyEngine } from '../lib/policy'
+import { submitDataViaEmail, submitDataToServer, getAvailableSubmissionMethod } from '../lib/dataSubmission'
 import './LoggerPane.css'
 
 interface LogEntry {
@@ -20,6 +21,8 @@ export function LoggerPane() {
   const [csvRowCount, setCsvRowCount] = useState(0)
   const [currentBlock, setCurrentBlock] = useState(1)
   const [blockRowCount, setBlockRowCount] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState<string | null>(null)
   // Track adaptation state: map of trial_number -> adaptation_triggered
   const adaptationStateRef = useRef<Map<number, boolean>>(new Map())
   const lastAdaptationStateRef = useRef(false)
@@ -158,6 +161,55 @@ export function LoggerPane() {
       logger.clear()
       setCsvRowCount(0)
       setBlockRowCount(0)
+      setSubmitStatus(null)
+    }
+  }
+
+  const handleAutoSubmit = async () => {
+    const logger = getLogger()
+    
+    if (csvRowCount === 0) {
+      setSubmitStatus('⚠️ No data to submit')
+      return
+    }
+    
+    const csvData = logger.toCSV()
+    const blockData = logger.getBlockRowCount() > 0 ? logger.toBlockCSV() : null
+    const participantId = logger.getParticipantId()
+    
+    setSubmitting(true)
+    setSubmitStatus('Submitting data...')
+    
+    try {
+      const submissionMethod = getAvailableSubmissionMethod()
+      
+      let result: { success: boolean; message?: string; error?: string }
+      
+      if (submissionMethod === 'email') {
+        result = await submitDataViaEmail(csvData, blockData, participantId)
+      } else if (submissionMethod === 'server') {
+        result = await submitDataToServer(csvData, blockData, participantId)
+      } else {
+        throw new Error('No submission method configured. Please set up EmailJS or API endpoint.')
+      }
+      
+      if (result.success) {
+        setSubmitStatus('✅ Data submitted successfully!')
+        // Still offer download as backup
+        setTimeout(() => {
+          logger.downloadCSV(`backup_${participantId}_${Date.now()}.csv`)
+          if (blockData) {
+            logger.downloadBlockCSV(`backup_blocks_${participantId}_${Date.now()}.csv`)
+          }
+        }, 2000)
+      } else {
+        throw new Error(result.error || 'Submission failed')
+      }
+    } catch (error) {
+      setSubmitStatus(`⚠️ Auto-submit failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please download manually.`)
+      console.error('Submission error:', error)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -190,6 +242,16 @@ export function LoggerPane() {
           <div className="csv-actions">
             <span className="csv-count">{csvRowCount} trial rows</span>
             <span className="csv-count secondary">{blockRowCount} block rows</span>
+            {getAvailableSubmissionMethod() !== 'none' && (
+              <button 
+                onClick={handleAutoSubmit} 
+                disabled={submitting || csvRowCount === 0}
+                className="submit-btn"
+                title="Automatically submit data via email or server"
+              >
+                {submitting ? '⏳ Submitting...' : '📤 Auto-Submit'}
+              </button>
+            )}
             <button onClick={handleDownloadCSV} className="download-btn">
               📊 Download CSV
             </button>
@@ -203,6 +265,11 @@ export function LoggerPane() {
               🗑️
             </button>
           </div>
+          {submitStatus && (
+            <div className={`submit-status ${submitStatus.includes('✅') ? 'success' : submitStatus.includes('⚠️') ? 'warning' : 'info'}`}>
+              {submitStatus}
+            </div>
+          )}
         </div>
       </div>
 

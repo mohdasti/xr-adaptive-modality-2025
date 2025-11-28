@@ -192,7 +192,12 @@ export function TaskPane() {
     
     // Get block order from counterbalanced sequence
     if (blockSequence.length === 0 || blockNumber > blockSequence.length) {
-      console.warn('Block sequence not initialized or block number out of range')
+      console.error('Block sequence not initialized or block number out of range', {
+        blockSequenceLength: blockSequence.length,
+        blockNumber,
+        blockSequence
+      })
+      alert('Error: Block sequence not initialized. Please refresh the page and enter a Participant Index (0-99) when prompted.')
       return
     }
     
