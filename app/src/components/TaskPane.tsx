@@ -25,6 +25,7 @@ import {
   markBlockCompleted,
   getSessionProgress
 } from '../utils/sessionTracking'
+import { initLogger } from '../lib/csv'
 import './TaskPane.css'
 
 type TaskMode = 'manual' | 'fitts'
@@ -111,8 +112,11 @@ export function TaskPane() {
           setSessionProgress(progress)
           
           // Initialize logger with participant ID
-          const { initLogger } = require('../lib/csv')
-          initLogger(urlInfo.participantId)
+          try {
+            initLogger(urlInfo.participantId)
+          } catch (error) {
+            console.error('[TaskPane] Failed to initialize logger:', error)
+          }
           
           return
         }
@@ -155,8 +159,11 @@ export function TaskPane() {
           setSessionProgress(progress)
           
           // Initialize logger
-          const { initLogger } = require('../lib/csv')
-          initLogger(pid)
+          try {
+            initLogger(pid)
+          } catch (error) {
+            console.error('[TaskPane] Failed to initialize logger:', error)
+          }
         }
       } else {
         // It's an index
@@ -173,8 +180,11 @@ export function TaskPane() {
           setSessionProgress(progress)
           
           // Initialize logger
-          const { initLogger } = require('../lib/csv')
-          initLogger(pid)
+          try {
+            initLogger(pid)
+          } catch (error) {
+            console.error('[TaskPane] Failed to initialize logger:', error)
+          }
         }
       }
     }
