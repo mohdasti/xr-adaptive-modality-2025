@@ -31,6 +31,7 @@ import {
   getInitialDPR,
 } from '../lib/systemCheck'
 import { isAlignmentGateEnabled } from '../config'
+import { useGazeSimulation } from '../hooks/useGazeSimulation'
 import './FittsTask.css'
 
 interface TrialContext {
@@ -114,7 +115,6 @@ export function FittsTask({
   
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
   const animationFrameRef = useRef<number | null>(null)
-  const gazeAnimationFrameRef = useRef<number | null>(null) // Separate ref for gaze smoothing
   const hoverAnimationFrameRef = useRef<number | null>(null) // Separate ref for hover detection
   const trialDataRef = useRef<TrialData | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -778,23 +778,25 @@ export function FittsTask({
   // Track mouse position globally (for gaze mode and alignment gate)
   const mousePosRef = useRef<Position>({ x: 0, y: 0 })
   
-  // Gaze proxy: smoothed cursor position (for simulating eye-tracking characteristics)
-  const smoothedGazePosRef = useRef<Position>({ x: 0, y: 0 })
-  const rawMousePosRef = useRef<Position>({ x: 0, y: 0 })
+  // Raw mouse position (for gaze simulation input)
+  const [rawMousePosition, setRawMousePosition] = useState<Position | null>(null)
   
-  // Linear interpolation helper (lerp)
-  const lerp = useCallback((a: number, b: number, t: number): number => {
-    return a + (b - a) * t
-  }, [])
-  
-  // Gaussian noise generator (for simulating microsaccades)
-  const gaussianNoise = useCallback((): number => {
-    // Box-Muller transform for Gaussian distribution
-    const u1 = Math.random()
-    const u2 = Math.random()
-    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
-    return z0
-  }, [])
+  // Gaze simulation hook (physiologically-accurate eye tracking simulation)
+  const isGazeMode = modalityConfig.modality === Modality.GAZE
+  const {
+    simulatedPosition: simulatedGazePosRef,
+    displayPosition: displayGazePos,
+    isSaccading,
+  } = useGazeSimulation(rawMousePosition, isGazeMode, {
+    smoothingFactor: 0.15,
+    fixationNoiseStdDev: 3.5, // Reduced from 7.5 for better dwell accuracy
+    fixationVelocityThreshold: 50,
+    saccadeVelocityThreshold: 1000,
+    enableSaccadicSuppression: true,
+    // Adaptive noise: scale down for smaller targets and when near target
+    targetSize: targetPos ? effectiveWidth : undefined,
+    targetPosition: targetPos,
+  })
   
   // Update mouse position on move (for gaze mode and alignment gate)
   useEffect(() => {
@@ -802,7 +804,11 @@ export function FittsTask({
       modalityConfig.modality === Modality.GAZE ||
       (alignmentGateEnabled && modalityConfig.modality === Modality.HAND)
     
-    if (!needsMouseTracking) return
+    if (!needsMouseTracking) {
+      // Reset raw position when not needed
+      setRawMousePosition(null)
+      return
+    }
     
     const handleGlobalMouseMove = (event: MouseEvent) => {
       if (!canvasRef.current) return
@@ -811,119 +817,48 @@ export function FittsTask({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       }
-      rawMousePosRef.current = rawPos
       
-      // Debug: log mouse moves occasionally in gaze mode
-      if (modalityConfig.modality === Modality.GAZE && Math.random() < 0.05) {
-        console.log('[FittsTask] Mouse move (gaze mode):', rawPos)
+      // Update raw position for gaze simulation
+      if (modalityConfig.modality === Modality.GAZE) {
+        setRawMousePosition(rawPos)
       }
       
       // For hand mode, use raw position directly
       if (modalityConfig.modality === Modality.HAND) {
         mousePosRef.current = rawPos
-        return
+        setRawMousePosition(null) // Not needed for hand mode
       }
-      
-      // For gaze mode, the smoothing loop will handle cursor updates
-      // Don't update cursorPos here - let the smoothing loop do it for consistent jitter
     }
     
     window.addEventListener('mousemove', handleGlobalMouseMove)
     return () => window.removeEventListener('mousemove', handleGlobalMouseMove)
   }, [modalityConfig.modality, alignmentGateEnabled])
   
-  // Gaze mode: smoothing and jitter animation loop
+  // Gaze mode: Sync simulated position to mousePosRef and cursorPos for hit detection and display
   useEffect(() => {
     if (modalityConfig.modality !== Modality.GAZE) {
-      // Reset smoothed position when not in gaze mode
-      smoothedGazePosRef.current = { x: 0, y: 0 }
+      // Reset when not in gaze mode
       setCursorPos({ x: 0, y: 0 })
       return
     }
     
-    console.log('[FittsTask] Starting gaze smoothing loop')
+    // Update mousePosRef with simulated position for hit detection
+    // This ensures collisions are calculated using the physiologically-accurate simulated gaze
+    mousePosRef.current = simulatedGazePosRef.current
     
-    // Don't initialize to a fixed position - wait for mouse to move
-    // Reset smoothed position to zero so we know it hasn't been initialized yet
-    smoothedGazePosRef.current = { x: 0, y: 0 }
+    // Update cursorPos with display position for visual rendering
+    setCursorPos(displayGazePos)
     
-    const smoothingFactor = 0.15 // Lerp factor for smoothing (lower = more lag)
-    const jitterStdDev = 2.0 // Standard deviation of jitter in pixels (simulates microsaccades)
-    
-    const updateGazeCursor = () => {
-      const rawPos = rawMousePosRef.current
-      const currentSmoothed = smoothedGazePosRef.current
-      
-      // Check if we haven't initialized yet (both are zero)
-      const isInitialized = !(currentSmoothed.x === 0 && currentSmoothed.y === 0)
-      
-      if (!isInitialized) {
-        // Wait for mouse to move before initializing
-        if (rawPos.x > 0 || rawPos.y > 0) {
-          console.log('[FittsTask] Initializing gaze cursor at mouse position:', rawPos)
-          smoothedGazePosRef.current = rawPos
-          mousePosRef.current = rawPos
-          setCursorPos(rawPos)
-          gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
-          return
-        } else {
-          // Mouse hasn't moved yet - keep cursor invisible (at 0,0)
-          gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
-          return
-        }
-      }
-      
-      // If raw position is zero after initialization, something went wrong - reset
-      if (rawPos.x === 0 && rawPos.y === 0) {
-        gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
-        return
-      }
-      
-      // After initialization, apply smoothing and jitter
-      // Linear interpolation (smoothing) - lag behind raw mouse
-      const smoothedX = lerp(currentSmoothed.x, rawPos.x, smoothingFactor)
-      const smoothedY = lerp(currentSmoothed.y, rawPos.y, smoothingFactor)
-      
-      // Add Gaussian noise (jitter) to simulate microsaccades
-      const jitterX = gaussianNoise() * jitterStdDev
-      const jitterY = gaussianNoise() * jitterStdDev
-      
-      // Final gaze position = smoothed + jitter
-      const gazePos = {
-        x: smoothedX + jitterX,
-        y: smoothedY + jitterY,
-      }
-      
-      smoothedGazePosRef.current = gazePos
-      mousePosRef.current = gazePos // Use smoothed+jittered position for hit detection
-      
-      // Update display cursor (for visual feedback)
-      setCursorPos(gazePos)
-      
-      // Debug: log position updates occasionally
-      if (Math.random() < 0.01) { // Log ~1% of frames
-        console.log('[FittsTask] Gaze cursor update:', {
-          raw: rawPos,
-          smoothed: { x: smoothedX.toFixed(1), y: smoothedY.toFixed(1) },
-          jitter: { x: jitterX.toFixed(2), y: jitterY.toFixed(2) },
-          final: gazePos
-        })
-      }
-      
-      gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
+    // Debug: log position updates occasionally
+    if (Math.random() < 0.01 && rawMousePosition) {
+      console.log('[FittsTask] Gaze simulation update:', {
+        raw: rawMousePosition,
+        simulated: simulatedGazePosRef.current,
+        display: displayGazePos,
+        isSaccading,
+      })
     }
-    
-    // Start the animation loop immediately
-    gazeAnimationFrameRef.current = requestAnimationFrame(updateGazeCursor)
-    
-    return () => {
-      console.log('[FittsTask] Stopping gaze smoothing loop')
-      if (gazeAnimationFrameRef.current) {
-        cancelAnimationFrame(gazeAnimationFrameRef.current)
-        gazeAnimationFrameRef.current = null
-      }
-    }
-  }, [modalityConfig.modality, lerp, gaussianNoise, canvasDimensions.width, canvasDimensions.height])
+  }, [modalityConfig.modality, displayGazePos, simulatedGazePosRef, isSaccading, rawMousePosition])
 
   // Gaze mode: update hover state
   useEffect(() => {
@@ -1143,10 +1078,9 @@ export function FittsTask({
     setCountdown(timeout / 1000)
     
     // Reset cursor position for gaze mode (reset to uninitialized state)
-    // Don't cancel gazeAnimationFrameRef - let the smoothing loop keep running
-    // It will re-initialize when mouse moves
+    // The gaze simulation hook will re-initialize when mouse moves
     if (modalityConfig.modality === Modality.GAZE) {
-      smoothedGazePosRef.current = { x: 0, y: 0 }
+      setRawMousePosition(null) // Reset raw input to trigger hook reset
       mousePosRef.current = { x: 0, y: 0 }
       setCursorPos({ x: 0, y: 0 })
       console.log('[FittsTask] Reset gaze cursor position for new trial')
@@ -1165,7 +1099,6 @@ export function FittsTask({
       cancelAnimationFrame(hoverAnimationFrameRef.current)
       hoverAnimationFrameRef.current = null
     }
-    // Don't cancel gazeAnimationFrameRef - smoothing loop should keep running
   }, [trialContext.trialInBlock, trialContext.globalTrialNumber, modalityConfig.dwellTime, timeout, modalityConfig.modality, canvasDimensions.width, canvasDimensions.height])
 
   // Reset cursor position when returning to start state (showStart becomes true)
@@ -1173,7 +1106,7 @@ export function FittsTask({
     if (modalityConfig.modality === Modality.GAZE && showStart) {
       // Reset to uninitialized state - cursor will follow mouse when it moves
       // This ensures cursor doesn't get stuck at the last target position
-      smoothedGazePosRef.current = { x: 0, y: 0 }
+      setRawMousePosition(null) // Reset raw input to trigger hook reset
       mousePosRef.current = { x: 0, y: 0 }
       setCursorPos({ x: 0, y: 0 })
       console.log('[FittsTask] Reset gaze cursor for start state - waiting for mouse movement')
@@ -1209,9 +1142,6 @@ export function FittsTask({
       }
       if (hoverAnimationFrameRef.current) {
         cancelAnimationFrame(hoverAnimationFrameRef.current)
-      }
-      if (gazeAnimationFrameRef.current) {
-        cancelAnimationFrame(gazeAnimationFrameRef.current)
       }
       cleanupSystemCheck()
     }
