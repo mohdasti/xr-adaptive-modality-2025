@@ -544,7 +544,7 @@ export function TaskPane() {
               (Ctrl+0 / ⌘0). Minimum window size is 1280×720.
             </p>
             <p style={{ fontSize: '0.875rem', color: '#808080', marginTop: '0.5rem' }}>
-              <strong>Note:</strong> Different monitor sizes and resolutions are fine as long as the window meets minimum size requirements. Webcam is optional (only needed for pupil proxy feature).
+              <strong>Note:</strong> Different monitor sizes and resolutions are fine as long as the window meets minimum size requirements.
             </p>
             <div className="display-guard-meta">
               <div>
@@ -800,9 +800,11 @@ export function TaskPane() {
               </div>
             </div>
             
-            <button onClick={handleStopFittsBlock} className="stop-button">
-              Stop Block
-            </button>
+            {SHOW_DEV_MODE && (
+              <button onClick={handleStopFittsBlock} className="stop-button">
+                Stop Block
+              </button>
+            )}
           </div>
 
           <FittsTask

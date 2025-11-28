@@ -126,8 +126,8 @@ describe('Modality', () => {
 
   describe('getModalityLabel', () => {
     it('returns correct labels', () => {
-      expect(getModalityLabel(Modality.GAZE)).toBe('Gaze-like')
-      expect(getModalityLabel(Modality.HAND)).toBe('Hand-like')
+      expect(getModalityLabel(Modality.GAZE)).toBe('Gaze Simulation')
+      expect(getModalityLabel(Modality.HAND)).toBe('Mouse')
     })
   })
 

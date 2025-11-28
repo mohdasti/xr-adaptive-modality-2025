@@ -255,7 +255,7 @@ export function HUDPane() {
             />
             <span className="toggle-label">
               <span className="toggle-icon">⏱️</span>
-              Pressure (Countdown Timer)
+              Time Pressure (Countdown Timer)
               {!SHOW_DEV_MODE && <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '0.25rem' }}>(auto)</span>}
             </span>
           </label>
@@ -270,85 +270,93 @@ export function HUDPane() {
             />
             <span className="toggle-label">
               <span className="toggle-icon">👓</span>
-              Aging Proxy (Reduced Contrast)
+              Visual Aging (Reduced Contrast)
               {!SHOW_DEV_MODE && <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '0.25rem' }}>(auto)</span>}
             </span>
           </label>
           
-          <label className="context-toggle">
-            <input
-              type="checkbox"
-              checked={cameraEnabled}
-              onChange={handleCameraToggle}
-            />
-            <span className="toggle-label">
-              <span className="toggle-icon">📷</span>
-              Pupil Proxy (Camera Required)
-              <span style={{ fontSize: '0.75rem', color: '#d32f2f', marginLeft: '0.25rem' }}>(experimental)</span>
-            </span>
-          </label>
-        </div>
-        
-        {cameraEnabled && (
-          <div className="camera-consent">
-            <p className="consent-text">
-              ⚠️ <strong>Consent:</strong> This feature uses your webcam to estimate cognitive load via pupil proxy. 
-              <br />No video frames are stored or transmitted—only a scalar value (luminance-based z-score).
-              <br />Your privacy is protected.
-            </p>
-          </div>
-        )}
+          {/* Pupil Proxy removed - feature not currently implemented */}
       </div>
       
-      {/* Modality Switch */}
-      <div className="modality-switch">
-        <h3>Modality</h3>
-        <div className="modality-options">
-          <label className="modality-radio">
-            <input
-              type="radio"
-              name="modality"
-              value={Modality.HAND}
-              checked={modalityConfig.modality === Modality.HAND}
-              onChange={() => handleModalityChange(Modality.HAND)}
-            />
-            <span className="radio-label">
-              <span className="radio-icon">👆</span>
-              {getModalityLabel(Modality.HAND)}
-            </span>
-          </label>
-          
-          <label className="modality-radio">
-            <input
-              type="radio"
-              name="modality"
-              value={Modality.GAZE}
-              checked={modalityConfig.modality === Modality.GAZE}
-              onChange={() => handleModalityChange(Modality.GAZE)}
-            />
-            <span className="radio-label">
-              <span className="radio-icon">👁️</span>
-              {getModalityLabel(Modality.GAZE)}
-            </span>
-          </label>
-        </div>
-        
-        {/* Dwell time selector for gaze mode */}
-        {modalityConfig.modality === Modality.GAZE && (
-          <div className="dwell-selector">
-            <label className="dwell-label">Confirmation:</label>
-            <select
-              value={modalityConfig.dwellTime}
-              onChange={(e) => handleDwellTimeChange(Number(e.target.value))}
-              className="dwell-select"
-            >
-              <option value={DWELL_TIMES.NONE}>Space key</option>
-              <option value={DWELL_TIMES.SHORT}>350ms dwell</option>
-              <option value={DWELL_TIMES.MEDIUM}>500ms dwell</option>
-            </select>
+      {/* Modality Switch - Only visible in dev mode */}
+      {SHOW_DEV_MODE && (
+        <div className="modality-switch">
+          <h3>Modality</h3>
+          {!SHOW_DEV_MODE && (
+            <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+              <strong>Note:</strong> Modality is automatically set by the block sequence in production mode.
+            </div>
+          )}
+          <div className="modality-options">
+            <label className="modality-radio">
+              <input
+                type="radio"
+                name="modality"
+                value={Modality.HAND}
+                checked={modalityConfig.modality === Modality.HAND}
+                onChange={() => handleModalityChange(Modality.HAND)}
+              />
+              <span className="radio-label">
+                <span className="radio-icon">👆</span>
+                {getModalityLabel(Modality.HAND)}
+              </span>
+            </label>
+            
+            <label className="modality-radio">
+              <input
+                type="radio"
+                name="modality"
+                value={Modality.GAZE}
+                checked={modalityConfig.modality === Modality.GAZE}
+                onChange={() => handleModalityChange(Modality.GAZE)}
+              />
+              <span className="radio-label">
+                <span className="radio-icon">👁️</span>
+                {getModalityLabel(Modality.GAZE)}
+              </span>
+            </label>
           </div>
-        )}
-      </div>
+          
+          {/* Dwell time selector for gaze mode */}
+          {modalityConfig.modality === Modality.GAZE && (
+            <div className="dwell-selector">
+              <label className="dwell-label">Confirmation:</label>
+              <select
+                value={modalityConfig.dwellTime}
+                onChange={(e) => handleDwellTimeChange(Number(e.target.value))}
+                className="dwell-select"
+              >
+                <option value={DWELL_TIMES.NONE}>Space key</option>
+                <option value={DWELL_TIMES.SHORT}>350ms dwell</option>
+                <option value={DWELL_TIMES.MEDIUM}>500ms dwell</option>
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Modality Display (Production Mode) - Show current modality as read-only */}
+      {!SHOW_DEV_MODE && (
+        <div className="modality-switch">
+          <h3>Current Modality</h3>
+          <div style={{ 
+            padding: '0.75rem', 
+            backgroundColor: 'rgba(0, 217, 255, 0.1)', 
+            borderRadius: '4px',
+            border: '1px solid rgba(0, 217, 255, 0.3)'
+          }}>
+            <span style={{ fontSize: '1.25rem', marginRight: '0.5rem' }}>
+              {modalityConfig.modality === Modality.GAZE ? '👁️' : '👆'}
+            </span>
+            <strong>{getModalityLabel(modalityConfig.modality)}</strong>
+            {modalityConfig.modality === Modality.GAZE && (
+              <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem', color: '#b0b0b0' }}>
+                ({modalityConfig.dwellTime === 0 ? 'Space key confirmation' : `${modalityConfig.dwellTime}ms dwell`})
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       
       <div className="stats-grid">
         <div className="stat-card">

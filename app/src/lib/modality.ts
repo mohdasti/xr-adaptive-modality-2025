@@ -141,9 +141,9 @@ export function isPointInTarget(
 export function getModalityLabel(modality: Modality): string {
   switch (modality) {
     case Modality.GAZE:
-      return 'Gaze-like'
+      return 'Gaze Simulation'
     case Modality.HAND:
-      return 'Hand-like'
+      return 'Mouse'
     default:
       return 'Unknown'
   }

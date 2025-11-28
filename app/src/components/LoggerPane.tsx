@@ -6,6 +6,9 @@ import { submitDataViaEmail, submitDataToServer, getAvailableSubmissionMethod } 
 import { getSessionInfoFromURL, getSessionProgress } from '../utils/sessionTracking'
 import './LoggerPane.css'
 
+// Show developer controls only in development mode
+const SHOW_DEV_MODE = import.meta.env.DEV || import.meta.env.MODE === 'development'
+
 interface LogEntry {
   id: string
   event: string
@@ -293,14 +296,18 @@ export function LoggerPane() {
   return (
     <div className="pane logger-pane">
       <div className="logger-header">
-        <h2>Event Logger</h2>
+        <h2>{SHOW_DEV_MODE ? 'Event Logger' : 'Data & Progress'}</h2>
         <div className="logger-actions">
-          <button onClick={clearLogs} className="clear-btn">
-            Clear Logs
-          </button>
+          {SHOW_DEV_MODE && (
+            <button onClick={clearLogs} className="clear-btn">
+              Clear Logs
+            </button>
+          )}
           <div className="csv-actions">
             <span className="csv-count">{csvRowCount} trial rows</span>
-            <span className="csv-count secondary">{blockRowCount} block rows</span>
+            {SHOW_DEV_MODE && (
+              <span className="csv-count secondary">{blockRowCount} block rows</span>
+            )}
             {sessionInfo && sessionInfo.progress && (
               <span className="csv-count" style={{ color: '#00ff88' }}>
                 {sessionInfo.progress.completed}/8 blocks
@@ -316,18 +323,22 @@ export function LoggerPane() {
                 {submitting ? '⏳ Submitting...' : `📤 End Session ${sessionInfo?.sessionNumber || ''}`}
               </button>
             )}
-            <button onClick={handleDownloadCSV} className="download-btn">
+            <button onClick={handleDownloadCSV} className="download-btn" title="Download your data as backup">
               📊 Download CSV
             </button>
-            <button onClick={handleDownloadBlockCSV} className="download-btn secondary">
-              🧱 Block CSV
-            </button>
-            <button onClick={handleDownloadJSON} className="download-btn secondary">
-              📄 JSON
-            </button>
-            <button onClick={handleClearCSV} className="clear-btn small">
-              🗑️
-            </button>
+            {SHOW_DEV_MODE && (
+              <>
+                <button onClick={handleDownloadBlockCSV} className="download-btn secondary">
+                  🧱 Block CSV
+                </button>
+                <button onClick={handleDownloadJSON} className="download-btn secondary">
+                  📄 JSON
+                </button>
+                <button onClick={handleClearCSV} className="clear-btn small">
+                  🗑️
+                </button>
+              </>
+            )}
           </div>
           {submitStatus && (
             <div className={`submit-status ${submitStatus.includes('✅') ? 'success' : submitStatus.includes('⚠️') ? 'warning' : 'info'}`}>
@@ -356,11 +367,14 @@ export function LoggerPane() {
         </div>
       )}
 
-      <div className="log-info">
-        Showing last {logs.length} of {MAX_LOGS} events | Block: {currentBlock}
-      </div>
+      {SHOW_DEV_MODE && (
+        <div className="log-info">
+          Showing last {logs.length} of {MAX_LOGS} events | Block: {currentBlock}
+        </div>
+      )}
 
-      <div className="log-table-container">
+      {SHOW_DEV_MODE && (
+        <div className="log-table-container">
         <table className="log-table">
           <thead>
             <tr>
@@ -392,6 +406,7 @@ export function LoggerPane() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }
