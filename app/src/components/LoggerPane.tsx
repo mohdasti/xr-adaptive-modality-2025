@@ -359,14 +359,15 @@ export function LoggerPane() {
         <div className="session-info" style={{ 
           marginBottom: '1rem', 
           padding: '0.75rem', 
-          backgroundColor: 'rgba(0, 217, 255, 0.1)', 
+          backgroundColor: 'rgba(0, 217, 255, 0.15)', 
           borderRadius: '4px',
-          border: '1px solid rgba(0, 217, 255, 0.3)'
+          border: '1px solid rgba(0, 217, 255, 0.4)',
+          color: '#e0e0e0'
         }}>
-          <strong>Session Info:</strong> {sessionInfo.participantId}
-          {sessionInfo.sessionNumber && <span> · Session {sessionInfo.sessionNumber}</span>}
+          <strong style={{ color: '#ffffff' }}>Session Info:</strong> <span style={{ color: '#ffffff' }}>{sessionInfo.participantId}</span>
+          {sessionInfo.sessionNumber && <span style={{ color: '#ffffff' }}> · Session {sessionInfo.sessionNumber}</span>}
           {sessionInfo.progress && (
-            <span style={{ marginLeft: '1rem' }}>
+            <span style={{ marginLeft: '1rem', color: '#b0b0b0' }}>
               Progress: {sessionInfo.progress.completed} of 8 blocks completed ({sessionInfo.progress.percentage.toFixed(0)}%)
             </span>
           )}

@@ -740,17 +740,18 @@ export function TaskPane() {
                   <div style={{ 
                     marginBottom: '1.5rem', 
                     padding: '1rem', 
-                    backgroundColor: '#e8f4f8', 
+                    backgroundColor: 'rgba(0, 217, 255, 0.15)', 
                     borderRadius: '6px', 
-                    border: '2px solid #00d9ff'
+                    border: '2px solid #00d9ff',
+                    color: '#e0e0e0'
                   }}>
-                    <div style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#ffffff' }}>
                       <strong>Your Progress:</strong> {sessionProgress && blockSequence.length > 0 
                         ? `${sessionProgress.completed} of ${blockSequence.length} blocks completed`
                         : 'Starting...'}
                     </div>
                     {sessionProgress && sessionProgress.remaining > 0 && (
-                      <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#b0b0b0' }}>
                         {sessionProgress.remaining} block{sessionProgress.remaining !== 1 ? 's' : ''} remaining
                       </div>
                     )}
@@ -801,14 +802,15 @@ export function TaskPane() {
               <div className="status" style={{ 
                 marginBottom: '1rem', 
                 padding: '1rem', 
-                backgroundColor: '#f8f9fa', 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)', 
                 borderRadius: '6px',
-                border: '1px solid #dee2e6'
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#e0e0e0'
               }}>
-                <div style={{ marginBottom: '0.5rem', fontSize: '1.1rem' }}>
+                <div style={{ marginBottom: '0.5rem', fontSize: '1.1rem', color: '#ffffff' }}>
                   <strong>Current Block:</strong> Block {blockNumber} of {blockSequence.length}
                 </div>
-                <div style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#ffffff' }}>
                   <strong>Input Method:</strong> {
                     modalityConfig.modality === Modality.HAND 
                       ? '🖱️ Mouse (Click to select)' 
@@ -821,7 +823,7 @@ export function TaskPane() {
                   const parsed = parseConditionCode(blockOrderCode)
                   if (parsed.pressure) {
                     return (
-                      <div style={{ fontSize: '0.9rem', color: '#dc3545', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#ff6b6b', fontWeight: 'bold', marginTop: '0.5rem' }}>
                         ⏱️ Time pressure is ON - work quickly!
                       </div>
                     )
