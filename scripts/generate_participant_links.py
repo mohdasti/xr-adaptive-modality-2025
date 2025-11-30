@@ -33,7 +33,8 @@ def generate_links(base_url: str, num_participants: int, num_sessions: int) -> l
         participant_id = f"P{participant_idx + 1:03d}"  # P001, P002, etc.
         
         for session_num in range(1, num_sessions + 1):
-            link = f"{base_url}?pid={participant_id}&session={session_num}"
+            # Link directly to /task to avoid losing query params during navigation
+            link = f"{base_url}/task?pid={participant_id}&session={session_num}"
             links.append({
                 'participant_id': participant_id,
                 'session_number': session_num,

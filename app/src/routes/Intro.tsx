@@ -1,8 +1,9 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export default function Intro() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-10">
@@ -52,15 +53,30 @@ export default function Intro() {
       </div>
 
       <h2 className="text-xl font-semibold mt-6 mb-2">Quick comprehension check</h2>
-      <ComprehensionGate onPassed={() => navigate('/check')} />
+      <ComprehensionGate onPassed={() => {
+        const params = searchParams.toString()
+        navigate(`/check${params ? `?${params}` : ''}`)
+      }} />
 
       <div className="mt-6 flex gap-3">
-        <Link to="/check" className="px-4 py-2 rounded bg-black text-white">
+        <button 
+          onClick={() => {
+            const params = searchParams.toString()
+            navigate(`/check${params ? `?${params}` : ''}`)
+          }}
+          className="px-4 py-2 rounded bg-black text-white"
+        >
           Run System Check
-        </Link>
-        <Link to="/task" className="px-4 py-2 rounded border">
+        </button>
+        <button 
+          onClick={() => {
+            const params = searchParams.toString()
+            navigate(`/task${params ? `?${params}` : ''}`)
+          }}
+          className="px-4 py-2 rounded border"
+        >
           Skip to Task
-        </Link>
+        </button>
       </div>
     </div>
   )

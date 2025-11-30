@@ -711,42 +711,54 @@ export function TaskPane() {
             )}
 
             {/* Participant and Session Info - Always show at top */}
-            <div style={{ 
-              marginBottom: '1rem', 
-              padding: '1rem', 
-              backgroundColor: '#e8f4f8', 
-              borderRadius: '6px', 
-              border: '2px solid #00d9ff',
-              fontSize: '1.1rem'
-            }}>
-              {participantId ? (
-                <>
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <strong style={{ color: '#0066cc' }}>Participant ID:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{participantId}</span>
-                    {sessionNumber && (
-                      <span style={{ marginLeft: '1rem' }}>
-                        <strong style={{ color: '#0066cc' }}>Session:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{sessionNumber}</span>
-                      </span>
-                    )}
-                  </div>
-                  {sessionProgress && blockSequence.length > 0 && (
-                    <div style={{ fontSize: '0.95rem', color: '#333', marginTop: '0.5rem' }}>
-                      <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
-                      {sessionProgress.remaining > 0 && (
-                        <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
+            {(() => {
+              // Check URL directly in case useEffect hasn't run yet
+              const urlInfo = getSessionInfoFromURL()
+              const displayPid = participantId || urlInfo.participantId
+              const displaySession = sessionNumber || urlInfo.sessionNumber
+              
+              return (
+                <div style={{ 
+                  marginBottom: '1rem', 
+                  padding: '1rem', 
+                  backgroundColor: '#e8f4f8', 
+                  borderRadius: '6px', 
+                  border: '2px solid #00d9ff',
+                  fontSize: '1.1rem'
+                }}>
+                  {displayPid ? (
+                    <>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <strong style={{ color: '#0066cc' }}>Participant ID:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{displayPid}</span>
+                        {displaySession && (
+                          <span style={{ marginLeft: '1rem' }}>
+                            <strong style={{ color: '#0066cc' }}>Session:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{displaySession}</span>
+                          </span>
+                        )}
+                      </div>
+                      {sessionProgress && blockSequence.length > 0 && (
+                        <div style={{ fontSize: '0.95rem', color: '#333', marginTop: '0.5rem' }}>
+                          <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
+                          {sessionProgress.remaining > 0 && (
+                            <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
+                          )}
+                          {sessionProgress.remaining === 0 && (
+                            <span style={{ color: '#00ff88', fontWeight: 'bold', marginLeft: '0.5rem' }}>🎉 All blocks completed!</span>
+                          )}
+                        </div>
                       )}
-                      {sessionProgress.remaining === 0 && (
-                        <span style={{ color: '#00ff88', fontWeight: 'bold', marginLeft: '0.5rem' }}>🎉 All blocks completed!</span>
-                      )}
+                    </>
+                  ) : (
+                    <div style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                      ⚠️ Participant ID not detected. Please use the link provided by the researcher.
+                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#666' }}>
+                        Current URL: {window.location.href}
+                      </div>
                     </div>
                   )}
-                </>
-              ) : (
-                <div style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
-                  ⚠️ Participant ID not detected. Please use the link provided by the researcher.
                 </div>
-              )}
-            </div>
+              )
+            })()}
             
             <div className="status">
               Modality: <strong>{modalityConfig.modality}</strong>

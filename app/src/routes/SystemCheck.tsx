@@ -1,11 +1,12 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getDisplayMetadata, meetsDisplayRequirements, DisplayMeta } from '../lib/system'
 
 export default function SystemCheck() {
   const [meta, setMeta] = React.useState<DisplayMeta>(getDisplayMetadata())
   const [status, setStatus] = React.useState(meetsDisplayRequirements(getDisplayMetadata()))
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   React.useEffect(() => {
     function onChange() {
@@ -81,7 +82,10 @@ export default function SystemCheck() {
           Enter Full-screen
         </button>
         <button
-          onClick={() => navigate('/task')}
+          onClick={() => {
+            const params = searchParams.toString()
+            navigate(`/task${params ? `?${params}` : ''}`)
+          }}
           disabled={!status.allOk}
           className={
             'px-4 py-2 rounded text-white ' +
