@@ -48,10 +48,6 @@ export default function Intro() {
             Set your window size before starting and keep it fixed throughout.
           </li>
           <li>Use Chrome desktop on a laptop/desktop; close other heavy apps.</li>
-          <li>
-            If we try an optional camera quality check, please turn <b>off</b> Zoom video or
-            join from a second device.
-          </li>
         </ul>
       </div>
 
@@ -61,9 +57,6 @@ export default function Intro() {
       <div className="mt-6 flex gap-3">
         <Link to="/check" className="px-4 py-2 rounded bg-black text-white">
           Run System Check
-        </Link>
-        <Link to="/camera-check" className="px-4 py-2 rounded border">
-          Try Optional Camera Check
         </Link>
         <Link to="/task" className="px-4 py-2 rounded border">
           Skip to Task
