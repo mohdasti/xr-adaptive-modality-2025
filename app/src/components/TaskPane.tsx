@@ -668,54 +668,87 @@ export function TaskPane() {
       {taskMode === 'fitts' && !fittsActive && (
         <>
           <div className="control-group">
-            <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.5rem' }}>Fitts Task Experiment</h2>
-            <h3>Block Configuration</h3>
+            <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.5rem' }}>Ready to Start</h2>
             
-            <label className="input-label">
-              Trials per ID:
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={nTrialsPerID}
-                onChange={(e) => setNTrialsPerID(parseInt(e.target.value))}
-              />
-            </label>
-
-            <div className="checkbox-group">
-              <label>Difficulty Levels:</label>
-              {Object.entries(DIFFICULTY_PRESETS).map(([key, config]) => (
-                <label key={key} className="checkbox-label">
+            {/* Hide configuration in production - participants shouldn't change this */}
+            {SHOW_DEV_MODE && (
+              <>
+                <h3>Block Configuration (Dev Only)</h3>
+                <label className="input-label">
+                  Trials per ID:
                   <input
-                    type="checkbox"
-                    checked={selectedIDs.includes(key)}
-                    onChange={() => toggleIDSelection(key)}
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={nTrialsPerID}
+                    onChange={(e) => setNTrialsPerID(parseInt(e.target.value))}
                   />
-                  {config.label}
                 </label>
-              ))}
-            </div>
+              </>
+            )}
+            
+            {!SHOW_DEV_MODE && (
+              <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                The experiment is configured automatically. Click "Start Fitts Block" when ready.
+              </p>
+            )}
 
-            <div className="status">
-              {participantId && (
+            {/* Hide difficulty selection in production - use default */}
+            {SHOW_DEV_MODE && (
+              <div className="checkbox-group">
+                <label>Difficulty Levels:</label>
+                {Object.entries(DIFFICULTY_PRESETS).map(([key, config]) => (
+                  <label key={key} className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedIDs.includes(key)}
+                      onChange={() => toggleIDSelection(key)}
+                    />
+                    {config.label}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* Participant and Session Info - Always show at top */}
+            <div style={{ 
+              marginBottom: '1rem', 
+              padding: '1rem', 
+              backgroundColor: '#e8f4f8', 
+              borderRadius: '6px', 
+              border: '2px solid #00d9ff',
+              fontSize: '1.1rem'
+            }}>
+              {participantId ? (
                 <>
-                  <div style={{ marginBottom: '0.5rem', padding: '0.75rem', backgroundColor: '#e8f4f8', borderRadius: '4px', border: '1px solid #00d9ff' }}>
-                    <strong>Participant:</strong> {participantId}
-                    {sessionNumber && <span> · <strong>Session:</strong> {sessionNumber}</span>}
-                    {sessionProgress && (
-                      <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                        <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
-                        {sessionProgress.remaining > 0 && (
-                          <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
-                        )}
-                        {sessionProgress.remaining === 0 && (
-                          <span style={{ color: '#00ff88', fontWeight: 'bold' }}> · All blocks completed! 🎉</span>
-                        )}
-                      </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong style={{ color: '#0066cc' }}>Participant ID:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{participantId}</span>
+                    {sessionNumber && (
+                      <span style={{ marginLeft: '1rem' }}>
+                        <strong style={{ color: '#0066cc' }}>Session:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{sessionNumber}</span>
+                      </span>
                     )}
                   </div>
+                  {sessionProgress && blockSequence.length > 0 && (
+                    <div style={{ fontSize: '0.95rem', color: '#333', marginTop: '0.5rem' }}>
+                      <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
+                      {sessionProgress.remaining > 0 && (
+                        <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
+                      )}
+                      {sessionProgress.remaining === 0 && (
+                        <span style={{ color: '#00ff88', fontWeight: 'bold', marginLeft: '0.5rem' }}>🎉 All blocks completed!</span>
+                      )}
+                    </div>
+                  )}
                 </>
+              ) : (
+                <div style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
+                  ⚠️ Participant ID not detected. Please use the link provided by the researcher.
+                </div>
               )}
+            </div>
+            
+            <div className="status">
               Modality: <strong>{modalityConfig.modality}</strong>
               {modalityConfig.modality === Modality.GAZE && (
                 <span>

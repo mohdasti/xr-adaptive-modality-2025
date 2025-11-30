@@ -6,7 +6,7 @@ describe('App', () => {
   it('renders main heading', () => {
     render(<App />)
     expect(
-      screen.getByText('XR Adaptive Modality - Control Panel')
+      screen.getByText('XR Adaptive Modality Study')
     ).toBeInTheDocument()
   })
 

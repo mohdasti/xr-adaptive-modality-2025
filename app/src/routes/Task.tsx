@@ -91,7 +91,7 @@ export default function Task() {
       )}
 
       <header className="app-header">
-        <h1>XR Adaptive Modality - Control Panel</h1>
+        <h1>XR Adaptive Modality Study</h1>
         <nav className="app-nav">
           <Link to="/intro" className="nav-link">
             Help / How it works
