@@ -710,13 +710,60 @@ export function TaskPane() {
               </div>
             )}
 
-            {/* Participant and Session Info - Always show at top */}
+            {/* Participant and Session Info - Simplified for production */}
             {(() => {
               // Check URL directly in case useEffect hasn't run yet
               const urlInfo = getSessionInfoFromURL()
               const displayPid = participantId || urlInfo.participantId
               const displaySession = sessionNumber || urlInfo.sessionNumber
               
+              if (!displayPid) {
+                return (
+                  <div style={{ 
+                    marginBottom: '1rem', 
+                    padding: '1rem', 
+                    backgroundColor: '#fff3cd', 
+                    borderRadius: '6px', 
+                    border: '2px solid #ffc107',
+                    fontSize: '1rem'
+                  }}>
+                    <div style={{ color: '#856404', fontWeight: 'bold' }}>
+                      ⚠️ Participant ID not detected. Please use the link provided by the researcher.
+                    </div>
+                  </div>
+                )
+              }
+              
+              // Production: Simple, clean display
+              if (!SHOW_DEV_MODE) {
+                return (
+                  <div style={{ 
+                    marginBottom: '1.5rem', 
+                    padding: '1rem', 
+                    backgroundColor: '#e8f4f8', 
+                    borderRadius: '6px', 
+                    border: '2px solid #00d9ff'
+                  }}>
+                    <div style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
+                      <strong>Your Progress:</strong> {sessionProgress && blockSequence.length > 0 
+                        ? `${sessionProgress.completed} of ${blockSequence.length} blocks completed`
+                        : 'Starting...'}
+                    </div>
+                    {sessionProgress && sessionProgress.remaining > 0 && (
+                      <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                        {sessionProgress.remaining} block{sessionProgress.remaining !== 1 ? 's' : ''} remaining
+                      </div>
+                    )}
+                    {sessionProgress && sessionProgress.remaining === 0 && (
+                      <div style={{ fontSize: '1rem', color: '#00ff88', fontWeight: 'bold' }}>
+                        🎉 All blocks completed! Great work!
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              
+              // Dev mode: Full technical details
               return (
                 <div style={{ 
                   marginBottom: '1rem', 
@@ -726,82 +773,106 @@ export function TaskPane() {
                   border: '2px solid #00d9ff',
                   fontSize: '1.1rem'
                 }}>
-                  {displayPid ? (
-                    <>
-                      <div style={{ marginBottom: '0.5rem' }}>
-                        <strong style={{ color: '#0066cc' }}>Participant ID:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{displayPid}</span>
-                        {displaySession && (
-                          <span style={{ marginLeft: '1rem' }}>
-                            <strong style={{ color: '#0066cc' }}>Session:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{displaySession}</span>
-                          </span>
-                        )}
-                      </div>
-                      {sessionProgress && blockSequence.length > 0 && (
-                        <div style={{ fontSize: '0.95rem', color: '#333', marginTop: '0.5rem' }}>
-                          <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
-                          {sessionProgress.remaining > 0 && (
-                            <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
-                          )}
-                          {sessionProgress.remaining === 0 && (
-                            <span style={{ color: '#00ff88', fontWeight: 'bold', marginLeft: '0.5rem' }}>🎉 All blocks completed!</span>
-                          )}
-                        </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong style={{ color: '#0066cc' }}>Participant ID:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{displayPid}</span>
+                    {displaySession && (
+                      <span style={{ marginLeft: '1rem' }}>
+                        <strong style={{ color: '#0066cc' }}>Session:</strong> <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold' }}>{displaySession}</span>
+                      </span>
+                    )}
+                  </div>
+                  {sessionProgress && blockSequence.length > 0 && (
+                    <div style={{ fontSize: '0.95rem', color: '#333', marginTop: '0.5rem' }}>
+                      <strong>Progress:</strong> {sessionProgress.completed} of {blockSequence.length} blocks completed ({sessionProgress.percentage.toFixed(0)}%)
+                      {sessionProgress.remaining > 0 && (
+                        <span> · <strong>Next:</strong> Block {sessionProgress.nextBlock}</span>
                       )}
-                    </>
-                  ) : (
-                    <div style={{ color: '#ff6b6b', fontWeight: 'bold' }}>
-                      ⚠️ Participant ID not detected. Please use the link provided by the researcher.
-                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: '#666' }}>
-                        Current URL: {window.location.href}
-                      </div>
+                      {sessionProgress.remaining === 0 && (
+                        <span style={{ color: '#00ff88', fontWeight: 'bold', marginLeft: '0.5rem' }}>🎉 All blocks completed!</span>
+                      )}
                     </div>
                   )}
                 </div>
               )
             })()}
             
-            <div className="status">
-              Modality: <strong>{modalityConfig.modality}</strong>
-              {modalityConfig.modality === Modality.GAZE && (
-                <span>
-                  {' '}
-                  (
-                  {modalityConfig.dwellTime === 0
-                    ? 'Space to confirm'
-                    : `${modalityConfig.dwellTime}ms dwell`}
-                  )
-                </span>
-              )}
-              <br />
-              Block #{blockNumber} of {blockSequence.length} · Condition: <strong>{blockOrderCode}</strong>
-              <br />
-              Next global trial #: <strong>{globalTrialNumber}</strong>
-              <br />
-              {!SHOW_DEV_MODE && (
-                <small>All experimental factors (modality, UI mode, pressure) are automatically set by block sequence.</small>
-              )}
-              {SHOW_DEV_MODE && (
-                <small>Dev mode: Modality can be changed in HUD for testing, but will be overridden by block sequence in production.</small>
-              )}
-            </div>
-
-            <div className="status" style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
-              <strong>Current Block:</strong> {blockOrderCode} — {
-                (() => {
+            {/* Production mode: Simple, user-friendly info */}
+            {!SHOW_DEV_MODE && (
+              <div className="status" style={{ 
+                marginBottom: '1rem', 
+                padding: '1rem', 
+                backgroundColor: '#f8f9fa', 
+                borderRadius: '6px',
+                border: '1px solid #dee2e6'
+              }}>
+                <div style={{ marginBottom: '0.5rem', fontSize: '1.1rem' }}>
+                  <strong>Current Block:</strong> Block {blockNumber} of {blockSequence.length}
+                </div>
+                <div style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>
+                  <strong>Input Method:</strong> {
+                    modalityConfig.modality === Modality.HAND 
+                      ? '🖱️ Mouse (Click to select)' 
+                      : modalityConfig.dwellTime === 0
+                        ? '👁️ Gaze (Hover + Press Space)'
+                        : `👁️ Gaze (Hover for ${modalityConfig.dwellTime}ms)`
+                  }
+                </div>
+                {(() => {
                   const parsed = parseConditionCode(blockOrderCode)
-                  const modalityLabel = parsed.modality === Modality.HAND ? 'Hand' : 'Gaze'
-                  const interventionLabel = parsed.uiMode === 'adaptive' ? 'Adaptive' : 'Static'
-                  const pressureLabel = parsed.pressure ? 'Pressure ON' : 'Pressure OFF'
-                  return `${modalityLabel} · ${interventionLabel} · ${pressureLabel}`
-                })()
-              }
-              <br />
-              <small style={{ color: '#666' }}>
-                Block order is automatically set based on your participant index (Williams counterbalancing).
-                Modality, UI mode (Static/Adaptive), and Pressure are all controlled by the block sequence.
-                {SHOW_DEV_MODE && ' (Dev mode: HUD toggles are overridden by block sequence in production.)'}
-              </small>
-            </div>
+                  if (parsed.pressure) {
+                    return (
+                      <div style={{ fontSize: '0.9rem', color: '#dc3545', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                        ⏱️ Time pressure is ON - work quickly!
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
+            )}
+
+            {/* Dev mode: Full technical details */}
+            {SHOW_DEV_MODE && (
+              <>
+                <div className="status">
+                  Modality: <strong>{modalityConfig.modality}</strong>
+                  {modalityConfig.modality === Modality.GAZE && (
+                    <span>
+                      {' '}
+                      (
+                      {modalityConfig.dwellTime === 0
+                        ? 'Space to confirm'
+                        : `${modalityConfig.dwellTime}ms dwell`}
+                      )
+                    </span>
+                  )}
+                  <br />
+                  Block #{blockNumber} of {blockSequence.length} · Condition: <strong>{blockOrderCode}</strong>
+                  <br />
+                  Next global trial #: <strong>{globalTrialNumber}</strong>
+                  <br />
+                  <small>Dev mode: Modality can be changed in HUD for testing, but will be overridden by block sequence in production.</small>
+                </div>
+
+                <div className="status" style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+                  <strong>Current Block:</strong> {blockOrderCode} — {
+                    (() => {
+                      const parsed = parseConditionCode(blockOrderCode)
+                      const modalityLabel = parsed.modality === Modality.HAND ? 'Hand' : 'Gaze'
+                      const interventionLabel = parsed.uiMode === 'adaptive' ? 'Adaptive' : 'Static'
+                      const pressureLabel = parsed.pressure ? 'Pressure ON' : 'Pressure OFF'
+                      return `${modalityLabel} · ${interventionLabel} · ${pressureLabel}`
+                    })()
+                  }
+                  <br />
+                  <small style={{ color: '#666' }}>
+                    Block order is automatically set based on your participant index (Williams counterbalancing).
+                    Modality, UI mode (Static/Adaptive), and Pressure are all controlled by the block sequence.
+                    (Dev mode: HUD toggles are overridden by block sequence in production.)
+                  </small>
+                </div>
+              </>
+            )}
 
             {/* Pressure control - Dev only (experimental variable) */}
             {SHOW_DEV_MODE && (
@@ -819,12 +890,14 @@ export function TaskPane() {
             </label>
             )}
 
-            <div className="status">
-              Total Trials: <strong>{selectedIDs.length * nTrialsPerID * 3}</strong>
-              <span style={{ fontSize: '0.875rem', color: '#666' }}>
-                {' '}(point + drag near + drag far per difficulty)
-              </span>
-            </div>
+            {SHOW_DEV_MODE && (
+              <div className="status">
+                Total Trials: <strong>{selectedIDs.length * nTrialsPerID * 3}</strong>
+                <span style={{ fontSize: '0.875rem', color: '#666' }}>
+                  {' '}(point + drag near + drag far per difficulty)
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="control-group">
