@@ -111,9 +111,9 @@ export function TaskPane() {
           const progress = getSessionProgress(urlInfo.participantId, sequence.length)
           setSessionProgress(progress)
           
-          // Initialize logger with participant ID
+          // Initialize logger with participant ID and session number
           try {
-            initLogger(urlInfo.participantId)
+            initLogger(urlInfo.participantId, urlInfo.sessionNumber)
           } catch (error) {
             console.error('[TaskPane] Failed to initialize logger:', error)
           }
@@ -123,7 +123,7 @@ export function TaskPane() {
       }
     }
     
-    // Fallback: prompt for participant info
+    // Fallback: check localStorage (only if no URL params)
     const storedIndex = localStorage.getItem('participantIndex')
     const storedPid = localStorage.getItem('participantId')
     
@@ -140,50 +140,55 @@ export function TaskPane() {
       }
     }
     
-    // Prompt for participant ID
-    const pidInput = prompt('Enter Participant ID (e.g., P001) or Participant Index (0-99):')
-    if (pidInput !== null) {
-      // Check if it's a participant ID (P001) or index
-      const pidMatch = pidInput.match(/P(\d+)/i)
-      if (pidMatch) {
-        const pid = pidInput.toUpperCase()
-        const idx = parseInt(pidMatch[1], 10) - 1
-        if (!isNaN(idx) && idx >= 0 && idx < 100) {
-          setParticipantId(pid)
-          setParticipantIndex(idx)
-          localStorage.setItem('participantId', pid)
-          localStorage.setItem('participantIndex', String(idx))
-          const sequence = sequenceForParticipant(idx)
-          setBlockSequence(sequence)
-          const progress = getSessionProgress(pid, sequence.length)
-          setSessionProgress(progress)
-          
-          // Initialize logger
+    // Only prompt if no URL params and no stored data (dev/testing mode)
+    // In production with custom links, URL params should always be present
+    if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
+      const pidInput = prompt('Enter Participant ID (e.g., P001) or Participant Index (0-99):')
+      if (pidInput !== null) {
+        // Check if it's a participant ID (P001) or index
+        const pidMatch = pidInput.match(/P(\d+)/i)
+        if (pidMatch) {
+          const pid = pidInput.toUpperCase()
+          const idx = parseInt(pidMatch[1], 10) - 1
+          if (!isNaN(idx) && idx >= 0 && idx < 100) {
+            setParticipantId(pid)
+            setParticipantIndex(idx)
+            localStorage.setItem('participantId', pid)
+            localStorage.setItem('participantIndex', String(idx))
+            const sequence = sequenceForParticipant(idx)
+            setBlockSequence(sequence)
+            const progress = getSessionProgress(pid, sequence.length)
+            setSessionProgress(progress)
+            
+          // Initialize logger with session number from URL
           try {
-            initLogger(pid)
+            const urlInfo = getSessionInfoFromURL()
+            initLogger(pid, urlInfo.sessionNumber)
           } catch (error) {
             console.error('[TaskPane] Failed to initialize logger:', error)
           }
-        }
-      } else {
-        // It's an index
-        const idx = parseInt(pidInput, 10)
-        if (!isNaN(idx) && idx >= 0 && idx < 100) {
-          const pid = `P${String(idx + 1).padStart(3, '0')}`
-          setParticipantId(pid)
-          setParticipantIndex(idx)
-          localStorage.setItem('participantId', pid)
-          localStorage.setItem('participantIndex', String(idx))
-          const sequence = sequenceForParticipant(idx)
-          setBlockSequence(sequence)
-          const progress = getSessionProgress(pid, sequence.length)
-          setSessionProgress(progress)
-          
-          // Initialize logger
+          }
+        } else {
+          // It's an index
+          const idx = parseInt(pidInput, 10)
+          if (!isNaN(idx) && idx >= 0 && idx < 100) {
+            const pid = `P${String(idx + 1).padStart(3, '0')}`
+            setParticipantId(pid)
+            setParticipantIndex(idx)
+            localStorage.setItem('participantId', pid)
+            localStorage.setItem('participantIndex', String(idx))
+            const sequence = sequenceForParticipant(idx)
+            setBlockSequence(sequence)
+            const progress = getSessionProgress(pid, sequence.length)
+            setSessionProgress(progress)
+            
+          // Initialize logger with session number from URL
           try {
-            initLogger(pid)
+            const urlInfo = getSessionInfoFromURL()
+            initLogger(pid, urlInfo.sessionNumber)
           } catch (error) {
             console.error('[TaskPane] Failed to initialize logger:', error)
+          }
           }
         }
       }

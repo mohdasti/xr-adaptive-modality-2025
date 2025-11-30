@@ -19,25 +19,28 @@ Participants can't access `localhost` from their own devices. You need to deploy
 
 **Steps:**
 
-1. **Build the app:**
-   ```bash
-   cd app
-   npm run build
-   ```
-
-2. **Install Vercel CLI:**
+1. **Install Vercel CLI:**
    ```bash
    npm install -g vercel
    ```
 
-3. **Deploy:**
+2. **Deploy from root directory:**
    ```bash
-   cd app
+   # From the project root (not app/)
    vercel
    ```
    - Follow prompts (first time: login, link to GitHub)
-   - It will ask for project settings - use defaults
-   - **Important:** Set root directory to `app/`
+   - When asked for project settings:
+     - **Root Directory:** Set to `app` (this is critical!)
+     - Framework Preset: Vite
+     - Build Command: `npm run build` (or leave default)
+     - Output Directory: `dist` (or leave default)
+
+3. **OR configure in Vercel Dashboard:**
+   - After first deployment, go to Vercel Dashboard
+   - Project Settings → General
+   - Set **Root Directory** to `app`
+   - Save and redeploy
 
 4. **Add Environment Variables:**
    - Go to Vercel Dashboard → Your Project → Settings → Environment Variables

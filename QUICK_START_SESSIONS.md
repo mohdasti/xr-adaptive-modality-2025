@@ -30,7 +30,7 @@
 ```bash
 python scripts/generate_participant_links.py \
   --base-url "https://your-project.vercel.app" \
-  --participants 25 \
+  --participants 30 \
   --sessions 3 \
   --output participant_links.csv
 ```
@@ -67,8 +67,8 @@ Use `participant_tracking.csv` to see:
 
 ## Email Usage
 
-- **Before:** 200 emails (8 per participant)
-- **After:** 75 emails (1 per participant per session)
+- **Before:** 240 emails (8 per participant for 30 participants)
+- **After:** 90 emails (1 per participant per session for 30 participants)
 - **Savings:** 62.5% reduction! ✅
 
 ## What's New

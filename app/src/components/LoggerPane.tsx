@@ -35,23 +35,29 @@ export function LoggerPane() {
   useEffect(() => {
     const urlInfo = getSessionInfoFromURL()
     if (urlInfo.participantId) {
-      initLogger(urlInfo.participantId)
+      initLogger(urlInfo.participantId, urlInfo.sessionNumber)
       return
     }
     
     // Check localStorage for existing participant ID
     const storedPid = localStorage.getItem('participantId')
     if (storedPid) {
-      initLogger(storedPid)
+      initLogger(storedPid, urlInfo.sessionNumber)
       return
     }
     
-    // Prompt if not found
-    const pid = prompt('Enter Participant ID (e.g., P001) or leave blank for auto-generated:')
-    if (pid) {
-      localStorage.setItem('participantId', pid)
+    // Only prompt in dev mode if no URL params and no stored data
+    // In production with custom links, URL params should always be present
+    if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
+      const pid = prompt('Enter Participant ID (e.g., P001) or leave blank for auto-generated:')
+      if (pid) {
+        localStorage.setItem('participantId', pid)
+      }
+      initLogger(pid || undefined, urlInfo.sessionNumber)
+    } else {
+      // Production: auto-generate if no URL params (shouldn't happen with custom links)
+      initLogger(undefined, urlInfo.sessionNumber)
     }
-    initLogger(pid || undefined)
   }, [])
   
   // Track session info

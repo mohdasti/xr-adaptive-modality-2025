@@ -8,6 +8,7 @@ import { getDisplayMetadata } from '../lib/system'
  */
 export const CSV_HEADERS = [
   'pid',
+  'session_number',
   'ts',
   'trial_number',
   'trial_in_block',
@@ -111,10 +112,22 @@ export class CSVLogger {
     const meta = typeof window !== 'undefined' ? getDisplayMetadata() : undefined
     const providedPid = typeof data.pid === 'string' ? data.pid : undefined
     const pid = providedPid || `P${Date.now()}`
+    
+    // Get session number from data or URL if not provided
+    let sessionNumber = data.session_number
+    if (!sessionNumber && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const sessionParam = params.get('session')
+      if (sessionParam) {
+        sessionNumber = parseInt(sessionParam, 10)
+      }
+    }
+    
     this.sessionData = {
       ...(meta ?? {}),
       ...data,
       pid,
+      session_number: sessionNumber || null,
       browser: this.getBrowser(),
       dpi: this.getDPI(),
     }
@@ -352,10 +365,22 @@ let globalLogger: CSVLogger | null = null
 /**
  * Initialize global logger
  */
-export function initLogger(pid?: string): CSVLogger {
+export function initLogger(pid?: string, sessionNumber?: number | null): CSVLogger {
   globalLogger = new CSVLogger()
+  
+  // Get session number from URL if not provided
+  let session = sessionNumber
+  if (session === undefined && typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search)
+    const sessionParam = params.get('session')
+    if (sessionParam) {
+      session = parseInt(sessionParam, 10)
+    }
+  }
+  
   globalLogger.initSession({
     pid: pid || `P${Date.now()}`,
+    session_number: session || null,
   })
   return globalLogger
 }

@@ -91,7 +91,7 @@ Use `participant_tracking.csv` (generated earlier) to track:
 - 1 email per participant per session
 - Filename: `experiment_P001_session1_all_blocks.csv`
 - Contains all trials and blocks from that session
-- 25 participants × 3 sessions = **75 emails total** (well under 200 limit!)
+- 30 participants × 3 sessions = **90 emails total** (well under 200 limit!)
 
 **Email Content:**
 - All CSV data in email body (copy and save as .csv file)
@@ -156,12 +156,12 @@ Use `participant_tracking.csv` (generated earlier) to track:
 
 **Before (Block-based):**
 - 8 emails per participant (1 per block)
-- 25 participants = 200 emails
+- 30 participants = 240 emails (would exceed 200 limit!)
 - **At limit!**
 
 **After (Session-based):**
 - 1 email per participant per session
-- 25 participants × 3 sessions = 75 emails
+- 30 participants × 3 sessions = 90 emails
 - **Well under 200 limit!**
 
 ## Best Practices
@@ -170,7 +170,7 @@ Use `participant_tracking.csv` (generated earlier) to track:
 
 1. **Generate links in advance:**
    ```bash
-   python scripts/generate_participant_links.py --base-url "YOUR_URL" --participants 25 --sessions 3
+   python scripts/generate_participant_links.py --base-url "YOUR_URL" --participants 30 --sessions 3
    ```
 
 2. **Use tracking spreadsheet:**
