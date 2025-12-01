@@ -170,6 +170,23 @@ export default function Task() {
           <LoggerPane />
         </div>
       </main>
+      
+      {/* Debug info in development */}
+      {import.meta.env.DEV && (
+        <div style={{
+          position: 'fixed',
+          bottom: 10,
+          right: 10,
+          background: 'rgba(0, 0, 0, 0.8)',
+          color: '#00d9ff',
+          padding: '0.5rem',
+          fontSize: '0.75rem',
+          zIndex: 9999,
+          borderRadius: '4px',
+        }}>
+          Task Route Loaded
+        </div>
+      )}
     </div>
   )
 }
