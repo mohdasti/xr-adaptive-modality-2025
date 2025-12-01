@@ -52,7 +52,7 @@ export async function submitDataViaEmail(
       timestamp: new Date().toISOString(),
       csv_data: formattedCsvData, // Send as formatted text in email body
       csv_filename: `experiment_${participantId}_${Date.now()}.csv`,
-      message: `Experiment data for participant ${participantId}.\n\n📋 INSTRUCTIONS:\n1. Copy the CSV data from the "TRIAL DATA (CSV)" section below\n2. Paste it into a text editor (Notepad, TextEdit, etc.)\n3. Save the file with the name: ${`experiment_${participantId}_${Date.now()}.csv`}\n4. Make sure to save with .csv extension\n\n✅ DATA COMPLETENESS:\nThe CSV file contains ALL experiment data including:\n- Trial metrics (RT, accuracy, endpoint error, etc.)\n- Fitts' Law parameters (ID, A, W)\n- Display metadata (screen size, zoom, fullscreen status)\n- Modality settings (hand/gaze, UI mode, pressure, aging)\n- Participant and block information\n- All spatial coordinates and error measurements\n\nThe CSV contains the same complete data as the JSON export - just in a tabular format that's easier to analyze in Excel/R/Python.`,
+      message: `Experiment data for participant ${participantId}.\n\n📋 INSTRUCTIONS:\n1. Copy the CSV data from the "TRIAL DATA (CSV)" section below\n2. Paste it into a text editor (Notepad, TextEdit, etc.)\n3. Save the file with the name: ${`experiment_${participantId}_${Date.now()}.csv`}\n4. Make sure to save with .csv extension${blockData ? '\n5. Also copy the "BLOCK DATA (TLX)" section below and save as a separate CSV file' : ''}\n\n✅ DATA COMPLETENESS:\nThe CSV file contains ALL experiment data including:\n- Trial metrics (RT, accuracy, endpoint error, etc.)\n- Fitts' Law parameters (ID, A, W)\n- Display metadata (screen size, zoom, fullscreen status)\n- Modality settings (hand/gaze, UI mode, pressure, aging)\n- Participant and block information\n- All spatial coordinates and error measurements${blockData ? '\n- NASA-TLX questionnaire responses (one row per block)' : ''}\n\nThe CSV contains the same complete data as the JSON export - just in a tabular format that's easier to analyze in Excel/R/Python.`,
     }
     
     // Add block data if available
@@ -70,6 +70,25 @@ export async function submitDataViaEmail(
       hasBlockData: !!blockData,
       templateParams: Object.keys(templateParams)
     })
+    
+    // Check data size before sending (EmailJS has 50KB limit)
+    const totalSize = JSON.stringify(templateParams).length
+    const sizeKB = (totalSize / 1024).toFixed(2)
+    
+    console.log('EmailJS data size check:', {
+      totalSize,
+      sizeKB: `${sizeKB} KB`,
+      limit: '50 KB',
+      willExceed: totalSize > 50 * 1024
+    })
+    
+    if (totalSize > 50 * 1024) {
+      // Data too large for EmailJS - return error with suggestion
+      return {
+        success: false,
+        error: `Data size (${sizeKB} KB) exceeds EmailJS limit (50 KB). Please download the CSV files manually instead.`
+      }
+    }
     
     const response = await emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
     
@@ -91,7 +110,9 @@ export async function submitDataViaEmail(
     
     // Provide more helpful error messages
     let errorMessage = 'Email send failed'
-    if (error?.status) {
+    if (error?.status === 413) {
+      errorMessage = 'Data size exceeds EmailJS limit (50 KB). Please download the CSV files manually instead.'
+    } else if (error?.status) {
       errorMessage = `EmailJS error ${error.status}: ${error.text || error.message || 'Unknown error'}`
     } else if (error?.message) {
       errorMessage = error.message

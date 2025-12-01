@@ -270,10 +270,38 @@ export function LoggerPane() {
           }
         }, 2000)
       } else {
-        throw new Error(result.error || 'Submission failed')
+        // If submission failed (e.g., size limit), automatically trigger downloads
+        const errorMsg = result.error || 'Submission failed'
+        setSubmitStatus(`⚠️ ${errorMsg} Automatically downloading files...`)
+        
+        // Automatically download both CSVs as fallback
+        setTimeout(() => {
+          logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
+          if (blockData) {
+            logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
+          }
+          setSubmitStatus(`⚠️ ${errorMsg} Files have been downloaded automatically.`)
+        }, 500)
+        
+        throw new Error(errorMsg)
       }
     } catch (error) {
-      setSubmitStatus(`⚠️ Session submission failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please download manually.`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      // Only show error if downloads weren't already triggered
+      if (!errorMessage.includes('exceeds EmailJS limit') && !errorMessage.includes('size exceeds')) {
+        setSubmitStatus(`⚠️ Session submission failed: ${errorMessage}. Please download manually.`)
+        
+        // Auto-download on any error as fallback
+        setTimeout(() => {
+          const logger = getLogger()
+          logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
+          if (blockData) {
+            logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
+          }
+        }, 1000)
+      }
+      
       console.error('Submission error:', error)
     } finally {
       setSubmitting(false)
@@ -332,11 +360,13 @@ export function LoggerPane() {
             <button onClick={handleDownloadCSV} className="download-btn" title="Download your data as backup">
               📊 Download CSV
             </button>
+            {blockRowCount > 0 && (
+              <button onClick={handleDownloadBlockCSV} className="download-btn secondary" title="Download NASA-TLX questionnaire data">
+                📋 TLX Data ({blockRowCount})
+              </button>
+            )}
             {SHOW_DEV_MODE && (
               <>
-                <button onClick={handleDownloadBlockCSV} className="download-btn secondary">
-                  🧱 Block CSV
-                </button>
                 <button onClick={handleDownloadJSON} className="download-btn secondary">
                   📄 JSON
                 </button>

@@ -608,6 +608,21 @@ export function TaskPane() {
     setShowTlxModal(false)
     setCurrentTrialIndex(0)
     setTrialSequence([])
+    
+    // Even if TLX is skipped, advance to next block if not at the end
+    // The block was already marked as complete in handleFittsTrialComplete
+    if (blockSequence.length > 0 && blockNumber < blockSequence.length) {
+      const nextBlock = blockNumber + 1
+      setBlockNumber(nextBlock)
+      setBlockOrderCode(blockSequence[nextBlock - 1])
+      
+      // Update session progress
+      if (participantId && blockSequence.length > 0) {
+        const progress = getSessionProgress(participantId, blockSequence.length)
+        setSessionProgress(progress)
+      }
+    }
+    
     setActiveBlockContext(null)
   }
 
