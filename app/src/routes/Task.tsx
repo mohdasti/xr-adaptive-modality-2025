@@ -8,17 +8,27 @@ import { enforceDisplayOrPause } from '../lib/display'
 
 export default function Task() {
   const [displayWarning, setDisplayWarning] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   
   // Check if demographics are completed - redirect to intro if not
   useEffect(() => {
-    const demographics = sessionStorage.getItem('demographics')
-    if (!demographics) {
-      // Preserve query parameters when redirecting
-      const params = searchParams.toString()
-      navigate(`/intro${params ? `?${params}` : ''}`, { replace: true })
-      return
+    try {
+      const demographics = sessionStorage.getItem('demographics')
+      if (!demographics) {
+        console.warn('[Task] Demographics not found, redirecting to /intro')
+        // Preserve query parameters when redirecting
+        const params = searchParams.toString()
+        navigate(`/intro${params ? `?${params}` : ''}`, { replace: true })
+        return
+      }
+      setIsLoading(false)
+    } catch (err) {
+      console.error('[Task] Error checking demographics:', err)
+      setError('Failed to load session data. Please try refreshing the page.')
+      setIsLoading(false)
     }
   }, [navigate, searchParams])
 
@@ -52,6 +62,41 @@ export default function Task() {
       document.removeEventListener('fullscreenchange', recheck)
     }
   }, [])
+
+  // Show loading or error state
+  if (isLoading) {
+    return (
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ color: '#e0e0e0', fontSize: '1.2rem' }}>Loading...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ color: '#ff4444', fontSize: '1.2rem', textAlign: 'center', padding: '2rem' }}>
+          <h2>Error</h2>
+          <p>{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '1rem',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#00d9ff',
+              color: '#000',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: '600',
+            }}
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app-container">
