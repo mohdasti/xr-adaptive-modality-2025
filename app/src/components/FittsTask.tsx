@@ -833,21 +833,15 @@ export function FittsTask({
     ]
   )
 
-  // Gaze mode: mouse move handler
+  // Gaze mode: mouse move handler (deprecated - raw position is now tracked globally)
+  // This handler is kept for compatibility but cursorPos is set by gaze simulation hook
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (modalityConfig.modality !== Modality.GAZE) return
-      if (showStart || !targetPos) return
-      
-      const rect = event.currentTarget.getBoundingClientRect()
-      const pos: Position = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      }
-      
-      setCursorPos(pos)
+      // Cursor position is now handled by the global mouse tracking and gaze simulation
+      // This handler is kept to prevent errors but does nothing
+      // The gaze simulation hook updates cursorPos via displayGazePos
     },
-    [modalityConfig.modality, showStart, targetPos]
+    []
   )
 
   // Track mouse position globally (for gaze mode and alignment gate)
