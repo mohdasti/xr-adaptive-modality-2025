@@ -53,6 +53,9 @@ export function HUDPane() {
   const [blockCompletedTrials, setBlockCompletedTrials] = useState(0)
   const [blockErrors, setBlockErrors] = useState(0)
   
+  // Track last block number to detect block changes (moved outside useEffect to fix hooks violation)
+  const lastBlockNumberRef = useRef<number | null>(null)
+  
   const handleModalityChange = (modality: Modality) => {
     const newConfig: ModalityConfig = {
       modality,
@@ -219,7 +222,6 @@ export function HUDPane() {
     }
     
     // Reset block tracking when a new block starts (detect block number change)
-    const lastBlockNumberRef = useRef<number | null>(null)
     const handleBlockStart = (payload: any) => {
       if (payload.block_number !== undefined && payload.block_number !== null) {
         const currentBlock = payload.block_number
