@@ -13,10 +13,17 @@ export default function Task() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   
+  // Debug: Log component mount
+  useEffect(() => {
+    console.log('[Task] Component mounted')
+  }, [])
+  
   // Check if demographics are completed - redirect to intro if not
   useEffect(() => {
     try {
+      console.log('[Task] Checking demographics...')
       const demographics = sessionStorage.getItem('demographics')
+      console.log('[Task] Demographics found:', !!demographics)
       if (!demographics) {
         console.warn('[Task] Demographics not found, redirecting to /intro')
         // Preserve query parameters when redirecting
@@ -24,6 +31,7 @@ export default function Task() {
         navigate(`/intro${params ? `?${params}` : ''}`, { replace: true })
         return
       }
+      console.log('[Task] Demographics OK, setting loading to false')
       setIsLoading(false)
     } catch (err) {
       console.error('[Task] Error checking demographics:', err)
@@ -63,18 +71,23 @@ export default function Task() {
     }
   }, [])
 
+  // Debug: Log render state
+  console.log('[Task] Render - isLoading:', isLoading, 'error:', error)
+  
   // Show loading or error state
   if (isLoading) {
+    console.log('[Task] Rendering loading state')
     return (
-      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0f0f0f' }}>
         <div style={{ color: '#e0e0e0', fontSize: '1.2rem' }}>Loading...</div>
       </div>
     )
   }
 
   if (error) {
+    console.log('[Task] Rendering error state')
     return (
-      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0f0f0f' }}>
         <div style={{ color: '#ff4444', fontSize: '1.2rem', textAlign: 'center', padding: '2rem' }}>
           <h2>Error</h2>
           <p>{error}</p>
@@ -98,8 +111,9 @@ export default function Task() {
     )
   }
 
+  console.log('[Task] Rendering main Task component')
   return (
-    <div className="app-container">
+    <div className="app-container" style={{ background: '#0f0f0f', minHeight: '100vh' }}>
       {displayWarning && (
         <div
           style={{
