@@ -1,4 +1,4 @@
-import DemographicsForm, { DemographicsData } from '../components/DemographicsForm'
+import { DemographicsForm, DemographicsData } from '../components/DemographicsForm'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export default function Demographics() {

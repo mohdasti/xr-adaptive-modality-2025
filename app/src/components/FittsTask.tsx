@@ -167,6 +167,18 @@ export function FittsTask({
     [targetPos]
   )
 
+  // Calculate average FPS from frame times (moved before handleTimeout to fix declaration order)
+  const calculateAverageFPS = useCallback((): number | null => {
+    const frameTimes = fpsTrackingRef.current.frameTimes
+    if (frameTimes.length < 2) return null
+    
+    // Calculate average frame time in milliseconds
+    const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length
+    // Convert to FPS (1000ms / frameTime)
+    const avgFPS = 1000 / avgFrameTime
+    return avgFPS
+  }, [])
+
   const handleTimeout = useCallback(() => {
     if (!trialDataRef.current) return
     if (isPaused || isBlockedState()) return // Don't process if paused
@@ -440,18 +452,6 @@ export function FittsTask({
 
   // Guard to prevent duplicate trial completions
   const trialCompletedRef = useRef(false)
-  
-  // Calculate average FPS from frame times
-  const calculateAverageFPS = useCallback((): number | null => {
-    const frameTimes = fpsTrackingRef.current.frameTimes
-    if (frameTimes.length < 2) return null
-    
-    // Calculate average frame time in milliseconds
-    const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length
-    // Convert to FPS (1000ms / frameTime)
-    const avgFPS = 1000 / avgFrameTime
-    return avgFPS
-  }, [])
   
   // FPS tracking loop
   useEffect(() => {
@@ -835,14 +835,11 @@ export function FittsTask({
 
   // Gaze mode: mouse move handler (deprecated - raw position is now tracked globally)
   // This handler is kept for compatibility but cursorPos is set by gaze simulation hook
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      // Cursor position is now handled by the global mouse tracking and gaze simulation
-      // This handler is kept to prevent errors but does nothing
-      // The gaze simulation hook updates cursorPos via displayGazePos
-    },
-    []
-  )
+  const handleMouseMove = useCallback(() => {
+    // Cursor position is now handled by the global mouse tracking and gaze simulation
+    // This handler is kept to prevent errors but does nothing
+    // The gaze simulation hook updates cursorPos via displayGazePos
+  }, [])
 
   // Track mouse position globally (for gaze mode and alignment gate)
   const mousePosRef = useRef<Position>({ x: 0, y: 0 })

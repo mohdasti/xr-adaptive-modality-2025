@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
 import './DemographicsForm.css'
 
 export interface DemographicsData {
@@ -493,22 +492,5 @@ export function DemographicsForm({ onComplete }: DemographicsFormProps) {
       </form>
     </div>
   )
-}
-
-// Standalone route component
-export default function Demographics() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  const handleComplete = (data: DemographicsData) => {
-    // Store demographics in sessionStorage
-    sessionStorage.setItem('demographics', JSON.stringify(data))
-    
-    // Navigate to system check
-    const params = searchParams.toString()
-    navigate(`/check${params ? `?${params}` : ''}`)
-  }
-
-  return <DemographicsForm onComplete={handleComplete} />
 }
 

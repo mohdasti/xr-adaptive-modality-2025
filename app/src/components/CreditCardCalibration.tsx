@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import './CreditCardCalibration.css'
 
@@ -148,7 +148,7 @@ function CreditCardCalibrationRoute() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
-  const handleComplete = (data: CalibrationData) => {
+  const handleComplete = (_data: CalibrationData) => {
     // Navigate to task
     const params = searchParams.toString()
     navigate(`/task${params ? `?${params}` : ''}`)
