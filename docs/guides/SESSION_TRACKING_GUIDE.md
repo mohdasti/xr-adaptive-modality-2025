@@ -13,7 +13,7 @@ The experiment now supports **multi-session tracking** and **session-based submi
 
 - `localhost:5173` only works on YOUR computer
 - Participants need a public URL (e.g., `https://your-project.vercel.app`)
-- See `DEPLOYMENT_GUIDE.md` for step-by-step instructions
+- See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for step-by-step instructions (same directory)
 
 ## How It Works
 

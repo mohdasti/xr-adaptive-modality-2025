@@ -5,7 +5,7 @@ Generate participant-specific links for multi-session study
 This script creates a CSV file with participant links for each session.
 
 ⚠️ IMPORTANT: You must deploy your app first! Localhost won't work for remote participants.
-   See DEPLOYMENT_GUIDE.md for instructions.
+   See docs/guides/DEPLOYMENT_GUIDE.md for instructions.
 
 Usage:
     # After deploying to Vercel/Netlify, use your production URL:

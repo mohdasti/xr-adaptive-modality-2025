@@ -164,7 +164,7 @@ The app will be available at `http://localhost:5173`
 
 **⚠️ For remote participants, you MUST deploy first!**
 
-See `DEPLOYMENT_GUIDE.md` for step-by-step instructions.
+See [docs/guides/DEPLOYMENT_GUIDE.md](docs/guides/DEPLOYMENT_GUIDE.md) for step-by-step instructions.
 
 **Quick deploy to Vercel:**
 ```bash
@@ -437,6 +437,11 @@ Lightweight pub/sub system for inter-component communication:
 
 ### Documentation
 
+**Quick Start Guides:**
+- [docs/guides/SETUP.md](docs/guides/SETUP.md) - Setup instructions for developers
+- [docs/guides/DEPLOYMENT_GUIDE.md](docs/guides/DEPLOYMENT_GUIDE.md) - Deploy to Vercel/Netlify
+- [docs/README.md](docs/README.md) - Complete documentation index
+
 **Study Documentation:**
 - [docs/preregistration.md](docs/preregistration.md) - Pre-registered study design and analysis plan
 - [docs/hypotheses.md](docs/hypotheses.md) - H1-H5 hypotheses with quantified expectations
@@ -452,6 +457,11 @@ Lightweight pub/sub system for inter-component communication:
 - [app/CSV_LOGGING.md](app/CSV_LOGGING.md) - Data logging and export
 - [app/TLX_FORM.md](app/TLX_FORM.md) - NASA-TLX workload assessment
 - [app/PUPIL_PROXY.md](app/PUPIL_PROXY.md) - Pupil diameter proxy (camera-based)
+
+**Operations & Troubleshooting:**
+- [docs/ops/VERCEL_BUILD_FIX.md](docs/ops/VERCEL_BUILD_FIX.md) - Troubleshooting Vercel builds
+- [docs/ops/EMAILJS_SETUP.md](docs/ops/EMAILJS_SETUP.md) - EmailJS configuration
+- [docs/ops/DEBUG_BLACK_SCREEN.md](docs/ops/DEBUG_BLACK_SCREEN.md) - Debugging guide
 
 ## Recent Updates
 
