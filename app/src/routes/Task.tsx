@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { TaskPane } from '../components/TaskPane'
 import { HUDPane } from '../components/HUDPane'
 import { LoggerPane } from '../components/LoggerPane'
@@ -8,6 +8,19 @@ import { enforceDisplayOrPause } from '../lib/display'
 
 export default function Task() {
   const [displayWarning, setDisplayWarning] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  
+  // Check if demographics are completed - redirect to intro if not
+  useEffect(() => {
+    const demographics = sessionStorage.getItem('demographics')
+    if (!demographics) {
+      // Preserve query parameters when redirecting
+      const params = searchParams.toString()
+      navigate(`/intro${params ? `?${params}` : ''}`, { replace: true })
+      return
+    }
+  }, [navigate, searchParams])
 
   // Initialize policy engine on mount
   useEffect(() => {
