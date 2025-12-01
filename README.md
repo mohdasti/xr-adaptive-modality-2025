@@ -107,6 +107,45 @@ Artifacts saved to `results/`.
 
 **Policy:** Tune `policy/policy.default.json` during pilot to 15–25% adaptation trigger rate, then lock thresholds to `policy/policy.locked.json`.
 
+## Participant Flow
+
+The study follows a structured participant flow:
+
+1. **Intro Page** (`/intro`)
+   - Welcome message and study overview
+   - Multiple-choice comprehension check (3 questions)
+   - Instructions for modalities and display requirements
+
+2. **Demographics Form** (`/demographics`)
+   - Age, gender, vision correction status
+   - Gaming frequency (hours per week)
+   - Input device type (mouse, trackpad, etc.)
+   - Handedness (dominant hand, operating hand)
+   - Motor impairment screening
+   - Fatigue level (1-7 Likert scale)
+
+3. **System Check** (`/check`)
+   - Display requirements verification
+   - Fullscreen enforcement
+   - Zoom level check (must be 100%)
+   - Window size validation
+
+4. **Calibration** (`/calibrate`)
+   - Credit card calibration for physical display measurement
+   - Calculates pixels-per-millimeter (PPMM)
+   - Calculates pixels-per-degree (PPD) for gaze jitter normalization
+
+5. **Practice Block** (within `/task`)
+   - 10 trials with Hand modality
+   - 10 trials with Gaze modality
+   - Practice trials are flagged in data (not included in main analysis)
+
+6. **Main Experiment** (`/task`)
+   - Counterbalanced block sequence
+   - 4 conditions: HaS, GaS, HaA, GaA
+   - NASA-TLX after each block
+   - CSV export at completion
+
 ## Quick Start
 
 ### Local Development
@@ -118,6 +157,8 @@ npm run dev
 ```
 
 The app will be available at `http://localhost:5173`
+
+**Note:** When testing locally without participant links, the app will prompt for a Participant ID. In production, participant links include `?pid=P001&session=1` parameters that automatically populate this information.
 
 ### Deploy for Data Collection
 
@@ -206,8 +247,11 @@ xr-adaptive-modality-2025/
 
 - Standard target selection paradigm (ISO 9241-9)
 - Configurable difficulty levels (ID: 1.7 - 5.6 bits)
+- **High-precision timing**: Uses `performance.now()` for sub-millisecond psychophysics timing
 - **Spatial metrics logging**: Endpoint coordinates, target centers, endpoint error (px)
 - **Effective metrics**: Computes We (effective width) and IDe (effective ID) for throughput
+- **Performance tracking**: Average FPS per trial for data quality filtering
+- **Practice block**: Automatic practice trials before main experiment (flagged in data)
 - Reaction time measurement
 - Block-based trial management with Williams counterbalancing
 - Trial and block metadata tracking (trial_number, block_number, block_order)
@@ -216,10 +260,15 @@ xr-adaptive-modality-2025/
 
 - **Hand-like**: Direct pointing (move + click)
 - **Gaze-like**: Hover-based selection with configurable confirmation
+  - Physiologically-accurate gaze simulation with normalized jitter
+  - Jitter normalized by pixels-per-degree (PPD) from calibration
+  - Saccadic suppression and smoothing effects
   - Dwell-based (350ms, 500ms auto-confirm)
   - Confirmation-based (Space key to confirm)
+- **Start button modality switching**: Start button is selectable via current modality (no forced modality switch)
 - Real-time modality switching
 - Error detection (miss, timeout, slip)
+- ISO 9241-9 compliant: 10px tolerance radius for gaze selection (accounts for physiological tremor)
 
 #### Gaze mode UX tips
 - The system cursor is hidden inside the canvas by design in Gaze mode.
@@ -249,9 +298,12 @@ git commit -m "Lock adaptation thresholds post-pilot"
 
 ### Data Collection & Logging
 
-- **Trial-level data**: Movement time, errors, endpoint coordinates, spatial metrics, display metadata
+- **Demographics data**: Age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, fatigue level
+- **Calibration data**: Pixels-per-millimeter and pixels-per-degree (PPD) for gaze jitter normalization
+- **Trial-level data**: Movement time, errors, endpoint coordinates, spatial metrics, display metadata, practice flag, average FPS
 - **Block-level data**: Raw NASA-TLX (6 dimensions: mental, physical, temporal, performance, effort, frustration)
 - **Display metadata**: Screen/window dimensions, device pixel ratio, zoom level, fullscreen status
+- **Performance metrics**: Frame rate (FPS) tracking for data quality filtering
 - **CSV export**: Separate files for trial data and block-level TLX
 - **Data dictionary**: Complete documentation of all logged variables
 
@@ -266,8 +318,17 @@ git commit -m "Lock adaptation thresholds post-pilot"
 
 - **Counterbalancing**: Williams square design for 4 conditions (HaS, GaS, HaA, GaA)
 - **Participant indexing**: Automatic sequence assignment based on participant index (mod 4)
+- **Practice block**: 10 trials each for Hand and Gaze modalities before main experiment
 - **Block shuffling**: Target positions randomized within each block
 - **Display requirements**: Enforced fullscreen/maximized window and 100% zoom for consistency
+- **Physical calibration**: Credit card calibration for PPD-based gaze jitter normalization
+- **Data quality filtering**: FPS tracking to exclude trials with performance issues (FPS < 30)
+
+**Practice Block Logic:**
+- Practice trials are automatically run before the main experiment
+- Practice trials are flagged with `practice: true` in the CSV data
+- Practice data should be excluded from main analysis
+- Participants complete practice for both modalities to minimize learning effects
 
 Tip: to test a different counterbalanced sequence locally, clear the stored participant index in the browser console:
 
@@ -276,8 +337,15 @@ localStorage.removeItem('participantIndex'); location.reload();
 ```
 
 ### Data Export
-- Trial CSV includes: `rt_ms`, `endpoint_error_px`, `confirm_type`, `adaptation_triggered`, plus display metadata (screen/window size, DPR, zoom, fullscreen).
+- Trial CSV includes: `rt_ms`, `endpoint_error_px`, `confirm_type`, `adaptation_triggered`, `practice`, `avg_fps`, plus display metadata (screen/window size, DPR, zoom, fullscreen).
+- Demographics CSV includes: age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, fatigue level.
+- Calibration data includes: pixels_per_mm, pixels_per_degree (stored in sessionStorage, logged in CSV).
 - Block TLX CSV is logged once per block with six raw subscales (performance reverse‑scored in analysis).
+
+**Data Quality Filters:**
+- Practice trials (`practice: true`) should be excluded from main analysis
+- Trials with low FPS (`avg_fps < 30`) should be excluded from analysis
+- See `analysis/check_exclusions.R` for automated exclusion reporting
 
 ---
 
@@ -388,6 +456,16 @@ Lightweight pub/sub system for inter-component communication:
 ## Recent Updates
 
 **Latest improvements (2025):**
+- ✅ **Demographics Collection**: Comprehensive form collecting age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, and fatigue level
+- ✅ **Physical Calibration**: Credit card calibration for pixels-per-degree (PPD) normalization of gaze simulation jitter
+- ✅ **Practice Block**: 10 trials each for Gaze and Hand modalities before the main experiment (flagged in data)
+- ✅ **FPS Telemetry**: Average frame rate tracking per trial for data quality filtering (exclude trials with FPS < 30)
+- ✅ **Comprehension Check**: Multiple-choice questions on Intro page to ensure participants understand the task
+- ✅ **Participant Flow**: Complete flow implemented: Intro → Demographics → SystemCheck → Calibration → Task
+- ✅ **Timing Precision**: Using `performance.now()` for critical psychophysics timing measurements
+- ✅ **Gaze Simulation**: Physiologically-accurate simulation with normalized jitter based on calibration
+- ✅ **Error Rate Feedback**: ISO 9241-9 compliant block-level error rate indicator in HUD
+- ✅ **Bug Fixes**: Fixed React hooks violation, corrupted policy JSON, black screen after calibration
 - ✅ Pre-registration documentation complete (design, hypotheses, methods)
 - ✅ Full R analysis pipeline (effective metrics, mixed models, visualizations)
 - ✅ Williams counterbalancing for block order (4-sequence design)
