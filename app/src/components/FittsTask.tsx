@@ -1363,7 +1363,26 @@ export function FittsTask({
         )}
         {/* Countdown overlay for pressure mode */}
         {pressureEnabled && !showStart && targetPos && (
-          <div className={`countdown-overlay ${countdown <= 3 ? 'warning' : ''}`}>
+          <div 
+            className={`countdown-overlay ${countdown <= 3 ? 'warning' : countdown <= 6 ? 'urgent' : ''}`}
+            style={{
+              background: countdown <= 3 
+                ? 'rgba(255, 68, 68, 0.95)' 
+                : countdown <= 6 
+                  ? 'rgba(255, 140, 0, 0.95)'
+                  : 'rgba(255, 204, 0, 0.95)',
+              boxShadow: countdown <= 3
+                ? '0 0 25px rgba(255, 68, 68, 0.9)'
+                : countdown <= 6
+                  ? '0 0 22px rgba(255, 140, 0, 0.7)'
+                  : '0 0 20px rgba(255, 204, 0, 0.6)',
+              borderColor: countdown <= 3
+                ? 'rgba(255, 0, 0, 1)'
+                : countdown <= 6
+                  ? 'rgba(255, 140, 0, 0.9)'
+                  : 'rgba(255, 170, 0, 0.8)',
+            }}
+          >
             {countdown.toFixed(1)}s
           </div>
         )}
