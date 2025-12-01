@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
 import './CreditCardCalibration.css'
 
 // Standard credit card dimensions in millimeters
@@ -143,19 +142,4 @@ export function CreditCardCalibration({ onComplete }: CreditCardCalibrationProps
   )
 }
 
-// Standalone route component
-function CreditCardCalibrationRoute() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  const handleComplete = (_data: CalibrationData) => {
-    // Navigate to task
-    const params = searchParams.toString()
-    navigate(`/task${params ? `?${params}` : ''}`)
-  }
-
-  return <CreditCardCalibration onComplete={handleComplete} />
-}
-
-export default CreditCardCalibrationRoute
 
