@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { bus } from '../lib/bus'
 import {
   Modality,
@@ -48,6 +48,10 @@ export function HUDPane() {
   const [pressure, setPressure] = useState(1.0)
   const [pressureEnabled, setPressureEnabled] = useState(false)
   const [agingEnabled, setAgingEnabled] = useState(false)
+  
+  // Block-level error rate tracking for ISO 9241-9 compliance
+  const [blockCompletedTrials, setBlockCompletedTrials] = useState(0)
+  const [blockErrors, setBlockErrors] = useState(0)
   
   const handleModalityChange = (modality: Modality) => {
     const newConfig: ModalityConfig = {
@@ -119,6 +123,11 @@ export function HUDPane() {
         lastEventTime: new Date().toLocaleTimeString(),
       }))
       
+      // Track block-level completion (ignore practice trials)
+      if (!payload.practice) {
+        setBlockCompletedTrials((prev) => prev + 1)
+      }
+      
       // Add to policy engine history
       const entry: TrialHistoryEntry = {
         trialId: payload.trialId,
@@ -156,6 +165,11 @@ export function HUDPane() {
         errors: prev.errors + 1,
         lastEventTime: new Date().toLocaleTimeString(),
       }))
+      
+      // Track block-level errors (ignore practice trials)
+      if (!payload.practice) {
+        setBlockErrors((prev) => prev + 1)
+      }
       
       // Add to policy engine history
       const entry: TrialHistoryEntry = {
@@ -196,18 +210,79 @@ export function HUDPane() {
       }))
     }
 
-    const unsubTrialStart = bus.on('trial:start', handleTrialStart)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleBlockComplete = () => {
+      // Reset block error tracking when block completes
+      // (Will reset on next trial:start when new block begins)
+      setBlockCompletedTrials(0)
+      setBlockErrors(0)
+    }
+    
+    // Reset block tracking when a new block starts (detect block number change)
+    const lastBlockNumberRef = useRef<number | null>(null)
+    const handleBlockStart = (payload: any) => {
+      if (payload.block_number !== undefined && payload.block_number !== null) {
+        const currentBlock = payload.block_number
+        if (lastBlockNumberRef.current !== currentBlock) {
+          lastBlockNumberRef.current = currentBlock
+          // New block started - reset error tracking (ignore practice trials)
+          if (!payload.practice) {
+            setBlockCompletedTrials(0)
+            setBlockErrors(0)
+          }
+        }
+      }
+    }
+
+    const unsubTrialStart = bus.on('trial:start', (payload: any) => {
+      handleBlockStart(payload)
+      handleTrialStart(payload)
+    })
     const unsubTrialEnd = bus.on('trial:end', handleTrialEnd)
     const unsubTrialError = bus.on('trial:error', handleTrialError)
     const unsubPolicyChange = bus.on('policy:change', handlePolicyChange)
+    const unsubBlockComplete = bus.on('block:complete', handleBlockComplete)
 
     return () => {
       unsubTrialStart()
       unsubTrialEnd()
       unsubTrialError()
       unsubPolicyChange()
+      unsubBlockComplete()
     }
   }, [modalityConfig.modality, pressure, policyState.action, pressureEnabled])
+  
+  // Calculate error rate for ISO 9241-9 feedback
+  const totalBlockTrials = blockCompletedTrials + blockErrors
+  const errorRatePercent = totalBlockTrials > 0 
+    ? (blockErrors / totalBlockTrials) * 100 
+    : 0
+  
+  // ISO 9241-9 error rate feedback
+  const getErrorRateFeedback = () => {
+    if (totalBlockTrials === 0) return null
+    
+    if (errorRatePercent < 4) {
+      return {
+        message: 'Good Accuracy! Go Faster!',
+        color: '#28a745', // Green
+        icon: '✓',
+      }
+    } else if (errorRatePercent > 10) {
+      return {
+        message: 'Too many errors! Slow Down.',
+        color: '#dc3545', // Red
+        icon: '⚠',
+      }
+    }
+    return {
+      message: `Error Rate: ${errorRatePercent.toFixed(1)}%`,
+      color: '#ffc107', // Yellow
+      icon: '•',
+    }
+  }
+  
+  const errorFeedback = getErrorRateFeedback()
 
   return (
     <div className={`pane hud-pane ${policyState.action === 'declutter' ? 'decluttered' : ''}`}>
@@ -221,6 +296,31 @@ export function HUDPane() {
             <strong>Adaptation Active:</strong> {policyState.action}
           </div>
           <div className="policy-reason noncritical">{policyState.reason}</div>
+        </div>
+      )}
+      
+      {/* ISO 9241-9 Error Rate Feedback */}
+      {errorFeedback && totalBlockTrials >= 3 && (
+        <div 
+          className="error-rate-feedback"
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '6px',
+            border: `2px solid ${errorFeedback.color}`,
+            backgroundColor: `${errorFeedback.color}15`, // 15 hex = ~8% opacity
+            marginBottom: '1rem',
+            fontWeight: '600',
+            color: errorFeedback.color,
+            textAlign: 'center',
+          }}
+        >
+          <span style={{ fontSize: '1.2rem', marginRight: '0.5rem' }}>
+            {errorFeedback.icon}
+          </span>
+          <span>{errorFeedback.message}</span>
+          <div style={{ fontSize: '0.875rem', marginTop: '0.25rem', fontWeight: '400', opacity: 0.8 }}>
+            ({blockErrors} errors / {totalBlockTrials} trials = {errorRatePercent.toFixed(1)}%)
+          </div>
         </div>
       )}
       

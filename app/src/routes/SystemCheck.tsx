@@ -7,6 +7,18 @@ export default function SystemCheck() {
   const [status, setStatus] = React.useState(meetsDisplayRequirements(getDisplayMetadata()))
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  
+  // Check if demographics are completed
+  const [hasDemographics, setHasDemographics] = React.useState(false)
+  
+  React.useEffect(() => {
+    try {
+      const demographicsStr = sessionStorage.getItem('demographics')
+      setHasDemographics(!!demographicsStr)
+    } catch (e) {
+      console.warn('Failed to check demographics:', e)
+    }
+  }, [])
 
   React.useEffect(() => {
     function onChange() {
@@ -77,14 +89,27 @@ export default function SystemCheck() {
         </p>
       </div>
 
+      {!hasDemographics && (
+        <div className="rounded border p-4 mb-4 bg-yellow-50 border-yellow-200">
+          <p className="text-yellow-800">
+            <strong>Missing demographics:</strong> Please complete the demographics form first.
+          </p>
+        </div>
+      )}
+      
       <div className="flex gap-3">
         <button onClick={goFullscreen} className="px-4 py-2 rounded border">
           Enter Full-screen
         </button>
         <button
           onClick={() => {
+            if (!hasDemographics) {
+              const params = searchParams.toString()
+              navigate(`/demographics${params ? `?${params}` : ''}`)
+              return
+            }
             const params = searchParams.toString()
-            navigate(`/task${params ? `?${params}` : ''}`)
+            navigate(`/calibration${params ? `?${params}` : ''}`)
           }}
           disabled={!status.allOk}
           className={
@@ -92,7 +117,7 @@ export default function SystemCheck() {
             (status.allOk ? 'bg-black' : 'bg-gray-400 cursor-not-allowed')
           }
         >
-          Continue to Task
+          {hasDemographics ? 'Continue to Calibration' : 'Complete Demographics First'}
         </button>
       </div>
     </div>

@@ -55,28 +55,30 @@ export default function Intro() {
       <h2 className="text-xl font-semibold mt-6 mb-2">Quick comprehension check</h2>
       <ComprehensionGate onPassed={() => {
         const params = searchParams.toString()
-        navigate(`/check${params ? `?${params}` : ''}`)
+        navigate(`/demographics${params ? `?${params}` : ''}`)
       }} />
 
       <div className="mt-6 flex gap-3">
         <button 
           onClick={() => {
             const params = searchParams.toString()
-            navigate(`/check${params ? `?${params}` : ''}`)
+            navigate(`/demographics${params ? `?${params}` : ''}`)
           }}
           className="px-4 py-2 rounded bg-black text-white"
         >
-          Run System Check
+          Continue to Demographics
         </button>
-        <button 
-          onClick={() => {
-            const params = searchParams.toString()
-            navigate(`/task${params ? `?${params}` : ''}`)
-          }}
-          className="px-4 py-2 rounded border"
-        >
-          Skip to Task
-        </button>
+        {import.meta.env.DEV && (
+          <button 
+            onClick={() => {
+              const params = searchParams.toString()
+              navigate(`/task${params ? `?${params}` : ''}`)
+            }}
+            className="px-4 py-2 rounded border"
+          >
+            Skip to Task (Dev Only)
+          </button>
+        )}
       </div>
     </div>
   )

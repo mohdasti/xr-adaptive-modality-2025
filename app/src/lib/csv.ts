@@ -9,6 +9,17 @@ import { getDisplayMetadata } from '../lib/system'
 export const CSV_HEADERS = [
   'pid',
   'session_number',
+  'age',
+  'gender',
+  'gaming_hours_per_week',
+  'input_device',
+  'vision_correction',
+  'wearing_correction_now',
+  'dominant_hand',
+  'operating_hand',
+  'using_dominant_hand',
+  'motor_impairment',
+  'fatigue_level',
   'ts',
   'trial_number',
   'trial_in_block',
@@ -56,6 +67,8 @@ export const CSV_HEADERS = [
   'user_agent',
   'browser',
   'dpi',
+  'practice',
+  'avg_fps',
 ] as const
 
 export type CSVRow = Record<string, string | number | boolean | null>
@@ -123,9 +136,36 @@ export class CSVLogger {
       }
     }
     
+    // Load demographics from sessionStorage
+    let demographics: Partial<CSVRow> = {}
+    if (typeof window !== 'undefined') {
+      try {
+        const demographicsStr = sessionStorage.getItem('demographics')
+        if (demographicsStr) {
+          const demData = JSON.parse(demographicsStr)
+          demographics = {
+            age: demData.age ?? null,
+            gender: demData.gender ?? null,
+            gaming_hours_per_week: demData.gamingHoursPerWeek ?? null,
+            input_device: demData.inputDevice ?? null,
+            vision_correction: demData.visionCorrection ?? null,
+            wearing_correction_now: demData.wearingCorrectionNow ?? null,
+            dominant_hand: demData.dominantHand ?? null,
+            operating_hand: demData.operatingHand ?? null,
+            using_dominant_hand: demData.usingDominantHand ?? null,
+            motor_impairment: demData.motorImpairment ?? null,
+            fatigue_level: demData.fatigueLevel ?? null,
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load demographics from sessionStorage:', e)
+      }
+    }
+    
     this.sessionData = {
       ...(meta ?? {}),
       ...data,
+      ...demographics,
       pid,
       session_number: sessionNumber || null,
       browser: this.getBrowser(),
@@ -454,6 +494,8 @@ export function createRowFromTrial(
     focus_blur_count: payload.focus_blur_count ?? null,
     tab_hidden_ms: payload.tab_hidden_ms ?? null,
     user_agent: displayMeta?.user_agent ?? payload.user_agent ?? null,
+    practice: payload.practice ?? false,
+    avg_fps: payload.avg_fps ?? null,
   }
   
   return row

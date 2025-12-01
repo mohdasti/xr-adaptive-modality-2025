@@ -55,6 +55,10 @@ export function TaskPane() {
   const [uiMode, setUiMode] = useState('standard')
   const [pressure, setPressure] = useState(1.0)
   
+  // Practice block state
+  const [isPracticeBlock, setIsPracticeBlock] = useState(false)
+  const [practiceCompleted, setPracticeCompleted] = useState(false)
+  
   // Width scale factor from policy
   const [widthScale, setWidthScale] = useState(1.0)
   
@@ -295,6 +299,42 @@ export function TaskPane() {
     return { modality, uiMode, pressure, aging }
   }
 
+  // Practice block handler
+  const startPracticeBlock = (modality: Modality) => {
+    // Generate practice trials (medium difficulty only)
+    const practiceConfig = DIFFICULTY_PRESETS['medium']
+    const practiceSequence: FittsConfig[] = []
+    
+    // Create 10 practice trials with medium difficulty
+    for (let i = 0; i < 10; i++) {
+      practiceSequence.push({ ...practiceConfig })
+    }
+    
+    // Set up practice block
+    setIsPracticeBlock(true)
+    setTrialSequence(practiceSequence)
+    setCurrentTrialIndex(0)
+    setTrialInBlock(1)
+    setShowDisplayWarning(false)
+    
+    // Set modality for practice
+    bus.emit('modality:change', {
+      config: {
+        modality,
+        dwellTime: modalityConfig.dwellTime,
+      },
+      timestamp: Date.now(),
+    })
+    
+    setUiMode('static') // Practice uses static UI
+    setPressureEnabled(false) // No pressure in practice
+    setActiveBlockContext({
+      modality,
+      uiMode: 'static',
+    })
+    setFittsActive(true)
+  }
+  
   // Fitts task handlers
   const startFittsBlockInternal = () => {
     // Reset policy engine to prevent state pollution between blocks
@@ -406,7 +446,26 @@ export function TaskPane() {
       return
     }
 
+    // Check if practice is needed first
+    if (!practiceCompleted) {
+      // Start practice with Hand modality first
+      startPracticeBlock(Modality.HAND)
+      return
+    }
+
     startFittsBlockInternal()
+  }
+  
+  const handleStartPractice = () => {
+    const meta = getDisplayMetadata()
+    setDisplayMetadata(meta)
+
+    if (!meetsDisplayRequirements(meta)) {
+      setShowDisplayWarning(true)
+      return
+    }
+
+    startPracticeBlock(Modality.HAND)
   }
 
   const handleDisplayRetry = () => {
@@ -444,7 +503,39 @@ export function TaskPane() {
   }
 
   const handleFittsTrialComplete = () => {
-    // Move to next trial
+    // Handle practice blocks differently
+    if (isPracticeBlock) {
+      const nextIndex = currentTrialIndex + 1
+      
+      if (nextIndex < trialSequence.length) {
+        // Continue practice block
+        setCurrentTrialIndex(nextIndex)
+        setTrialInBlock((prev) => prev + 1)
+      } else {
+        // Practice block complete - check if we need to switch modality or finish practice
+        const currentModality = modalityConfig.modality
+        
+        if (currentModality === Modality.HAND) {
+          // Finished Hand practice, start Gaze practice
+          setFittsActive(false)
+          setIsPracticeBlock(false) // Reset flag temporarily
+          setTimeout(() => {
+            startPracticeBlock(Modality.GAZE)
+          }, 500) // Brief pause between practice blocks
+        } else {
+          // Finished Gaze practice - practice is complete
+          setFittsActive(false)
+          setIsPracticeBlock(false)
+          setPracticeCompleted(true)
+          setTrialInBlock(1)
+          setCurrentTrialIndex(0)
+          setTrialSequence([])
+        }
+      }
+      return // Don't process as regular block
+    }
+    
+    // Regular block handling
     const nextIndex = currentTrialIndex + 1
     
     setGlobalTrialNumber((prev) => prev + 1)
@@ -903,13 +994,40 @@ export function TaskPane() {
           </div>
 
           <div className="control-group">
-            <button
-              onClick={handleStartFittsBlock}
-              disabled={selectedIDs.length === 0}
-              className="primary-button"
-            >
-              Start Fitts Block
-            </button>
+            {!practiceCompleted ? (
+              <>
+                <div style={{ 
+                  marginBottom: '1rem', 
+                  padding: '1rem', 
+                  backgroundColor: '#fff3cd', 
+                  borderRadius: '6px', 
+                  border: '2px solid #ffc107',
+                  fontSize: '1rem'
+                }}>
+                  <div style={{ color: '#856404', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                    Practice Block Required
+                  </div>
+                  <div style={{ color: '#856404', fontSize: '0.95rem' }}>
+                    Before starting the experiment, you&apos;ll complete 10 practice trials with each input method (Hand and Gaze). 
+                    This helps you get familiar with the task and ensures accurate measurements.
+                  </div>
+                </div>
+                <button
+                  onClick={handleStartPractice}
+                  className="primary-button"
+                >
+                  Start Practice Block
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleStartFittsBlock}
+                disabled={selectedIDs.length === 0}
+                className="primary-button"
+              >
+                Start Fitts Block
+              </button>
+            )}
           </div>
         </>
       )}
@@ -920,6 +1038,11 @@ export function TaskPane() {
           <div className="control-group">
             <div className="block-progress">
               <h3>
+                {isPracticeBlock && (
+                  <span style={{ color: '#ffc107', fontWeight: 'bold', marginRight: '0.5rem' }}>
+                    PRACTICE BLOCK
+                  </span>
+                )}
                 Trial {trialInBlock} of {trialSequence.length}
               </h3>
               <div className="progress-bar">
@@ -958,6 +1081,7 @@ export function TaskPane() {
             pressureEnabled={pressureEnabled}
             agingEnabled={agingEnabled}
             cameraEnabled={cameraEnabled}
+            isPractice={isPracticeBlock}
             onTrialComplete={handleFittsTrialComplete}
             onTrialError={handleFittsTrialError}
             timeout={10000}

@@ -51,6 +51,7 @@ export interface FittsTaskProps {
   pressureEnabled?: boolean // Show countdown timer
   agingEnabled?: boolean // Apply aging visual effects
   cameraEnabled?: boolean // Enable pupil tracking (unused for now)
+  isPractice?: boolean // Whether this is a practice trial (default: false)
   onTrialComplete: () => void
   onTrialError: (errorType: 'miss' | 'timeout' | 'slip') => void
   timeout?: number // milliseconds
@@ -66,6 +67,7 @@ export function FittsTask({
   pressureEnabled = false,
   agingEnabled = false,
   cameraEnabled = false, // Unused - kept for future integration
+  isPractice = false,
   onTrialComplete,
   onTrialError,
   timeout = 10000,
@@ -118,6 +120,15 @@ export function FittsTask({
   const trialDataRef = useRef<TrialData | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const targetRef = useRef<HTMLDivElement | null>(null)
+  
+  // FPS tracking for data quality
+  const fpsTrackingRef = useRef<{
+    frameTimes: number[]
+    lastFrameTime: number | null
+  }>({
+    frameTimes: [],
+    lastFrameTime: null,
+  })
 
   const getSpatialMetrics = useCallback(
     (localPoint?: Position | null) => {
@@ -163,6 +174,7 @@ export function FittsTask({
     const trialData = trialDataRef.current
     const metrics = getSpatialMetrics(null)
     const displayMetrics = getDisplayMetrics()
+    const avgFPS = calculateAverageFPS()
     const timestamp = performance.now()
 
     bus.emit('trial:error', {
@@ -206,10 +218,13 @@ export function FittsTask({
       viewport_h: displayMetrics.viewport_h,
       focus_blur_count: displayMetrics.focus_blur_count,
       tab_hidden_ms: displayMetrics.tab_hidden_ms,
+      // Practice and FPS tracking
+      practice: isPractice,
+      avg_fps: avgFPS,
     })
 
     onTrialError('timeout')
-  }, [getSpatialMetrics, onTrialError, isPaused])
+  }, [getSpatialMetrics, onTrialError, isPaused, calculateAverageFPS, isPractice])
 
   // Canvas dimensions - read from actual DOM element for accuracy
   // CSS handles responsive sizing (70vw/70vh, min 800x600, max 1200x900)
@@ -332,6 +347,12 @@ export function FittsTask({
       // Reset trial completion guard for new trial
       trialCompletedRef.current = false
       
+      // Reset FPS tracking
+      fpsTrackingRef.current = {
+        frameTimes: [],
+        lastFrameTime: null,
+      }
+      
       const startTime = performance.now()
       setTrialStartTime(startTime)
       
@@ -379,6 +400,7 @@ export function FittsTask({
         aging: agingEnabled,
         taskType: config.taskType || 'point',
         dragDistance: config.dragDistance,
+        practice: isPractice,
         timestamp: startTime,
       })
       
@@ -400,6 +422,7 @@ export function FittsTask({
     handleTimeout,
     agingEnabled,
     targetMargin,
+    isPractice,
   ])
 
   const getConfirmType = useCallback(
@@ -417,6 +440,51 @@ export function FittsTask({
 
   // Guard to prevent duplicate trial completions
   const trialCompletedRef = useRef(false)
+  
+  // Calculate average FPS from frame times
+  const calculateAverageFPS = useCallback((): number | null => {
+    const frameTimes = fpsTrackingRef.current.frameTimes
+    if (frameTimes.length < 2) return null
+    
+    // Calculate average frame time in milliseconds
+    const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length
+    // Convert to FPS (1000ms / frameTime)
+    const avgFPS = 1000 / avgFrameTime
+    return avgFPS
+  }, [])
+  
+  // FPS tracking loop
+  useEffect(() => {
+    if (!trialStartTime || showStart || !targetPos) return
+    
+    let fpsTrackingFrameId: number | null = null
+    let lastFrameTime = performance.now()
+    
+    const trackFrame = () => {
+      const currentTime = performance.now()
+      const deltaTime = currentTime - lastFrameTime
+      
+      // Record frame time
+      fpsTrackingRef.current.frameTimes.push(deltaTime)
+      lastFrameTime = currentTime
+      
+      // Keep only recent frames (last 120 frames ~2s at 60fps)
+      if (fpsTrackingRef.current.frameTimes.length > 120) {
+        fpsTrackingRef.current.frameTimes.shift()
+      }
+      
+      fpsTrackingFrameId = requestAnimationFrame(trackFrame)
+    }
+    
+    // Start tracking
+    fpsTrackingFrameId = requestAnimationFrame(trackFrame)
+    
+    return () => {
+      if (fpsTrackingFrameId !== null) {
+        cancelAnimationFrame(fpsTrackingFrameId)
+      }
+    }
+  }, [trialStartTime, showStart, targetPos])
   
   const completeSelection = useCallback(
     (clickPos: Position, isClick: boolean = false) => {
@@ -448,6 +516,7 @@ export function FittsTask({
       if (hit) {
         const metrics = getSpatialMetrics(clickPos)
         const displayMetrics = getDisplayMetrics()
+        const avgFPS = calculateAverageFPS()
 
         // Alignment gate metrics (if enabled)
         const alignmentGateMetrics = alignmentGateEnabled
@@ -518,6 +587,9 @@ export function FittsTask({
           tab_hidden_ms: displayMetrics.tab_hidden_ms,
           // Alignment gate metrics
           ...alignmentGateMetrics,
+          // Practice and FPS tracking
+          practice: isPractice,
+          avg_fps: avgFPS,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -528,6 +600,7 @@ export function FittsTask({
         const errorType = isClick ? 'miss' : 'slip'
         const metrics = getSpatialMetrics(clickPos)
         const displayMetrics = getDisplayMetrics()
+        const avgFPS = calculateAverageFPS()
 
         bus.emit('trial:error', {
           trialId: trialData.trialId,
@@ -572,6 +645,9 @@ export function FittsTask({
           viewport_h: displayMetrics.viewport_h,
           focus_blur_count: displayMetrics.focus_blur_count,
           tab_hidden_ms: displayMetrics.tab_hidden_ms,
+          // Practice and FPS tracking
+          practice: isPractice,
+          avg_fps: avgFPS,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -780,6 +856,47 @@ export function FittsTask({
   // Raw mouse position (for gaze simulation input)
   const [rawMousePosition, setRawMousePosition] = useState<Position | null>(null)
   
+  // Load calibration data for normalized jitter
+  const [calibrationData, setCalibrationData] = useState<{
+    pixelsPerMM: number
+    pixelsPerDegree: number
+  } | null>(null)
+  
+  useEffect(() => {
+    try {
+      const calibrationStr = sessionStorage.getItem('calibration')
+      if (calibrationStr) {
+        const cal = JSON.parse(calibrationStr)
+        setCalibrationData({
+          pixelsPerMM: cal.pixelsPerMM || 3.779, // Default ~96 DPI if no calibration
+          pixelsPerDegree: cal.pixelsPerDegree || 60, // Default estimate
+        })
+      } else {
+        // No calibration - use default estimate (96 DPI ≈ 3.779 px/mm at 60cm)
+        setCalibrationData({
+          pixelsPerMM: 3.779,
+          pixelsPerDegree: 60,
+        })
+      }
+    } catch (e) {
+      console.warn('[FittsTask] Failed to load calibration, using defaults:', e)
+      setCalibrationData({
+        pixelsPerMM: 3.779,
+        pixelsPerDegree: 60,
+      })
+    }
+  }, [])
+  
+  // Calculate normalized jitter: Base jitter in mm (0.5mm ≈ 0.12° at 60cm viewing distance)
+  // Convert to pixels using calibration: Jitter_px = Jitter_mm × PixelsPerMM
+  const JITTER_MM = 0.5 // Standard high-end eye tracker noise level
+  const normalizedJitterPx = useMemo(() => {
+    if (calibrationData) {
+      return JITTER_MM * calibrationData.pixelsPerMM
+    }
+    return 5.0 // Fallback to fixed value if no calibration
+  }, [calibrationData])
+  
   // Gaze simulation hook (physiologically-accurate eye tracking simulation)
   const isGazeMode = modalityConfig.modality === Modality.GAZE
   const {
@@ -788,7 +905,7 @@ export function FittsTask({
     isSaccading,
   } = useGazeSimulation(rawMousePosition, isGazeMode, {
     smoothingFactor: 0.15,
-    fixationNoiseStdDev: 5.0, // Fixed noise for high-end eye tracker simulation (~0.12°)
+    fixationNoiseStdDev: normalizedJitterPx, // Normalized noise based on calibration
     fixationVelocityThreshold: 50,
     saccadeVelocityThreshold: 2000, // Increased to prevent false freezes in mouse simulation
     enableSaccadicSuppression: true,
@@ -856,16 +973,13 @@ export function FittsTask({
     }
   }, [modalityConfig.modality, displayGazePos, simulatedGazePosRef, isSaccading, rawMousePosition])
 
-  // Gaze mode: update hover state
+  // Gaze mode: update hover state (for both Start button and Target)
   useEffect(() => {
     if (modalityConfig.modality !== Modality.GAZE) {
-      // Debug: log when not in gaze mode
-      if (showStart === false && targetPos !== null) {
-        console.log('[FittsTask] Not in gaze mode, modality:', modalityConfig.modality, 'dwellTime:', modalityConfig.dwellTime)
-      }
       return
     }
-    if (showStart || !targetPos) return
+    // Allow checking hover for Start button OR Target - don't return early
+    // We need to track hover state for both the start button and the target
     
     console.log('[FittsTask] Starting gaze hover detection, dwellTime:', modalityConfig.dwellTime)
     
@@ -879,19 +993,26 @@ export function FittsTask({
         return
       }
       
-      // Calculate distance to target for debugging
-      const distance = Math.sqrt(
-        Math.pow(currentMousePos.x - targetPos.x, 2) + 
-        Math.pow(currentMousePos.y - targetPos.y, 2)
-      )
-      const targetRadius = effectiveWidth / 2
-      // Forgiving dwell: Add 10px tolerance margin for gaze mode
-      // This allows cursor to jitter slightly over the edge without resetting the timer
-      // Preserves Fitts' Law validity while making small targets selectable
-      const DWELL_TOLERANCE_PX = 10
-      const isHovering = distance <= (targetRadius + DWELL_TOLERANCE_PX)
-      const currentTime = performance.now()
+      // Determine which element we're checking hover for (Start button or Target)
+      const currentTarget = showStart ? startPos : targetPos
+      if (!currentTarget) {
+        hoverAnimationFrameRef.current = requestAnimationFrame(updateHover)
+        return
+      }
       
+      // Start button is typically larger (80px radius) than targets
+      const START_BUTTON_RADIUS = 60
+      const DWELL_TOLERANCE_PX = 10
+      const hitSize = showStart ? START_BUTTON_RADIUS * 2 : effectiveWidth
+      const hitRadius = hitSize / 2
+      
+      // Calculate distance to current target (start button or target)
+      const distance = Math.sqrt(
+        Math.pow(currentMousePos.x - currentTarget.x, 2) + 
+        Math.pow(currentMousePos.y - currentTarget.y, 2)
+      )
+      const isHovering = distance <= (hitRadius + DWELL_TOLERANCE_PX)
+      const currentTime = performance.now()
       
       setGazeState((prev) => {
         const newState = updateGazeState(
@@ -901,40 +1022,22 @@ export function FittsTask({
           modalityConfig.dwellTime
         )
         
-        // Debug: log hover state changes and progress
-        if (isHovering !== prev.isHovering || (isHovering && newState.dwellProgress > 0 && Math.abs(newState.dwellProgress - prev.dwellProgress) > 0.1)) {
-          console.log('[FittsTask] Hover update:', {
-            isHovering,
-            wasHovering: prev.isHovering,
-            dwellProgress: newState.dwellProgress.toFixed(3),
-            dwellTime: modalityConfig.dwellTime,
-            hoverStartTime: newState.hoverStartTime,
-            currentPos: currentMousePos,
-            targetPos,
-            effectiveWidth,
-            targetRadius,
-            dwellTolerance: DWELL_TOLERANCE_PX,
-            effectiveRadius: targetRadius + DWELL_TOLERANCE_PX,
-            distance: distance.toFixed(1),
-            insideTarget: isHovering
-          })
-        }
-        
         // Check if selection is complete (dwell-based)
         // Only auto-select if dwellTime > 0 (dwell mode, not confirmation mode)
         if (
           modalityConfig.dwellTime > 0 &&
           isGazeSelectionComplete(newState, modalityConfig.dwellTime, false)
         ) {
-          console.log('[FittsTask] Dwell complete! Auto-selecting...', {
-            dwellProgress: newState.dwellProgress,
-            dwellTime: modalityConfig.dwellTime,
-            isHovering: newState.isHovering,
-            hoverStartTime: newState.hoverStartTime,
-            elapsed: newState.hoverStartTime ? currentTime - newState.hoverStartTime : 0
-          })
-          completeSelection(currentMousePos, false)
-          return prev // Don't update state, trial is ending
+          if (showStart) {
+            // Start button selected via dwell
+            console.log('[FittsTask] Start button selected via dwell!')
+            startTrial()
+            return prev // Don't update state, trial is starting
+          } else {
+            // Target selected via dwell
+            completeSelection(currentMousePos, false)
+            return prev // Don't update state, trial is ending
+          }
         }
         
         return newState
@@ -955,9 +1058,11 @@ export function FittsTask({
     modalityConfig.modality,
     modalityConfig.dwellTime,
     showStart,
+    startPos,
     targetPos,
     effectiveWidth,
     completeSelection,
+    startTrial,
   ])
 
   // Gaze mode: space key handler (for confirmation mode when dwellTime === 0)
@@ -979,37 +1084,50 @@ export function FittsTask({
           mousePos: mousePosRef.current
         })
         
-        // Only handle selection if in confirmation mode (dwellTime === 0) and trial is active
-        if (modalityConfig.dwellTime === 0 && !showStart && targetPos) {
-          // Use current mouse position for hit detection
+        // Handle selection if in confirmation mode (dwellTime === 0)
+        if (modalityConfig.dwellTime === 0) {
           const currentPos = mousePosRef.current
-          // Forgiving dwell: Use 10px tolerance for space key confirmation (same as dwell mode)
           const DWELL_TOLERANCE_PX = 10
-          const targetRadius = effectiveWidth / 2
-          const distance = Math.sqrt(
-            Math.pow(currentPos.x - targetPos.x, 2) + 
-            Math.pow(currentPos.y - targetPos.y, 2)
-          )
-          const isHovering = distance <= (targetRadius + DWELL_TOLERANCE_PX)
           
-          console.log('[FittsTask] Space key - checking hover', {
-            currentPos,
-            targetPos,
-            effectiveWidth,
-            isHovering,
-            gazeStateIsHovering: gazeState.isHovering
-          })
+          // Check if hovering over start button
+          if (showStart && startPos) {
+            const START_BUTTON_RADIUS = 60
+            const distance = Math.sqrt(
+              Math.pow(currentPos.x - startPos.x, 2) + 
+              Math.pow(currentPos.y - startPos.y, 2)
+            )
+            const isHoveringStart = distance <= (START_BUTTON_RADIUS + DWELL_TOLERANCE_PX)
+            
+            if (isHoveringStart || gazeState.isHovering) {
+              console.log('[FittsTask] Space key - starting trial')
+              startTrial()
+              return
+            }
+          }
           
-          // Check if hovering over target (use both state and real-time check)
-          if (isHovering || gazeState.isHovering) {
-            console.log('[FittsTask] Space key - selecting target')
-            completeSelection(currentPos, false)
-          } else {
-          // Premature confirmation (slip)
-          if (trialDataRef.current) {
+          // Check if hovering over target
+          if (!showStart && targetPos) {
+            const targetRadius = effectiveWidth / 2
+            const distance = Math.sqrt(
+              Math.pow(currentPos.x - targetPos.x, 2) + 
+              Math.pow(currentPos.y - targetPos.y, 2)
+            )
+            const isHovering = distance <= (targetRadius + DWELL_TOLERANCE_PX)
+            
+            // Check if hovering over target (use both state and real-time check)
+            if (isHovering || gazeState.isHovering) {
+              console.log('[FittsTask] Space key - selecting target')
+              completeSelection(currentPos, false)
+              return
+            }
+          }
+          
+          // Premature confirmation (slip) - only log if we have a target (not start button)
+          if (!showStart && targetPos && trialDataRef.current) {
             const trialData = trialDataRef.current
             const timestamp = performance.now()
             const metrics = getSpatialMetrics(cursorPos)
+            const avgFPS = calculateAverageFPS()
 
             bus.emit('trial:error', {
               trialId: trialData.trialId,
@@ -1044,9 +1162,11 @@ export function FittsTask({
               width_scale_factor: widthScale,
               confirm_type: getConfirmType(false),
               timestamp,
+              // Practice and FPS tracking
+              practice: isPractice,
+              avg_fps: avgFPS,
             })
             onTrialError('slip')
-          }
           }
         }
       }
@@ -1075,6 +1195,8 @@ export function FittsTask({
     getConfirmType,
     effectiveWidth,
     widthScale,
+    calculateAverageFPS,
+    isPractice,
   ])
 
   // Reset state when trial context changes (new trial starts)
@@ -1255,24 +1377,60 @@ export function FittsTask({
           </div>
         )}
         {showStart && (
-          <button
-            className="fitts-start-button"
-            style={{
-              left: `${startPos.x}px`,
-              top: `${startPos.y}px`,
-            }}
-            onPointerDown={(e) => {
-              e.stopPropagation() // CRITICAL: Stop the background from hearing this click
-              e.preventDefault() // Prevent text selection or other side effects
-              startTrial() // Start the trial immediately
-            }}
-            onMouseDown={(e) => {
-              // Also stop propagation on mousedown as a fallback
-              e.stopPropagation()
-            }}
-          >
-            START
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`fitts-start-button ${modalityConfig.modality === Modality.GAZE && gazeState.isHovering ? 'hovering' : ''}`}
+              style={{
+                left: `${startPos.x}px`,
+                top: `${startPos.y}px`,
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation() // CRITICAL: Stop the background from hearing this click
+                e.preventDefault() // Prevent text selection or other side effects
+                startTrial() // Start the trial immediately
+              }}
+              onMouseDown={(e) => {
+                // Also stop propagation on mousedown as a fallback
+                e.stopPropagation()
+              }}
+            >
+              START
+            </button>
+            {/* Gaze mode dwell progress for start button */}
+            {modalityConfig.modality === Modality.GAZE &&
+              modalityConfig.dwellTime > 0 &&
+              gazeState.isHovering && (
+                <div
+                  className="dwell-progress"
+                  style={{
+                    position: 'absolute',
+                    left: `${startPos.x - 60}px`,
+                    top: `${startPos.y - 60}px`,
+                    width: `${gazeState.dwellProgress * 120}px`,
+                    height: `${gazeState.dwellProgress * 120}px`,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 217, 255, 0.3)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+            {/* Gaze mode space confirmation indicator for start button */}
+            {modalityConfig.modality === Modality.GAZE &&
+              modalityConfig.dwellTime === 0 &&
+              gazeState.isHovering && (
+                <div
+                  className="space-indicator"
+                  style={{
+                    position: 'absolute',
+                    left: `${startPos.x}px`,
+                    top: `${startPos.y - 80}px`,
+                    transform: 'translateX(-50%)',
+                  }}
+                >
+                  Press SPACE
+                </div>
+              )}
+          </div>
         )}
         
         {!showStart && targetPos && (
