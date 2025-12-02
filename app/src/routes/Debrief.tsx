@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getLogger } from '../lib/csv'
 import './Debrief.css'
@@ -6,6 +7,11 @@ export default function Debrief() {
   const [searchParams] = useSearchParams()
   const participantId = searchParams.get('pid') || 'Unknown'
   const sessionNum = searchParams.get('session') || '1'
+  
+  // Strategy questions state
+  const [q1, setQ1] = useState('')
+  const [q2, setQ2] = useState('')
+  const [questionsSubmitted, setQuestionsSubmitted] = useState(false)
   
   const handleDownload = () => {
     const logger = getLogger()
@@ -16,6 +22,28 @@ export default function Debrief() {
     setTimeout(() => {
       logger.downloadBlockCSV(`blocks_${participantId}_session${sessionNum}_${timestamp}.csv`)
     }, 500)
+  }
+  
+  const handleSubmitQuestions = () => {
+    if (!q1.trim() || !q2.trim()) {
+      alert('Please answer both questions before submitting.')
+      return
+    }
+    
+    // Store qualitative responses in sessionStorage for potential export
+    const responses = {
+      participantId,
+      sessionNum,
+      timestamp: new Date().toISOString(),
+      q1_adaptation_noticed: q1.trim(),
+      q2_strategy_changed: q2.trim(),
+    }
+    
+    sessionStorage.setItem('debrief_responses', JSON.stringify(responses))
+    setQuestionsSubmitted(true)
+    
+    // Log to console for debugging (could also add to CSV if needed)
+    console.log('Debrief responses:', responses)
   }
 
   return (
@@ -59,6 +87,56 @@ export default function Debrief() {
           </p>
         </section>
 
+        <section className="debrief-section debrief-questions">
+          <h2 className="section-title">Your Experience (Optional but helpful)</h2>
+          <p className="section-text">
+            To better understand how the adaptive interface worked for you, please share your thoughts:
+          </p>
+          
+          {!questionsSubmitted ? (
+            <>
+              <div className="question-group">
+                <label htmlFor="q1" className="question-label">
+                  1. Did you notice the interface changing during the task? If so, how?
+                </label>
+                <textarea
+                  id="q1"
+                  value={q1}
+                  onChange={(e) => setQ1(e.target.value)}
+                  className="question-textarea"
+                  placeholder="e.g., 'I noticed the targets getting bigger when I made mistakes...'"
+                  rows={4}
+                />
+              </div>
+              
+              <div className="question-group">
+                <label htmlFor="q2" className="question-label">
+                  2. Did you change your strategy when the targets became easier or harder?
+                </label>
+                <textarea
+                  id="q2"
+                  value={q2}
+                  onChange={(e) => setQ2(e.target.value)}
+                  className="question-textarea"
+                  placeholder="e.g., 'When targets got bigger, I tried to go faster...'"
+                  rows={4}
+                />
+              </div>
+              
+              <button 
+                onClick={handleSubmitQuestions}
+                className="submit-questions-button"
+              >
+                Submit Responses
+              </button>
+            </>
+          ) : (
+            <div className="questions-submitted">
+              <p>✓ Thank you for your responses!</p>
+            </div>
+          )}
+        </section>
+
         <section className="debrief-download-section">
           <h2 className="download-title">📥 Final Step: Save Your Data</h2>
           <p className="download-text">
@@ -91,10 +169,10 @@ export default function Debrief() {
         </section>
 
         <section className="debrief-footer">
-          <p><strong>Principal Investigator:</strong> [Your Name]</p>
-          <p><strong>Contact:</strong> [Your Email]</p>
+          <p><strong>Principal Investigator:</strong> Mohammad Dastgheib</p>
+          <p><strong>Contact:</strong> m.dastgheib@gmail.com</p>
           <p className="footer-note">
-            If you have questions about your rights as a participant, you may contact the [Institution] IRB.
+            If you have questions about your rights as a participant, you may contact me at mdastgheib.com.
           </p>
         </section>
       </div>
