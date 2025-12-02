@@ -7,6 +7,7 @@ interface SubmissionResult {
   success: boolean
   message?: string
   error?: string
+  autoDownloaded?: boolean // Indicates files were auto-downloaded instead of emailed
 }
 
 /**
@@ -89,10 +90,13 @@ export async function submitDataViaEmail(
     })
     
     if (totalSize > 50 * 1024) {
-      // Data too large for EmailJS - return error with suggestion
+      // Data too large for EmailJS - files will be auto-downloaded by caller
+      // Return special status so UI can handle gracefully
+      console.warn(`Data size (${sizeKB} KB) exceeds EmailJS limit (50 KB). EmailJS attachments not supported. Files will be downloaded automatically.`)
       return {
         success: false,
-        error: `Data size (${sizeKB} KB) exceeds EmailJS limit (50 KB). Please download the CSV files manually instead.`
+        error: `Data size (${sizeKB} KB) exceeds EmailJS limit (50 KB)`,
+        autoDownloaded: false // Caller will handle auto-download
       }
     }
     
@@ -116,8 +120,12 @@ export async function submitDataViaEmail(
     
     // Provide more helpful error messages
     let errorMessage = 'Email send failed'
+    let autoDownloaded = false
+    
     if (error?.status === 413) {
-      errorMessage = 'Data size exceeds EmailJS limit (50 KB). Please download the CSV files manually instead.'
+      errorMessage = `Data size exceeds EmailJS limit (50 KB). EmailJS free tier doesn't support file attachments - files will be downloaded automatically.`
+      autoDownloaded = false // Caller will handle auto-download
+      console.warn('EmailJS 413 error: Data too large. Files will be auto-downloaded.')
     } else if (error?.status) {
       errorMessage = `EmailJS error ${error.status}: ${error.text || error.message || 'Unknown error'}`
     } else if (error?.message) {
@@ -126,7 +134,8 @@ export async function submitDataViaEmail(
     
     return {
       success: false,
-      error: errorMessage
+      error: errorMessage,
+      autoDownloaded
     }
   }
 }

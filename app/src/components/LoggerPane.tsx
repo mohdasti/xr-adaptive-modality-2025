@@ -272,18 +272,36 @@ export function LoggerPane() {
       } else {
         // If submission failed (e.g., size limit), automatically trigger downloads
         const errorMsg = result.error || 'Submission failed'
-        setSubmitStatus(`⚠️ ${errorMsg} Automatically downloading files...`)
+        const isSizeLimit = errorMsg.includes('exceeds EmailJS limit') || errorMsg.includes('50 KB')
         
-        // Automatically download both CSVs as fallback
-        setTimeout(() => {
-          logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
-          if (blockData) {
-            logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
-          }
-          setSubmitStatus(`⚠️ ${errorMsg} Files have been downloaded automatically.`)
-        }, 500)
-        
-        throw new Error(errorMsg)
+        if (isSizeLimit) {
+          // Size limit exceeded - EmailJS free tier doesn't support attachments
+          setSubmitStatus(`ℹ️ Data size exceeds email limit (50KB). Automatically downloading files...`)
+          
+          // Automatically download both CSVs immediately
+          setTimeout(() => {
+            logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
+            if (blockData) {
+              setTimeout(() => {
+                logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
+              }, 300)
+            }
+            setSubmitStatus(`✅ Files downloaded automatically! Note: EmailJS free tier doesn't support attachments for large files. Your CSV files have been saved to your Downloads folder.`)
+          }, 300)
+        } else {
+          // Other error - still auto-download as backup
+          setSubmitStatus(`⚠️ ${errorMsg} Automatically downloading files as backup...`)
+          
+          setTimeout(() => {
+            logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
+            if (blockData) {
+              setTimeout(() => {
+                logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
+              }, 300)
+            }
+            setSubmitStatus(`⚠️ ${errorMsg} Files have been downloaded automatically.`)
+          }, 500)
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'

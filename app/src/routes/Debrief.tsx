@@ -83,7 +83,26 @@ export default function Debrief() {
         if (result.success) {
           setEmailStatus('✅ Your data has been automatically sent to the researcher!')
         } else {
-          setEmailStatus(`⚠️ Automatic submission failed: ${result.error || 'Unknown error'}. Please use the download button below.`)
+          const errorMsg = result.error || 'Unknown error'
+          const isSizeLimit = errorMsg.includes('exceeds EmailJS limit') || errorMsg.includes('50 KB')
+          
+          if (isSizeLimit) {
+            // Size limit - auto-download files
+            setEmailStatus('ℹ️ Data size exceeds email limit (50KB). Automatically downloading files...')
+            
+            setTimeout(() => {
+              const logger = getLogger()
+              logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
+              if (blockData) {
+                setTimeout(() => {
+                  logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
+                }, 300)
+              }
+              setEmailStatus('✅ Files downloaded automatically! Note: EmailJS free tier doesn\'t support attachments for large files. Your CSV files have been saved to your Downloads folder.')
+            }, 300)
+          } else {
+            setEmailStatus(`⚠️ Automatic submission failed: ${errorMsg}. Please use the download button below.`)
+          }
         }
       } catch (error) {
         console.error('[Debrief] Auto-submission error:', error)
@@ -146,7 +165,26 @@ export default function Debrief() {
         if (result.success) {
           setEmailStatus('✅ Your complete data has been sent to the researcher!')
         } else {
-          setEmailStatus(`⚠️ Submission failed: ${result.error || 'Unknown error'}. Please use the download button below.`)
+          const errorMsg = result.error || 'Unknown error'
+          const isSizeLimit = errorMsg.includes('exceeds EmailJS limit') || errorMsg.includes('50 KB')
+          
+          if (isSizeLimit) {
+            // Size limit - auto-download files
+            setEmailStatus('ℹ️ Data size exceeds email limit (50KB). Automatically downloading files...')
+            
+            setTimeout(() => {
+              const logger = getLogger()
+              logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
+              if (blockData) {
+                setTimeout(() => {
+                  logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
+                }, 300)
+              }
+              setEmailStatus('✅ Files downloaded automatically! Note: EmailJS free tier doesn\'t support attachments for large files. Your CSV files have been saved to your Downloads folder.')
+            }, 300)
+          } else {
+            setEmailStatus(`⚠️ Submission failed: ${errorMsg}. Please use the download button below.`)
+          }
         }
       } else {
         setEmailStatus('ℹ️ Email not configured. Please use the download button to save your data.')
