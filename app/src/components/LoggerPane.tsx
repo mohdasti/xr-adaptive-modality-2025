@@ -241,6 +241,9 @@ export function LoggerPane() {
     const csvData = logger.toCSV()
     const blockData = logger.getBlockRowCount() > 0 ? logger.toBlockCSV() : null
     
+    // Include session info in participant ID for email filename (define before try block for error handling)
+    const sessionParticipantId = `${participantId}_session${sessionNum}`
+    
     setSubmitting(true)
     setSubmitStatus(`Submitting Session ${sessionNum} data...`)
     
@@ -248,9 +251,6 @@ export function LoggerPane() {
       const submissionMethod = getAvailableSubmissionMethod()
       
       let result: { success: boolean; message?: string; error?: string }
-      
-      // Include session info in participant ID for email filename
-      const sessionParticipantId = `${participantId}_session${sessionNum}`
       
       if (submissionMethod === 'email') {
         result = await submitDataViaEmail(csvData, blockData, sessionParticipantId)

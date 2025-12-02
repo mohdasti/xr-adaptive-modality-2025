@@ -1431,7 +1431,7 @@ export function FittsTask({
           />
         )}
         {/* Error Rate Feedback Overlay - Prominent on canvas */}
-        {errorRateFeedback && errorRateFeedback.message && !showStart && (
+        {errorRateFeedback && errorRateFeedback.message && errorRateFeedback.color && !showStart && (
           <div
             style={{
               position: 'absolute',
@@ -1456,7 +1456,7 @@ export function FittsTask({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.8rem' }}>{errorRateFeedback.icon}</span>
+              <span style={{ fontSize: '1.8rem' }}>{errorRateFeedback.icon || '•'}</span>
               <span>{errorRateFeedback.message}</span>
             </div>
             <div style={{ 
