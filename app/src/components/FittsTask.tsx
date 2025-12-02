@@ -1430,12 +1430,12 @@ export function FittsTask({
             title={`Gaze cursor: (${cursorPos.x.toFixed(0)}, ${cursorPos.y.toFixed(0)})`}
           />
         )}
-        {/* Error Rate Feedback Overlay - Prominent on canvas */}
-        {errorRateFeedback && errorRateFeedback.message && errorRateFeedback.color && !showStart && (
+        {/* Error Rate Feedback Overlay - Prominent on canvas, but only between trials (when START is visible) */}
+        {errorRateFeedback && errorRateFeedback.message && errorRateFeedback.color && showStart && (
           <div
             style={{
               position: 'absolute',
-              top: '20px',
+              top: '20px', // Near top-left, but only when no target is present
               left: '20px',
               padding: '1rem 1.5rem',
               borderRadius: '8px',
