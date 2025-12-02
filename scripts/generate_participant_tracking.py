@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Generate participant tracking spreadsheet for multi-session study
+Generate participant tracking spreadsheet for single-session study
 
 This script creates a CSV file that tracks:
 - Participant ID
-- Session number
-- Block number and condition
+- Session number (always 1 for single-session design)
+- Block number and condition (all 8 blocks in one session)
 - Completion status
 - Data file names
 
 Usage:
-    python scripts/generate_participant_tracking.py --participants 25 --sessions 3 --output participant_tracking.csv
+    python scripts/generate_participant_tracking.py --participants 25 --output participant_tracking.csv
 """
 
 import argparse
@@ -36,12 +36,12 @@ def get_sequence_for_participant(participant_index: int) -> List[str]:
     return WILLIAMS_SEQUENCES[sequence_index]
 
 def generate_tracking_data(
-    num_participants: int,
-    num_sessions: int,
-    blocks_per_session: int = None
+    num_participants: int
 ) -> List[Tuple[str, int, int, str]]:
     """
-    Generate tracking data for all participants
+    Generate tracking data for all participants in single-session design
+    
+    All 8 blocks are assigned to session_number = 1 for environmental consistency.
     
     Returns list of (participant_id, session_number, block_number, block_condition)
     """
@@ -51,34 +51,16 @@ def generate_tracking_data(
         participant_id = f"P{participant_idx + 1:03d}"  # P001, P002, etc.
         sequence = get_sequence_for_participant(participant_idx)
         
-        # Determine blocks per session
-        total_blocks = len(sequence)  # 8 blocks total
-        if blocks_per_session is None:
-            # Distribute blocks evenly across sessions
-            blocks_per_session = total_blocks // num_sessions
-            if total_blocks % num_sessions != 0:
-                blocks_per_session += 1
+        # Assign all 8 blocks to session_number = 1
+        session_number = 1
         
-        block_counter = 0
-        for session_num in range(1, num_sessions + 1):
-            for block_in_session in range(1, blocks_per_session + 1):
-                if block_counter >= total_blocks:
-                    break
-                
-                block_number = block_counter + 1
-                block_condition = sequence[block_counter]
-                
-                data.append((
-                    participant_id,
-                    session_num,
-                    block_number,
-                    block_condition
-                ))
-                
-                block_counter += 1
-            
-            if block_counter >= total_blocks:
-                break
+        for block_counter, block_condition in enumerate(sequence, start=1):
+            data.append((
+                participant_id,
+                session_number,
+                block_counter,
+                block_condition
+            ))
     
     return data
 
@@ -105,25 +87,13 @@ def write_tracking_csv(data: List[Tuple], output_file: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate participant tracking spreadsheet'
+        description='Generate participant tracking spreadsheet for single-session study'
     )
     parser.add_argument(
         '--participants',
         type=int,
         default=25,
         help='Number of participants (default: 25)'
-    )
-    parser.add_argument(
-        '--sessions',
-        type=int,
-        default=3,
-        help='Number of sessions per participant (default: 3)'
-    )
-    parser.add_argument(
-        '--blocks-per-session',
-        type=int,
-        default=None,
-        help='Blocks per session (default: distribute evenly)'
     )
     parser.add_argument(
         '--output',
@@ -135,14 +105,10 @@ def main():
     args = parser.parse_args()
     
     print(f"Generating tracking data for {args.participants} participants...")
-    print(f"  Sessions per participant: {args.sessions}")
-    print(f"  Total blocks: 8 (Williams design)")
+    print(f"  Design: Single session (all 8 blocks in session 1)")
+    print(f"  Total blocks per participant: 8 (Williams design)")
     
-    data = generate_tracking_data(
-        args.participants,
-        args.sessions,
-        args.blocks_per_session
-    )
+    data = generate_tracking_data(args.participants)
     
     write_tracking_csv(data, args.output)
     
@@ -155,4 +121,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
