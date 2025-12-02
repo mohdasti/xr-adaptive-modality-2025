@@ -103,6 +103,12 @@ export function FittsTask({
   const [isPaused, setIsPaused] = useState(false)
   const [pauseReason, setPauseReason] = useState<string>('')
   
+  // Calibration data (declared early for use in callbacks)
+  const [calibrationData, setCalibrationData] = useState<{
+    pixelsPerMM: number
+    pixelsPerDegree: number
+  } | null>(null)
+  
   // Alignment gate state (P1 experimental feature)
   const alignmentGateEnabled = isAlignmentGateEnabled()
   const [pointerDown, setPointerDown] = useState(false)
@@ -941,12 +947,7 @@ export function FittsTask({
   // Raw mouse position (for gaze simulation input)
   const [rawMousePosition, setRawMousePosition] = useState<Position | null>(null)
   
-  // Load calibration data for normalized jitter
-  const [calibrationData, setCalibrationData] = useState<{
-    pixelsPerMM: number
-    pixelsPerDegree: number
-  } | null>(null)
-  
+  // Load calibration data from sessionStorage (state declared earlier)
   useEffect(() => {
     try {
       const calibrationStr = sessionStorage.getItem('calibration')
