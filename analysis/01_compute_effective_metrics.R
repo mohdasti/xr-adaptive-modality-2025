@@ -21,17 +21,24 @@ if (!"error" %in% names(trial)) {
 }
 
 rt <- trial %>%
-  filter(error == 0, movement_time_ms >= 150, movement_time_ms <= 5000, !is.na(endpoint_error_px)) %>%
+  filter(error == 0, movement_time_ms >= 150, movement_time_ms <= 5000, !is.na(projected_error_px)) %>%
   mutate(
     participant_id = factor(participant_id),
     modality = factor(modality, levels = c("hand","gaze")),
     ui_mode = factor(ui_mode, levels = c("static","adaptive"))
   )
 
+# ISO 9241-9 Compliant Effective Width Calculation
+# Uses projected error (distance along task axis) instead of radial error
+# This ensures valid throughput comparisons across conditions
 effective <- rt %>%
   group_by(participant_id, modality, ui_mode, target_distance_A) %>%
   summarise(
-    We = 4.133 * sd(endpoint_error_px, na.rm = TRUE),
+    # USE PROJECTED ERROR (ISO 9241-9 COMPLIANT)
+    # Projected error is the component of selection error along the movement axis
+    # This is the standard metric for calculating effective width (We)
+    We = 4.133 * sd(projected_error_px, na.rm = TRUE),
+    # Calculate IDe using Effective Width
     IDe = log2(target_distance_A / We + 1),
     mean_MT = mean(movement_time_ms, na.rm = TRUE),
     throughput = IDe / (mean_MT / 1000),
