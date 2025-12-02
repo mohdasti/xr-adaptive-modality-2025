@@ -5,6 +5,7 @@ import SystemCheck from './routes/SystemCheck'
 import Calibration from './routes/Calibration'
 import CameraCheck from './routes/CameraCheck'
 import Task from './routes/Task'
+import Debrief from './routes/Debrief'
 import './App.css'
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
       <Route path="/calibration" element={<Calibration />} />
       <Route path="/camera-check" element={<CameraCheck />} />
       <Route path="/task" element={<Task />} />
+      <Route path="/debrief" element={<Debrief />} />
       <Route path="/" element={<Navigate to="/intro" replace />} />
     </Routes>
   )

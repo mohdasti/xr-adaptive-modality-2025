@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { bus } from '../lib/bus'
 import {
   FittsConfig,
@@ -34,6 +35,9 @@ type TaskMode = 'manual' | 'fitts'
 const SHOW_DEV_MODE = import.meta.env.DEV || import.meta.env.MODE === 'development'
 
 export function TaskPane() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  
   // Manual mode state (dev only)
   const [trialId, setTrialId] = useState('')
   const [policy, setPolicy] = useState('default')
@@ -588,7 +592,7 @@ export function TaskPane() {
     setCurrentTrialIndex(0)
     setTrialSequence([])
     
-    // Move to next block, but don't exceed total blocks
+    // Move to next block, or navigate to debrief if all blocks complete
     if (blockSequence.length > 0 && blockNumber < blockSequence.length) {
       const nextBlock = blockNumber + 1
       setBlockNumber(nextBlock)
@@ -599,6 +603,12 @@ export function TaskPane() {
         const progress = getSessionProgress(participantId, blockSequence.length)
         setSessionProgress(progress)
       }
+    } else if (blockSequence.length > 0 && blockNumber >= blockSequence.length) {
+      // All blocks complete - navigate to debrief
+      const pid = participantId || searchParams.get('pid')
+      const session = searchParams.get('session') || '1'
+      navigate(`/debrief?pid=${pid}&session=${session}`)
+      return
     }
     
     setActiveBlockContext(null)
@@ -621,6 +631,12 @@ export function TaskPane() {
         const progress = getSessionProgress(participantId, blockSequence.length)
         setSessionProgress(progress)
       }
+    } else if (blockSequence.length > 0 && blockNumber >= blockSequence.length) {
+      // All blocks complete - navigate to debrief
+      const pid = participantId || searchParams.get('pid')
+      const session = searchParams.get('session') || '1'
+      navigate(`/debrief?pid=${pid}&session=${session}`)
+      return
     }
     
     setActiveBlockContext(null)
