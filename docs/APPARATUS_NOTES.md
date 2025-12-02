@@ -57,3 +57,4 @@ Screen calibration (Credit Card Calibration step) normalizes all gaze simulation
 
 10 practice trials per modality (Hand + Gaze = 20 total) run before the main experiment to eliminate learning effects from contaminating Block 1 data.
 
+

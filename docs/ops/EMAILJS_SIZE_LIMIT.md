@@ -128,3 +128,4 @@ A: Yes, but it requires a server endpoint (`VITE_API_URL`). See the "Alternative
 - [EmailJS API Documentation](https://www.emailjs.com/docs/)
 - EmailJS Free Tier Limits: 50KB total variables size
 
+

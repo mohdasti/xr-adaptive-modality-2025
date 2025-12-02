@@ -128,3 +128,4 @@ The code sends these variables to EmailJS:
 - `debrief_responses` - JSON string with strategy question responses (optional)
 - `message` - Detailed instructions (can be removed if using template above)
 
+

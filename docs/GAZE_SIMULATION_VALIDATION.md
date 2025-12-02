@@ -95,3 +95,4 @@ Target sizes range from ~10px to ~100px, with Index of Difficulty (ID) values fr
 
 **Please provide a detailed analysis comparing our parameters to real eye tracking systems and physiological data, and recommend any adjustments if needed.**
 
+

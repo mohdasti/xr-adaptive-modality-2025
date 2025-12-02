@@ -138,3 +138,4 @@ export function clearSessionData(participantId: string): void {
   localStorage.removeItem(key)
 }
 
+
