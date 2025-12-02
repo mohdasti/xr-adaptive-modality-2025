@@ -372,7 +372,7 @@ export function LoggerPane() {
                 className="submit-btn"
                 title="Submit all data from current session (recommended: use at end of session)"
               >
-                {submitting ? '⏳ Submitting...' : `📤 End Session ${sessionInfo?.sessionNumber || ''}`}
+                {submitting ? '⏳ Submitting...' : '📤 End Session'}
               </button>
             )}
             <button onClick={handleDownloadCSV} className="download-btn" title="Download your data as backup">
