@@ -147,6 +147,15 @@ export interface EventPayloads {
     block_order?: string
     timestamp: number
   }
+  'error-rate:update': {
+    message: string | null
+    color: string | null
+    icon: string | null
+    errorRate: number | null
+    blockErrors: number | null
+    totalBlockTrials: number | null
+    timestamp: number
+  }
   'modality:change': {
     config: {
       modality: string

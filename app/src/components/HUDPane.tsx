@@ -285,6 +285,32 @@ export function HUDPane() {
   }
   
   const errorFeedback = getErrorRateFeedback()
+  
+  // Emit error rate feedback to FittsTask for canvas overlay display
+  useEffect(() => {
+    if (errorFeedback && totalBlockTrials >= 3) {
+      bus.emit('error-rate:update', {
+        message: errorFeedback.message,
+        color: errorFeedback.color,
+        icon: errorFeedback.icon,
+        errorRate: errorRatePercent,
+        blockErrors,
+        totalBlockTrials,
+        timestamp: Date.now(),
+      })
+    } else {
+      // Clear error rate overlay when not applicable
+      bus.emit('error-rate:update', {
+        message: null,
+        color: null,
+        icon: null,
+        errorRate: null,
+        blockErrors: null,
+        totalBlockTrials: null,
+        timestamp: Date.now(),
+      })
+    }
+  }, [errorFeedback, errorRatePercent, blockErrors, totalBlockTrials])
 
   return (
     <div className={`pane hud-pane ${policyState.action === 'declutter' ? 'decluttered' : ''}`}>
@@ -301,30 +327,7 @@ export function HUDPane() {
         </div>
       )}
       
-      {/* ISO 9241-9 Error Rate Feedback */}
-      {errorFeedback && totalBlockTrials >= 3 && (
-        <div 
-          className="error-rate-feedback"
-          style={{
-            padding: '0.75rem 1rem',
-            borderRadius: '6px',
-            border: `2px solid ${errorFeedback.color}`,
-            backgroundColor: `${errorFeedback.color}15`, // 15 hex = ~8% opacity
-            marginBottom: '1rem',
-            fontWeight: '600',
-            color: errorFeedback.color,
-            textAlign: 'center',
-          }}
-        >
-          <span style={{ fontSize: '1.2rem', marginRight: '0.5rem' }}>
-            {errorFeedback.icon}
-          </span>
-          <span>{errorFeedback.message}</span>
-          <div style={{ fontSize: '0.875rem', marginTop: '0.25rem', fontWeight: '400', opacity: 0.8 }}>
-            ({blockErrors} errors / {totalBlockTrials} trials = {errorRatePercent.toFixed(1)}%)
-          </div>
-        </div>
-      )}
+      {/* ISO 9241-9 Error Rate Feedback - Removed from HUD, now displayed on canvas overlay */}
       
       {/* Contextual Factors - Only show in dev mode */}
       {SHOW_DEV_MODE && (
@@ -440,37 +443,63 @@ export function HUDPane() {
         </div>
       )}
       
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-label">Total Trials</div>
-          <div className="stat-value">{stats.totalTrials}</div>
+      {/* Collapsible Stats Section - Less prominent for participants */}
+      {SHOW_DEV_MODE && (
+        <>
+          <details className="stats-details" style={{ marginTop: '1rem' }}>
+            <summary style={{ 
+              cursor: 'pointer', 
+              padding: '0.5rem', 
+              backgroundColor: '#2a2a2a', 
+              borderRadius: '4px',
+              fontSize: '0.875rem',
+              color: '#b0b0b0'
+            }}>
+              <strong>System Stats</strong> (Dev Only - Click to expand)
+            </summary>
+            <div className="stats-grid" style={{ marginTop: '0.5rem' }}>
+              <div className="stat-card">
+                <div className="stat-label">Total Trials</div>
+                <div className="stat-value">{stats.totalTrials}</div>
+              </div>
+              
+              <div className="stat-card">
+                <div className="stat-label">Active Trials</div>
+                <div className="stat-value active">{stats.activeTrials}</div>
+              </div>
+              
+              <div className="stat-card">
+                <div className="stat-label">Errors</div>
+                <div className="stat-value error">{stats.errors}</div>
+              </div>
+              
+              <div className="stat-card wide">
+                <div className="stat-label">Current Policy</div>
+                <div className="stat-value policy">{stats.currentPolicy}</div>
+              </div>
+              
+              <div className="stat-card wide noncritical">
+                <div className="stat-label">Last Event</div>
+                <div className="stat-value time">{stats.lastEventTime}</div>
+              </div>
+            </div>
+          </details>
+          <div className="status-indicator noncritical" style={{ marginTop: '0.5rem' }}>
+            <span className="indicator-dot"></span>
+            System Active
+          </div>
+        </>
+      )}
+      
+      {/* Minimal stats for production - only show errors */}
+      {!SHOW_DEV_MODE && (
+        <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#2a2a2a', borderRadius: '4px' }}>
+          <div style={{ fontSize: '0.875rem', color: '#b0b0b0', marginBottom: '0.25rem' }}>Block Errors</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: '600', color: stats.errors > 0 ? '#dc3545' : '#28a745' }}>
+            {stats.errors}
+          </div>
         </div>
-        
-        <div className="stat-card">
-          <div className="stat-label">Active Trials</div>
-          <div className="stat-value active">{stats.activeTrials}</div>
-        </div>
-        
-        <div className="stat-card">
-          <div className="stat-label">Errors</div>
-          <div className="stat-value error">{stats.errors}</div>
-        </div>
-        
-        <div className="stat-card wide">
-          <div className="stat-label">Current Policy</div>
-          <div className="stat-value policy">{stats.currentPolicy}</div>
-        </div>
-        
-        <div className="stat-card wide noncritical">
-          <div className="stat-label">Last Event</div>
-          <div className="stat-value time">{stats.lastEventTime}</div>
-        </div>
-      </div>
-
-      <div className="status-indicator noncritical">
-        <span className="indicator-dot"></span>
-        System Active
-      </div>
+      )}
     </div>
   )
 }

@@ -75,14 +75,17 @@ export function FittsTask({
   // Suppress unused warning for future use
   void cameraEnabled
   
-  // Debug: log modality config changes
+  // Debug: log modality config and pressure changes
   useEffect(() => {
-    console.log('[FittsTask] Modality config:', {
+    console.log('[FittsTask] Component props:', {
       modality: modalityConfig.modality,
       dwellTime: modalityConfig.dwellTime,
       isGaze: modalityConfig.modality === Modality.GAZE,
+      pressureEnabled,
+      agingEnabled,
+      timeout,
     })
-  }, [modalityConfig.modality, modalityConfig.dwellTime])
+  }, [modalityConfig.modality, modalityConfig.dwellTime, pressureEnabled, agingEnabled, timeout])
   
   // Apply width scaling
   const effectiveWidth = config.W * widthScale
@@ -99,6 +102,16 @@ export function FittsTask({
   const [countdown, setCountdown] = useState<number>(timeout / 1000)
   const [isPaused, setIsPaused] = useState(false)
   const [pauseReason, setPauseReason] = useState<string>('')
+  
+  // Error rate feedback from HUD (for canvas overlay)
+  const [errorRateFeedback, setErrorRateFeedback] = useState<{
+    message: string | null
+    color: string | null
+    icon: string | null
+    errorRate: number | null
+    blockErrors: number | null
+    totalBlockTrials: number | null
+  } | null>(null)
   
   // Alignment gate state (P1 experimental feature)
   const alignmentGateEnabled = isAlignmentGateEnabled()
@@ -1234,24 +1247,80 @@ export function FittsTask({
       console.log('[FittsTask] Reset gaze cursor for start state - waiting for mouse movement')
     }
   }, [showStart, modalityConfig.modality])
-
+  
+  // Listen for error rate feedback updates from HUD
+  useEffect(() => {
+    const handleErrorRateUpdate = (payload: {
+      message: string | null
+      color: string | null
+      icon: string | null
+      errorRate: number | null
+      blockErrors: number | null
+      totalBlockTrials: number | null
+    }) => {
+      if (payload.message) {
+        setErrorRateFeedback({
+          message: payload.message,
+          color: payload.color || '#ffc107',
+          icon: payload.icon || '•',
+          errorRate: payload.errorRate || 0,
+          blockErrors: payload.blockErrors || 0,
+          totalBlockTrials: payload.totalBlockTrials || 0,
+        })
+      } else {
+        setErrorRateFeedback(null)
+      }
+    }
+    
+    const unsubscribe = bus.on('error-rate:update', handleErrorRateUpdate)
+    return () => unsubscribe()
+  }, [])
+  
   // Countdown timer for pressure mode
   useEffect(() => {
-    if (!pressureEnabled || showStart || !targetPos) return
+    const shouldStart = pressureEnabled && !showStart && !!targetPos
+    console.log('[FittsTask] Timer useEffect check:', {
+      pressureEnabled,
+      showStart,
+      hasTargetPos: !!targetPos,
+      currentCountdown: countdown,
+      timeoutSeconds: timeout / 1000,
+      shouldStart,
+    })
+    
+    if (!shouldStart) {
+      console.log('[FittsTask] Timer NOT starting:', {
+        reason: !pressureEnabled ? 'pressure not enabled' : showStart ? 'start button visible' : 'no target',
+      })
+      return
+    }
+    
+    // Reset countdown to timeout value when timer starts
+    const initialCountdown = timeout / 1000
+    console.log('[FittsTask] Timer STARTING - resetting countdown to:', initialCountdown, 'seconds')
+    setCountdown(initialCountdown)
     
     const interval = setInterval(() => {
       setCountdown((prev) => {
-        const next = prev - 0.1
+        const next = Math.max(0, prev - 0.1)
         if (next <= 0) {
           clearInterval(interval)
+          console.log('[FittsTask] Timer reached 0 - timeout triggered')
+          // Trigger timeout handler if trial is still active
+          if (trialDataRef.current && trialStartTime) {
+            handleTimeout()
+          }
           return 0
         }
         return next
       })
     }, 100)
     
-    return () => clearInterval(interval)
-  }, [pressureEnabled, showStart, targetPos])
+    return () => {
+      clearInterval(interval)
+      console.log('[FittsTask] Timer interval cleared')
+    }
+  }, [pressureEnabled, showStart, targetPos, timeout, handleTimeout])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1361,26 +1430,80 @@ export function FittsTask({
             title={`Gaze cursor: (${cursorPos.x.toFixed(0)}, ${cursorPos.y.toFixed(0)})`}
           />
         )}
+        {/* Error Rate Feedback Overlay - Prominent on canvas */}
+        {errorRateFeedback && errorRateFeedback.message && !showStart && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '20px',
+              left: '20px',
+              padding: '1rem 1.5rem',
+              borderRadius: '8px',
+              border: `3px solid ${errorRateFeedback.color}`,
+              backgroundColor: `${errorRateFeedback.color}20`, // 20 hex = ~12% opacity
+              color: errorRateFeedback.color,
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              boxShadow: `0 0 20px ${errorRateFeedback.color}80`,
+              zIndex: 1000,
+              pointerEvents: 'none',
+              minWidth: '280px',
+              textAlign: 'center',
+              animation: errorRateFeedback.errorRate && errorRateFeedback.errorRate > 10 
+                ? 'error-pulse 1s ease-in-out infinite' 
+                : 'none',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.8rem' }}>{errorRateFeedback.icon}</span>
+              <span>{errorRateFeedback.message}</span>
+            </div>
+            <div style={{ 
+              fontSize: '0.875rem', 
+              marginTop: '0.5rem', 
+              fontWeight: '400', 
+              opacity: 0.9,
+              color: errorRateFeedback.color 
+            }}>
+              {errorRateFeedback.blockErrors} errors / {errorRateFeedback.totalBlockTrials} trials = {errorRateFeedback.errorRate?.toFixed(1)}%
+            </div>
+          </div>
+        )}
+        
         {/* Countdown overlay for pressure mode */}
         {pressureEnabled && !showStart && targetPos && (
           <div 
             className={`countdown-overlay ${countdown <= 3 ? 'warning' : countdown <= 6 ? 'urgent' : ''}`}
             style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              padding: '1rem 1.5rem',
               background: countdown <= 3 
                 ? 'rgba(255, 68, 68, 0.95)' 
                 : countdown <= 6 
                   ? 'rgba(255, 140, 0, 0.95)'
                   : 'rgba(255, 204, 0, 0.95)',
+              color: '#000',
+              fontSize: '2rem',
+              fontWeight: 700,
+              fontFamily: 'Courier New, monospace',
+              borderRadius: '8px',
               boxShadow: countdown <= 3
                 ? '0 0 25px rgba(255, 68, 68, 0.9)'
                 : countdown <= 6
                   ? '0 0 22px rgba(255, 140, 0, 0.7)'
                   : '0 0 20px rgba(255, 204, 0, 0.6)',
-              borderColor: countdown <= 3
-                ? 'rgba(255, 0, 0, 1)'
+              border: countdown <= 3
+                ? '3px solid rgba(255, 0, 0, 1)'
                 : countdown <= 6
-                  ? 'rgba(255, 140, 0, 0.9)'
-                  : 'rgba(255, 170, 0, 0.8)',
+                  ? '3px solid rgba(255, 140, 0, 0.9)'
+                  : '2px solid rgba(255, 170, 0, 0.8)',
+              zIndex: 1000,
+              pointerEvents: 'none',
+              minWidth: '80px',
+              textAlign: 'center',
             }}
           >
             {countdown.toFixed(1)}s

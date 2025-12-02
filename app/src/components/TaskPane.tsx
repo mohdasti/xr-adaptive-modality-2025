@@ -359,19 +359,19 @@ export function TaskPane() {
     
     // Automatically set pressure and aging based on block condition
     // This ensures they are controlled by the experimental design, not manual toggles
-    if (pressureEnabled !== targetPressure) {
-      console.log('[TaskPane] Block forcing pressure change:', {
-        from: pressureEnabled,
-        to: targetPressure,
-        blockCondition: currentCond,
-      })
-      setPressureEnabled(targetPressure)
-      bus.emit('context:change', {
-        pressure: targetPressure,
-        aging: targetAging, // Will be set next
-        timestamp: Date.now(),
-      })
-    }
+    // Always set pressure even if it's the same, to ensure it's correctly initialized
+    console.log('[TaskPane] Setting pressure from block condition:', {
+      currentPressure: pressureEnabled,
+      targetPressure,
+      blockCondition: currentCond,
+      willSet: pressureEnabled !== targetPressure,
+    })
+    setPressureEnabled(targetPressure)
+    bus.emit('context:change', {
+      pressure: targetPressure,
+      aging: targetAging,
+      timestamp: Date.now(),
+    })
     
     if (agingEnabled !== targetAging) {
       console.log('[TaskPane] Block forcing aging change:', {

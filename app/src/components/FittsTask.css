@@ -290,33 +290,30 @@
   font-weight: 600;
 }
 
-/* Countdown overlay */
+/* Countdown overlay - colors controlled by inline styles in FittsTask.tsx */
 .countdown-overlay {
   position: absolute;
   top: 20px;
   right: 20px;
   padding: 1rem 1.5rem;
-  background: rgba(255, 204, 0, 0.95);
   color: #000;
   font-size: 2rem;
   font-weight: 700;
   font-family: 'Courier New', monospace;
   border-radius: 8px;
-  box-shadow: 0 0 20px rgba(255, 204, 0, 0.6);
-  z-index: 100;
-  pointer-events: none; /* Don't block mouse interactions */
-  animation: countdown-pulse 1s ease-in-out infinite;
-  border: 2px solid rgba(255, 170, 0, 0.8);
+  z-index: 1000;
+  pointer-events: none;
+  min-width: 80px;
+  text-align: center;
+  /* Background, box-shadow, border are set via inline styles to allow dynamic colors */
 }
 
 .countdown-overlay.urgent {
   animation: countdown-urgent 0.6s ease-in-out infinite;
-  border-width: 3px;
 }
 
 .countdown-overlay.warning {
   animation: countdown-warning 0.4s ease-in-out infinite;
-  border-width: 3px;
 }
 
 @keyframes countdown-urgent {
@@ -345,6 +342,17 @@
   50% {
     transform: scale(1.1);
     box-shadow: 0 0 30px rgba(255, 68, 68, 1);
+  }
+}
+
+@keyframes error-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(220, 53, 69, 0.6);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 30px rgba(220, 53, 69, 0.9);
   }
 }
 
