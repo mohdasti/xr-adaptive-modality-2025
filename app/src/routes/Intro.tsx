@@ -58,17 +58,8 @@ export default function Intro() {
         navigate(`/demographics${params ? `?${params}` : ''}`)
       }} />
 
-      <div className="mt-6 flex gap-3">
-        <button 
-          onClick={() => {
-            const params = searchParams.toString()
-            navigate(`/demographics${params ? `?${params}` : ''}`)
-          }}
-          className="px-4 py-2 rounded bg-black text-white"
-        >
-          Continue to Demographics
-        </button>
-        {import.meta.env.DEV && (
+      {import.meta.env.DEV && (
+        <div className="mt-6">
           <button 
             onClick={() => {
               const params = searchParams.toString()
@@ -78,8 +69,8 @@ export default function Intro() {
           >
             Skip to Task (Dev Only)
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
