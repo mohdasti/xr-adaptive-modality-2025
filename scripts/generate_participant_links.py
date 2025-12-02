@@ -56,8 +56,8 @@ def main():
     parser.add_argument(
         '--participants',
         type=int,
-        default=25,
-        help='Number of participants (default: 25)'
+        default=32,
+        help='Number of participants (default: 32 for perfect Williams Design balancing)'
     )
     parser.add_argument(
         '--output',

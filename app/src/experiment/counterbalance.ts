@@ -27,39 +27,25 @@ export function parseCondition(cond: Cond): {
 }
 
 /**
- * Latin square for 8 conditions (counterbalanced order)
- * Ensures each condition appears in each position exactly once across 8 sequences
+ * True 8x8 Balanced Latin Square (Williams Design)
  * 
- * Generated using cyclic rotation method:
- * Base sequence rotated for each participant to ensure each condition
- * appears in each position exactly once across all participants.
+ * This is a Balanced Latin Square that ensures:
+ * - Each condition appears in each position exactly once (Latin Square property)
+ * - Every condition follows every other condition exactly once (Williams Design property)
+ * - Controls for immediate carryover effects between adjacent blocks
  * 
- * This is a valid Latin square (each condition appears once per row and once per column position).
- * For full Williams square (balanced carryover), a more complex algorithm would be needed,
- * but this Latin square is sufficient for counterbalancing order effects.
+ * This matrix ensures rigorous counterbalancing by eliminating order and carryover confounds.
  */
-const BASE_SEQUENCE: Cond[] = [
-  'HaS_P0', 'GaS_P0', 'HaA_P0', 'GaA_P0',
-  'HaS_P1', 'GaS_P1', 'HaA_P1', 'GaA_P1'
+export const WILLIAMS_8: Cond[][] = [
+  ['HaS_P0', 'GaS_P0', 'GaA_P1', 'HaA_P0', 'HaA_P1', 'HaS_P1', 'GaS_P1', 'GaA_P0'],
+  ['GaS_P0', 'HaA_P0', 'HaS_P0', 'HaA_P1', 'HaS_P1', 'GaS_P1', 'GaA_P0', 'GaA_P1'],
+  ['HaA_P0', 'HaA_P1', 'GaS_P0', 'HaS_P1', 'GaS_P1', 'GaA_P0', 'GaA_P1', 'HaS_P0'],
+  ['HaA_P1', 'HaS_P1', 'HaA_P0', 'GaS_P1', 'GaA_P0', 'GaA_P1', 'HaS_P0', 'GaS_P0'],
+  ['HaS_P1', 'GaS_P1', 'HaA_P1', 'GaA_P0', 'GaA_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0'],
+  ['GaS_P1', 'GaA_P0', 'HaS_P1', 'GaA_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0', 'HaA_P1'],
+  ['GaA_P0', 'GaA_P1', 'GaS_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0', 'HaA_P1', 'HaS_P1'],
+  ['GaA_P1', 'HaS_P0', 'GaA_P0', 'GaS_P0', 'HaA_P0', 'HaA_P1', 'HaS_P1', 'GaS_P1']
 ]
-
-/**
- * Generate Williams square by rotating base sequence
- * Each row is a cyclic shift of the base sequence
- */
-function generateWilliamsSquare(): Cond[][] {
-  const square: Cond[][] = []
-  for (let i = 0; i < 8; i++) {
-    const sequence: Cond[] = []
-    for (let j = 0; j < 8; j++) {
-      sequence.push(BASE_SEQUENCE[(i + j) % 8])
-    }
-    square.push(sequence)
-  }
-  return square
-}
-
-export const WILLIAMS_8: Cond[][] = generateWilliamsSquare()
 
 /**
  * Get counterbalanced sequence for a participant

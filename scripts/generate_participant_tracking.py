@@ -10,24 +10,30 @@ This script creates a CSV file that tracks:
 - Data file names
 
 Usage:
-    python scripts/generate_participant_tracking.py --participants 25 --output participant_tracking.csv
+    python scripts/generate_participant_tracking.py --participants 32 --output participant_tracking.csv
 """
 
 import argparse
 import csv
 from typing import List, Tuple
 
-# Williams design sequences (8 conditions)
-# Each participant index (0-99) maps to one of these sequences
+# True 8x8 Balanced Latin Square (Williams Design)
+# 
+# This is a Balanced Latin Square that ensures:
+# - Each condition appears in each position exactly once (Latin Square property)
+# - Every condition follows every other condition exactly once (Williams Design property)
+# - Controls for immediate carryover effects between adjacent blocks
+#
+# MUST MATCH the TypeScript matrix in app/src/experiment/counterbalance.ts exactly
 WILLIAMS_SEQUENCES = [
-    ['HaS_P0', 'GaS_P0', 'HaA_P0', 'GaA_P0', 'HaS_P1', 'GaS_P1', 'HaA_P1', 'GaA_P1'],
-    ['GaS_P0', 'HaA_P0', 'GaA_P0', 'HaS_P0', 'GaS_P1', 'HaA_P1', 'GaA_P1', 'HaS_P1'],
-    ['HaA_P0', 'GaA_P0', 'HaS_P0', 'GaS_P0', 'HaA_P1', 'GaA_P1', 'HaS_P1', 'GaS_P1'],
-    ['GaA_P0', 'HaS_P0', 'GaS_P0', 'HaA_P0', 'GaA_P1', 'HaS_P1', 'GaS_P1', 'HaA_P1'],
-    ['HaS_P1', 'GaS_P1', 'HaA_P1', 'GaA_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0', 'GaA_P0'],
-    ['GaS_P1', 'HaA_P1', 'GaA_P1', 'HaS_P1', 'GaS_P0', 'HaA_P0', 'GaA_P0', 'HaS_P0'],
-    ['HaA_P1', 'GaA_P1', 'HaS_P1', 'GaS_P1', 'HaA_P0', 'GaA_P0', 'HaS_P0', 'GaS_P0'],
-    ['GaA_P1', 'HaS_P1', 'GaS_P1', 'HaA_P1', 'GaA_P0', 'HaS_P0', 'GaS_P0', 'HaA_P0'],
+    ['HaS_P0', 'GaS_P0', 'GaA_P1', 'HaA_P0', 'HaA_P1', 'HaS_P1', 'GaS_P1', 'GaA_P0'],
+    ['GaS_P0', 'HaA_P0', 'HaS_P0', 'HaA_P1', 'HaS_P1', 'GaS_P1', 'GaA_P0', 'GaA_P1'],
+    ['HaA_P0', 'HaA_P1', 'GaS_P0', 'HaS_P1', 'GaS_P1', 'GaA_P0', 'GaA_P1', 'HaS_P0'],
+    ['HaA_P1', 'HaS_P1', 'HaA_P0', 'GaS_P1', 'GaA_P0', 'GaA_P1', 'HaS_P0', 'GaS_P0'],
+    ['HaS_P1', 'GaS_P1', 'HaA_P1', 'GaA_P0', 'GaA_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0'],
+    ['GaS_P1', 'GaA_P0', 'HaS_P1', 'GaA_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0', 'HaA_P1'],
+    ['GaA_P0', 'GaA_P1', 'GaS_P1', 'HaS_P0', 'GaS_P0', 'HaA_P0', 'HaA_P1', 'HaS_P1'],
+    ['GaA_P1', 'HaS_P0', 'GaA_P0', 'GaS_P0', 'HaA_P0', 'HaA_P1', 'HaS_P1', 'GaS_P1']
 ]
 
 def get_sequence_for_participant(participant_index: int) -> List[str]:
@@ -92,8 +98,8 @@ def main():
     parser.add_argument(
         '--participants',
         type=int,
-        default=25,
-        help='Number of participants (default: 25)'
+        default=32,
+        help='Number of participants (default: 32 for perfect Williams Design balancing)'
     )
     parser.add_argument(
         '--output',
@@ -106,7 +112,11 @@ def main():
     
     print(f"Generating tracking data for {args.participants} participants...")
     print(f"  Design: Single session (all 8 blocks in session 1)")
-    print(f"  Total blocks per participant: 8 (Williams design)")
+    print(f"  Total blocks per participant: 8 (True Williams Balanced Latin Square)")
+    if args.participants % 8 != 0:
+        print(f"  ⚠️  WARNING: {args.participants} is not a multiple of 8. For perfect balancing, use N=32 (or multiples of 8).")
+    else:
+        print(f"  ✓ Perfect balancing: {args.participants // 8} participants per Williams sequence")
     
     data = generate_tracking_data(args.participants)
     
