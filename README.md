@@ -9,12 +9,13 @@
 > 
 > **Status Checklist:**
 > - ✅ Design finalized & preregistered
-> - ✅ Power analysis complete (target N=26–28)
+> - ✅ Power analysis complete (target N=32, perfect Williams Design balancing)
 > - ✅ Analysis pipeline implemented and validated on synthetic data
 > - ✅ Policy thresholds tuned (target 15–25% adaptation trigger rate)
+> - ✅ Participant links generated (40 links for redundancy, target: 32 complete)
 > - ⏳ Pilot data collection (5 participants)
 > - ⏳ Policy lock (after pilot tuning)
-> - ⏳ Main study data collection (N=26–28)
+> - ⏳ Main study data collection (N=32 target)
 > - ⏳ Data analysis & reporting
 > 
 > **⚠️ IMPORTANT: All performance metrics below are PREDICTED (literature-based) until `v1.0.0-data`**
@@ -141,8 +142,8 @@ The study follows a structured participant flow:
    - Practice trials are flagged in data (not included in main analysis)
 
 6. **Main Experiment** (`/task`)
-   - Counterbalanced block sequence
-   - 4 conditions: HaS, GaS, HaA, GaA
+   - Counterbalanced block sequence (Williams Balanced Latin Square)
+   - 8 conditions: HaS_P0, GaS_P0, HaA_P0, GaA_P0, HaS_P1, GaS_P1, HaA_P1, GaA_P1
    - NASA-TLX after each block
    - Automatic data submission via email on completion
 
@@ -185,8 +186,7 @@ After deployment, generate participant links:
 ```bash
 python scripts/generate_participant_links.py \
   --base-url "https://your-project.vercel.app" \
-  --participants 25 \
-  --sessions 3
+  --participants 40
 ```
 
 The app will be available at `http://localhost:5173`
@@ -202,7 +202,7 @@ npm run preview
 Open the preview URL (typically `http://localhost:4173`).
 
 Notes:
-- In production, the counterbalanced block order controls modality (HaS/GaS/HaA/GaA). HUD does not override it.
+- In production, the counterbalanced block order controls modality, UI mode, and pressure (8 conditions: HaS_P0, GaS_P0, HaA_P0, GaA_P0, HaS_P1, GaS_P1, HaA_P1, GaA_P1). HUD does not override it.
 - In development, the HUD may override modality to facilitate testing (e.g., Gaze + dwell).
 
 ## Project Structure
@@ -332,8 +332,11 @@ git commit -m "Lock adaptation thresholds post-pilot"
 
 ### Experimental Design
 
-- **Counterbalancing**: Williams square design for 4 conditions (HaS, GaS, HaA, GaA)
-- **Participant indexing**: Automatic sequence assignment based on participant index (mod 4)
+- **Counterbalancing**: True 8×8 Balanced Latin Square (Williams Design) for 8 conditions (2 Modality × 2 UI × 2 Pressure)
+  - Controls for immediate carryover effects: every condition follows every other condition exactly once
+  - Perfect balancing with N=32: each sequence used exactly 4 times
+  - 40 participant links generated for redundancy (target: 32 complete datasets)
+- **Participant indexing**: Automatic sequence assignment based on participant index (mod 8)
 - **Practice block**: 10 trials each for Hand and Gaze modalities before main experiment
 - **Block shuffling**: Target positions randomized within each block
 - **Display requirements**: Enforced fullscreen/maximized window and 100% zoom for consistency
@@ -381,7 +384,8 @@ localStorage.removeItem('participantIndex'); location.reload();
 ## Study Snapshot (Portfolio-Ready)
 
 - **Design:** 2×2 within — Modality (Hand vs Gaze-confirm) × UI (Static vs Adaptive)
-- **N:** 24–30 | **Session:** 20–30 min | **Trials:** ~160/participant
+- **N:** 32 (target) | **Links:** 40 (redundancy for attrition) | **Session:** Single session (~25 min) | **Trials:** ~160/participant
+- **Counterbalancing:** True 8×8 Balanced Latin Square (Williams Design) — controls for order and carryover effects
 - **KPIs:** Movement Time, Error, **Throughput (IDe/MT)**, Raw NASA-TLX
 - **Adaptation:** RT p75 or 2-error burst triggers; **~15–25%** adaptive; **5-trial hysteresis**
 - **Display control:** Fullscreen + 100% zoom enforced; DPI logged
@@ -516,7 +520,7 @@ Lightweight pub/sub system for inter-component communication:
 - ✅ **Bug Fixes**: Fixed React hooks violation, corrupted policy JSON, black screen after calibration, block progression stuck
 - ✅ Pre-registration documentation complete (design, hypotheses, methods)
 - ✅ Full R analysis pipeline (effective metrics, mixed models, visualizations)
-- ✅ Williams counterbalancing for block order (4-sequence design)
+- ✅ True Williams Balanced Latin Square counterbalancing (8×8 matrix, 8-sequence design)
 - ✅ Spatial metrics logging (endpoint coordinates, error calculation)
 - ✅ Display requirements guard (fullscreen/maximized, zoom enforcement)
 - ✅ Adaptation policy loader (locked vs default policy support)
