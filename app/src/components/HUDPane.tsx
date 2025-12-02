@@ -327,8 +327,6 @@ export function HUDPane() {
         </div>
       )}
       
-      {/* ISO 9241-9 Error Rate Feedback - Removed from HUD, now displayed on canvas overlay */}
-      
       {/* Contextual Factors - Only show in dev mode */}
       {SHOW_DEV_MODE && (
         <div className="context-controls">
@@ -491,8 +489,41 @@ export function HUDPane() {
         </>
       )}
       
-      {/* Minimal stats for production - only show errors */}
-      {!SHOW_DEV_MODE && (
+      {/* Error rate feedback for production - ISO 9241-9 compliance */}
+      {!SHOW_DEV_MODE && totalBlockTrials >= 3 && errorFeedback && (
+        <div style={{ 
+          marginTop: '1rem', 
+          padding: '1rem', 
+          backgroundColor: '#2a2a2a', 
+          borderRadius: '6px',
+          border: `2px solid ${errorFeedback.color}`,
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.5rem',
+            marginBottom: '0.5rem'
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>{errorFeedback.icon}</span>
+            <div style={{ 
+              fontSize: '1rem', 
+              fontWeight: '600', 
+              color: errorFeedback.color 
+            }}>
+              {errorFeedback.message}
+            </div>
+          </div>
+          <div style={{ 
+            fontSize: '0.875rem', 
+            color: '#b0b0b0'
+          }}>
+            {blockErrors} errors / {totalBlockTrials} trials = {errorRatePercent.toFixed(1)}%
+          </div>
+        </div>
+      )}
+      
+      {/* Fallback: Show simple error count if not enough trials yet */}
+      {!SHOW_DEV_MODE && (!errorFeedback || totalBlockTrials < 3) && (
         <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#2a2a2a', borderRadius: '4px' }}>
           <div style={{ fontSize: '0.875rem', color: '#b0b0b0', marginBottom: '0.25rem' }}>Block Errors</div>
           <div style={{ fontSize: '1.5rem', fontWeight: '600', color: stats.errors > 0 ? '#dc3545' : '#28a745' }}>
