@@ -24,19 +24,22 @@ export interface GazeSimulationConfig {
   smoothingFactor?: number
   /** Standard deviation of fixation noise in pixels (fixed, no adaptation). Default: 5.0 */
   fixationNoiseStdDev?: number
-  /** Velocity threshold (px/s) below which fixation noise is applied. Default: 50 */
+  /** Velocity threshold (deg/s) below which fixation noise is applied. Default: 30 */
   fixationVelocityThreshold?: number
-  /** Velocity threshold (px/s) above which saccadic suppression activates. Default: 2000 */
+  /** Velocity threshold (deg/s) above which saccadic suppression activates. Default: 120 */
   saccadeVelocityThreshold?: number
+  /** Pixels per degree (for angular velocity calculation). Default: 60 */
+  pixelsPerDegree?: number
   /** Whether to enable saccadic suppression. Default: true */
   enableSaccadicSuppression?: boolean
 }
 
-const DEFAULT_CONFIG: Required<GazeSimulationConfig> = {
+const DEFAULT_CONFIG: Required<Omit<GazeSimulationConfig, 'pixelsPerDegree'> & { pixelsPerDegree: number }> = {
   smoothingFactor: 0.15,
   fixationNoiseStdDev: 5.0, // Fixed noise for high-end eye tracker simulation (~0.12°)
-  fixationVelocityThreshold: 50,
-  saccadeVelocityThreshold: 2000, // Increased to prevent false freezes in mouse simulation
+  fixationVelocityThreshold: 30, // degrees/sec - below this, apply fixation noise
+  saccadeVelocityThreshold: 120, // degrees/sec - above this, trigger saccadic suppression
+  pixelsPerDegree: 60, // Default estimate (96 DPI at 60cm viewing distance)
   enableSaccadicSuppression: true,
 }
 
@@ -152,23 +155,29 @@ export function useGazeSimulation(
     const deltaTime = currentTime - previousTimeRef.current
     previousTimeRef.current = currentTime
     
-    // Calculate velocity
-    let velocity = 0
+    // Calculate velocity in pixels per second
+    let velocityPx = 0
     if (previousRawPosRef.current) {
-      velocity = calculateVelocity(
+      velocityPx = calculateVelocity(
         previousRawPosRef.current,
         rawPosition,
         deltaTime
       )
     }
     
+    // Convert to angular velocity (degrees per second)
+    // Angular velocity is independent of screen resolution/DPI
+    const pixelsPerDegree = finalConfig.pixelsPerDegree || DEFAULT_CONFIG.pixelsPerDegree
+    const velocityDeg = velocityPx / pixelsPerDegree
+    
     // Update previous raw position
     previousRawPosRef.current = { ...rawPosition }
     
     // Saccadic Suppression: Freeze cursor during rapid movement
+    // Use angular velocity threshold (deg/s) instead of pixel velocity
     if (
       finalConfig.enableSaccadicSuppression &&
-      velocity > finalConfig.saccadeVelocityThreshold
+      velocityDeg > finalConfig.saccadeVelocityThreshold
     ) {
       // Entering saccade - freeze at current position
       if (!isSaccadingRef.current) {
@@ -210,10 +219,11 @@ export function useGazeSimulation(
     
     // Fixation Noise: Add Gaussian noise when relatively still
     // Fixed noise level (no adaptation) to preserve Fitts' Law validity
+    // Use angular velocity threshold (deg/s) instead of pixel velocity
     let finalX = smoothedX
     let finalY = smoothedY
     
-    if (velocity < finalConfig.fixationVelocityThreshold) {
+    if (velocityDeg < finalConfig.fixationVelocityThreshold) {
       // Apply fixed fixation noise (drift/tremor)
       // No adaptive scaling - noise is constant to maintain scientific validity
       const noiseX = gaussianRandom(0, finalConfig.fixationNoiseStdDev)

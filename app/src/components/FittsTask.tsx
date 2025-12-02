@@ -158,16 +158,49 @@ export function FittsTask({
           }
         : null
 
+    // Calculate radial (Euclidean) error for backward compatibility
     const endpointError =
       endpoint && targetCenter ? distanceBetweenPoints(endpoint, targetCenter) : null
+
+    // Calculate projected error along task axis (ISO 9241-9 compliant)
+    // Task axis: vector from start center to target center
+    // Projected error: component of selection error along the task axis
+    let projectedError: number | null = null
+    
+    if (endpoint && targetCenter && canvasRect) {
+      // Get start center in screen coordinates
+      const startCenter = {
+        x: canvasRect.left + startPos.x,
+        y: canvasRect.top + startPos.y,
+      }
+      
+      // Task axis vector (from start to target)
+      const taskAxisX = targetCenter.x - startCenter.x
+      const taskAxisY = targetCenter.y - startCenter.y
+      const taskAxisLength = Math.sqrt(taskAxisX * taskAxisX + taskAxisY * taskAxisY)
+      
+      if (taskAxisLength > 0) {
+        // Normalize task axis vector
+        const normalizedTaskAxisX = taskAxisX / taskAxisLength
+        const normalizedTaskAxisY = taskAxisY / taskAxisLength
+        
+        // Selection vector (from target center to endpoint)
+        const selectionX = endpoint.x - targetCenter.x
+        const selectionY = endpoint.y - targetCenter.y
+        
+        // Project selection vector onto task axis (dot product)
+        projectedError = selectionX * normalizedTaskAxisX + selectionY * normalizedTaskAxisY
+      }
+    }
 
     return {
       endpoint,
       targetCenter,
       endpointError,
+      projectedError,
     }
     },
-    [targetPos]
+    [targetPos, startPos]
   )
 
   // Calculate average FPS from frame times (moved before handleTimeout to fix declaration order)
@@ -224,6 +257,7 @@ export function FittsTask({
       endpoint_x: metrics.endpoint?.x ?? null,
       endpoint_y: metrics.endpoint?.y ?? null,
       endpoint_error_px: metrics.endpointError ?? null,
+      projected_error_px: metrics.projectedError ?? null,
       timestamp,
       // Display metrics
       zoom_pct: displayMetrics.zoom_pct,
@@ -572,6 +606,7 @@ export function FittsTask({
           endpoint_x: metrics.endpoint?.x ?? null,
           endpoint_y: metrics.endpoint?.y ?? null,
           endpoint_error_px: metrics.endpointError ?? null,
+          projected_error_px: metrics.projectedError ?? null,
           modality: trialData.modality,
           ui_mode: trialData.ui_mode,
           pressure: trialData.pressure,
@@ -623,6 +658,7 @@ export function FittsTask({
           endpoint_x: metrics.endpoint?.x ?? null,
           endpoint_y: metrics.endpoint?.y ?? null,
           endpoint_error_px: metrics.endpointError ?? null,
+          projected_error_px: metrics.projectedError ?? null,
           modality: trialData.modality,
           ui_mode: trialData.ui_mode,
           pressure: trialData.pressure,
@@ -900,8 +936,9 @@ export function FittsTask({
   } = useGazeSimulation(rawMousePosition, isGazeMode, {
     smoothingFactor: 0.15,
     fixationNoiseStdDev: normalizedJitterPx, // Normalized noise based on calibration
-    fixationVelocityThreshold: 50,
-    saccadeVelocityThreshold: 2000, // Increased to prevent false freezes in mouse simulation
+    pixelsPerDegree: calibrationData?.pixelsPerDegree || 60, // Pass calibration data for angular velocity calculation
+    fixationVelocityThreshold: 30, // degrees/sec - below this, apply fixation noise
+    saccadeVelocityThreshold: 120, // degrees/sec - above this, trigger saccadic suppression
     enableSaccadicSuppression: true,
   })
   
