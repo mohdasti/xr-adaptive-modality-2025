@@ -109,6 +109,11 @@ export function FittsTask({
   const [_pointerDownTime, setPointerDownTime] = useState<number | null>(null)
   const [hoverStartTime, setHoverStartTime] = useState<number | null>(null)
   const [_isHoveringTarget, setIsHoveringTarget] = useState(false)
+  
+  // Target re-entry tracking (for gaze interaction analysis)
+  // Counts how many times the cursor enters the target before selection
+  const targetReEntryCountRef = useRef<number>(0)
+  const previousHoverStateRef = useRef<boolean>(false)
   const [_falseTriggerCount, setFalseTriggerCount] = useState(0)
   const [recoveryStartTime, setRecoveryStartTime] = useState<number | null>(null)
   const alignmentGateRef = useRef<{
@@ -270,10 +275,15 @@ export function FittsTask({
       // Practice and FPS tracking
       practice: isPractice,
       avg_fps: avgFPS,
+      // Calibration data (for post-hoc visual angle calculations)
+      pixels_per_mm: calibrationData?.pixelsPerMM ?? null,
+      pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
+      // Target re-entry tracking (proxy for frustration in gaze interactions)
+      target_reentry_count: targetReEntryCountRef.current,
     })
 
     onTrialError('timeout')
-  }, [getSpatialMetrics, onTrialError, isPaused, calculateAverageFPS, isPractice])
+  }, [getSpatialMetrics, onTrialError, isPaused, calculateAverageFPS, isPractice, calibrationData])
 
   // Canvas dimensions - read from actual DOM element for accuracy
   // CSS handles responsive sizing (70vw/70vh, min 800x600, max 1200x900)
@@ -352,6 +362,10 @@ export function FittsTask({
       setRecoveryStartTime(null)
       alignmentGateRef.current = { falseTriggers: 0, recoveryTimes: [], lastFailureTime: null }
     }
+    
+    // Reset target re-entry tracking
+    targetReEntryCountRef.current = 0
+    previousHoverStateRef.current = false
 
     // Set up display requirement monitoring during trial
     enforceDisplayRequirements((pauseMsg) => {
@@ -628,6 +642,11 @@ export function FittsTask({
           // Practice and FPS tracking
           practice: isPractice,
           avg_fps: avgFPS,
+          // Calibration data (for post-hoc visual angle calculations)
+          pixels_per_mm: calibrationData?.pixelsPerMM ?? null,
+          pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
+          // Target re-entry tracking (proxy for frustration in gaze interactions)
+          target_reentry_count: targetReEntryCountRef.current,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -687,6 +706,11 @@ export function FittsTask({
           // Practice and FPS tracking
           practice: isPractice,
           avg_fps: avgFPS,
+          // Calibration data (for post-hoc visual angle calculations)
+          pixels_per_mm: calibrationData?.pixelsPerMM ?? null,
+          pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
+          // Target re-entry tracking (proxy for frustration in gaze interactions)
+          target_reentry_count: targetReEntryCountRef.current,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -694,7 +718,7 @@ export function FittsTask({
         onTrialError(errorType)
       }
     },
-    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType, isPaused]
+    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType, isPaused, calibrationData]
   )
 
   // Alignment gate: check if selection is allowed
@@ -803,6 +827,15 @@ export function FittsTask({
       if (!canvasRef.current) return
 
       const isHovering = isHit(mousePosRef.current, targetPos, effectiveWidth)
+
+      // Track target re-entries for hand mode too
+      if (isHovering !== previousHoverStateRef.current) {
+        if (isHovering && !previousHoverStateRef.current) {
+          // Cursor entered the target
+          targetReEntryCountRef.current += 1
+        }
+        previousHoverStateRef.current = isHovering
+      }
 
       setIsHoveringTarget(isHovering)
 
@@ -1044,6 +1077,17 @@ export function FittsTask({
       )
       const isHovering = distance <= (hitRadius + DWELL_TOLERANCE_PX)
       const currentTime = performance.now()
+      
+      // Track target re-entries (for gaze interaction analysis)
+      // Count when cursor enters target (transitions from not hovering to hovering)
+      // Only track for the actual target, not the start button
+      if (!showStart && targetPos && isHovering !== previousHoverStateRef.current) {
+        if (isHovering && !previousHoverStateRef.current) {
+          // Cursor entered the target
+          targetReEntryCountRef.current += 1
+        }
+        previousHoverStateRef.current = isHovering
+      }
       
       setGazeState((prev) => {
         const newState = updateGazeState(
