@@ -55,22 +55,19 @@ export async function submitDataViaEmail(
     const templateParams: Record<string, string> = {
       participant_id: participantId,
       timestamp: new Date().toISOString(),
-      csv_data: formattedCsvData, // Send as formatted text in email body
+      csv_data: csvData, // Send CSV data directly (template handles formatting)
       csv_filename: `experiment_${participantId}_${Date.now()}.csv`,
-      message: `Experiment data for participant ${participantId}.\n\n📋 INSTRUCTIONS:\n1. Copy the CSV data from the "TRIAL DATA (CSV)" section below\n2. Paste it into a text editor (Notepad, TextEdit, etc.)\n3. Save the file with the name: ${`experiment_${participantId}_${Date.now()}.csv`}\n4. Make sure to save with .csv extension${blockData ? '\n5. Also copy the "BLOCK DATA (TLX)" section below and save as a separate CSV file' : ''}\n\n✅ DATA COMPLETENESS:\nThe CSV file contains ALL experiment data including:\n- Trial metrics (RT, accuracy, endpoint error, etc.)\n- Fitts' Law parameters (ID, A, W)\n- Display metadata (screen size, zoom, fullscreen status)\n- Modality settings (hand/gaze, UI mode, pressure, aging)\n- Participant and block information\n- All spatial coordinates and error measurements${blockData ? '\n- NASA-TLX questionnaire responses (one row per block)' : ''}\n\nThe CSV contains the same complete data as the JSON export - just in a tabular format that's easier to analyze in Excel/R/Python.`,
     }
     
     // Add block data if available
     if (blockData) {
-      const formattedBlockData = `\`\`\`csv\n${blockData}\n\`\`\``
-      templateParams.block_data = formattedBlockData // Send as formatted text
+      templateParams.block_data = blockData // Send CSV data directly
       templateParams.block_filename = `blocks_${participantId}_${Date.now()}.csv`
     }
     
-    // Add debrief responses if available
+    // Add debrief responses if available (formatted as readable JSON)
     if (debriefData) {
       templateParams.debrief_responses = JSON.stringify(debriefData, null, 2)
-      templateParams.message += `\n\n📝 DEBRIEF RESPONSES:\nQ1 (Adaptation Noticed): ${debriefData.q1_adaptation_noticed}\nQ2 (Strategy Changed): ${debriefData.q2_strategy_changed}\nTimestamp: ${debriefData.timestamp}`
     }
     
     console.log('Sending email via EmailJS:', {

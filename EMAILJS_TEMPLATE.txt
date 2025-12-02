@@ -1,0 +1,80 @@
+Subject: Experiment Data - {{participant_id}}
+
+Body:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EXPERIMENT DATA SUBMISSION - XR Adaptive Modality Study
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PARTICIPANT INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Participant ID: {{participant_id}}
+Submission Timestamp: {{timestamp}}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TRIAL DATA (CSV)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Save as: {{csv_filename}}
+
+{{csv_data}}
+
+{% if block_data %}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BLOCK DATA - NASA-TLX QUESTIONNAIRE (CSV)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Save as: {{block_filename}}
+
+{{block_data}}
+{% endif %}
+
+{% if debrief_responses %}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DEBRIEF RESPONSES - STRATEGY QUESTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{debrief_responses}}
+{% endif %}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Copy the TRIAL DATA section above
+2. Paste into a text editor (Notepad, TextEdit, VS Code, etc.)
+3. Save as: {{csv_filename}} (include .csv extension)
+
+{% if block_data %}
+4. Copy the BLOCK DATA section above
+5. Paste into a text editor
+6. Save as: {{block_filename}} (include .csv extension)
+{% endif %}
+
+7. Both CSV files can be opened in Excel, R, Python, or any data analysis tool
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATA COMPLETENESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This submission includes:
+✅ All trial-level data (RT, accuracy, endpoint error, etc.)
+✅ Fitts' Law parameters (ID, A, W)
+✅ Display metadata (screen size, zoom, fullscreen status)
+✅ Modality settings (hand/gaze, UI mode, pressure, aging)
+✅ Participant and block information
+✅ All spatial coordinates and error measurements
+{% if block_data %}✅ NASA-TLX questionnaire responses (one row per block){% endif %}
+{% if debrief_responses %}✅ Strategy question responses (qualitative feedback){% endif %}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Automated submission from XR Adaptive Modality Study experiment platform.
+
