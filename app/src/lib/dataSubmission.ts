@@ -49,9 +49,7 @@ export async function submitDataViaEmail(
     
     // Send CSV data in email body (simpler than attachments for free tier)
     // EmailJS free tier may not support attachments, so we send as text
-    // Format CSV data with code block markers for better readability
-    const formattedCsvData = `\`\`\`csv\n${csvData}\n\`\`\``
-    
+    // Template handles formatting - just send raw CSV data
     const templateParams: Record<string, string> = {
       participant_id: participantId,
       timestamp: new Date().toISOString(),
