@@ -76,12 +76,5 @@ This submission includes:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-NOTE: If data size exceeds 50KB, CSV files are automatically downloaded 
-to the participant's computer instead of being sent via email (EmailJS 
-free tier limitation). Participants can manually email you the downloaded 
-files if needed.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 Automated submission from XR Adaptive Modality Study experiment platform.
 
