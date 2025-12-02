@@ -96,21 +96,25 @@ export function CreditCardCalibration({ onComplete }: CreditCardCalibrationProps
         </div>
 
         <div className="calibration-controls">
-          <label htmlFor="box-size-slider" className="slider-label">
-            Box Size:
-          </label>
-          <input
-            id="box-size-slider"
-            type="range"
-            min="50"
-            max="500"
-            step="1"
-            value={boxSize}
-            onChange={(e) => setBoxSize(parseInt(e.target.value, 10))}
-            className="size-slider"
-          />
-          <div className="slider-value">
-            {boxSize}px ({((boxSize / pixelsPerMM) * 0.1).toFixed(1)}cm)
+          <div className="slider-wrapper">
+            <label htmlFor="box-size-slider" className="slider-label">
+              Adjust Size
+            </label>
+            <div className="vertical-slider-container">
+              <input
+                id="box-size-slider"
+                type="range"
+                min="50"
+                max="500"
+                step="1"
+                value={boxSize}
+                onChange={(e) => setBoxSize(parseInt(e.target.value, 10))}
+                className="size-slider vertical"
+              />
+            </div>
+            <div className="slider-value">
+              {boxSize}px ({((boxSize / pixelsPerMM) * 0.1).toFixed(1)}cm)
+            </div>
           </div>
         </div>
       </div>
