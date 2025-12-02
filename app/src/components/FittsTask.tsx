@@ -114,6 +114,10 @@ export function FittsTask({
   // Counts how many times the cursor enters the target before selection
   const targetReEntryCountRef = useRef<number>(0)
   const previousHoverStateRef = useRef<boolean>(false)
+  
+  // Verification time tracking (time from first target entry to selection)
+  // Critical for gaze interaction analysis - isolates the "verification phase"
+  const firstTargetEntryTimeRef = useRef<number | null>(null)
   const [_falseTriggerCount, setFalseTriggerCount] = useState(0)
   const [recoveryStartTime, setRecoveryStartTime] = useState<number | null>(null)
   const alignmentGateRef = useRef<{
@@ -229,6 +233,11 @@ export function FittsTask({
     const displayMetrics = getDisplayMetrics()
     const avgFPS = calculateAverageFPS()
     const timestamp = performance.now()
+    
+    // Calculate verification time for timeout errors (if target was entered)
+    const verification_time_ms = firstTargetEntryTimeRef.current !== null
+      ? timestamp - firstTargetEntryTimeRef.current
+      : null
 
     bus.emit('trial:error', {
       trialId: trialData.trialId,
@@ -280,6 +289,8 @@ export function FittsTask({
       pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
       // Target re-entry tracking (proxy for frustration in gaze interactions)
       target_reentry_count: targetReEntryCountRef.current,
+      // Verification time (time from first target entry to timeout)
+      verification_time_ms: verification_time_ms,
     })
 
     onTrialError('timeout')
@@ -366,6 +377,7 @@ export function FittsTask({
     // Reset target re-entry tracking
     targetReEntryCountRef.current = 0
     previousHoverStateRef.current = false
+    firstTargetEntryTimeRef.current = null
 
     // Set up display requirement monitoring during trial
     enforceDisplayRequirements((pauseMsg) => {
@@ -562,6 +574,12 @@ export function FittsTask({
       const trialData = trialDataRef.current
       const confirmType = getConfirmType(isClick)
       
+      // Calculate verification time (time from first target entry to selection)
+      // This isolates the "verification phase" for gaze interaction analysis
+      const verification_time_ms = firstTargetEntryTimeRef.current !== null
+        ? endTime - firstTargetEntryTimeRef.current
+        : null
+      
       const hit = isHit(clickPos, targetPos, effectiveWidth)
       
       if (hit) {
@@ -647,6 +665,8 @@ export function FittsTask({
           pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
           // Target re-entry tracking (proxy for frustration in gaze interactions)
           target_reentry_count: targetReEntryCountRef.current,
+          // Verification time (time from first target entry to selection)
+          verification_time_ms: verification_time_ms,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -711,6 +731,8 @@ export function FittsTask({
           pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
           // Target re-entry tracking (proxy for frustration in gaze interactions)
           target_reentry_count: targetReEntryCountRef.current,
+          // Verification time (time from first target entry to selection)
+          verification_time_ms: verification_time_ms,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -1085,6 +1107,11 @@ export function FittsTask({
         if (isHovering && !previousHoverStateRef.current) {
           // Cursor entered the target
           targetReEntryCountRef.current += 1
+          
+          // Track first target entry time (for verification_time_ms calculation)
+          if (firstTargetEntryTimeRef.current === null) {
+            firstTargetEntryTimeRef.current = currentTime
+          }
         }
         previousHoverStateRef.current = isHovering
       }
