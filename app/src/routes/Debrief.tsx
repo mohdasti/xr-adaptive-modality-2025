@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getLogger } from '../lib/csv'
+import { submitDataViaEmail, submitDataToServer, getAvailableSubmissionMethod } from '../lib/dataSubmission'
 import './Debrief.css'
 
 export default function Debrief() {
@@ -12,6 +13,9 @@ export default function Debrief() {
   const [q1, setQ1] = useState('')
   const [q2, setQ2] = useState('')
   const [questionsSubmitted, setQuestionsSubmitted] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [autoSubmitAttempted, setAutoSubmitAttempted] = useState(false)
   
   const handleDownload = () => {
     const logger = getLogger()
@@ -24,13 +28,83 @@ export default function Debrief() {
     }, 500)
   }
   
-  const handleSubmitQuestions = () => {
+  // Auto-submit data when page loads (if EmailJS is configured)
+  useEffect(() => {
+    if (autoSubmitAttempted) return // Only attempt once
+    
+    const attemptAutoSubmit = async () => {
+      const logger = getLogger()
+      const csvData = logger.toCSV()
+      const blockData = logger.getBlockRowCount() > 0 ? logger.toBlockCSV() : null
+      
+      // Check if we have data to submit
+      if (!csvData || csvData.split('\n').length < 2) {
+        console.log('[Debrief] No data to submit yet')
+        return
+      }
+      
+      const submissionMethod = getAvailableSubmissionMethod()
+      if (submissionMethod === 'none') {
+        console.log('[Debrief] No email submission method configured')
+        return
+      }
+      
+      setAutoSubmitAttempted(true)
+      setIsSubmitting(true)
+      setEmailStatus('📤 Automatically sending your data to the researcher...')
+      
+      try {
+        const sessionParticipantId = `${participantId}_session${sessionNum}`
+        
+        // Check for existing debrief responses (in case they've already submitted)
+        let debriefData = null
+        try {
+          const stored = sessionStorage.getItem('debrief_responses')
+          if (stored) {
+            const parsed = JSON.parse(stored)
+            debriefData = {
+              q1_adaptation_noticed: parsed.q1_adaptation_noticed || '',
+              q2_strategy_changed: parsed.q2_strategy_changed || '',
+              timestamp: parsed.timestamp || new Date().toISOString(),
+            }
+          }
+        } catch (e) {
+          console.warn('[Debrief] Failed to parse stored debrief responses:', e)
+        }
+        
+        let result: { success: boolean; message?: string; error?: string }
+        
+        if (submissionMethod === 'email') {
+          result = await submitDataViaEmail(csvData, blockData, sessionParticipantId, debriefData)
+        } else {
+          result = await submitDataToServer(csvData, blockData, sessionParticipantId, debriefData)
+        }
+        
+        if (result.success) {
+          setEmailStatus('✅ Your data has been automatically sent to the researcher!')
+        } else {
+          setEmailStatus(`⚠️ Automatic submission failed: ${result.error || 'Unknown error'}. Please use the download button below.`)
+        }
+      } catch (error) {
+        console.error('[Debrief] Auto-submission error:', error)
+        setEmailStatus(`⚠️ Automatic submission failed. Please use the download button below.`)
+      } finally {
+        setIsSubmitting(false)
+      }
+    }
+    
+    // Delay auto-submit slightly to ensure page is fully loaded
+    const timer = setTimeout(attemptAutoSubmit, 1000)
+    return () => clearTimeout(timer)
+  }, [participantId, sessionNum, autoSubmitAttempted])
+  
+  const handleSubmitQuestions = async () => {
     if (!q1.trim() || !q2.trim()) {
       alert('Please answer both questions before submitting.')
       return
     }
     
-    // Store qualitative responses in sessionStorage for potential export
+    // Store qualitative responses in sessionStorage
     const responses = {
       participantId,
       sessionNum,
@@ -42,7 +116,48 @@ export default function Debrief() {
     sessionStorage.setItem('debrief_responses', JSON.stringify(responses))
     setQuestionsSubmitted(true)
     
-    // Log to console for debugging (could also add to CSV if needed)
+    // Immediately submit data with debrief responses
+    setIsSubmitting(true)
+    setEmailStatus('📤 Sending your complete data (including responses) to the researcher...')
+    
+    try {
+      const logger = getLogger()
+      const csvData = logger.toCSV()
+      const blockData = logger.getBlockRowCount() > 0 ? logger.toBlockCSV() : null
+      const sessionParticipantId = `${participantId}_session${sessionNum}`
+      
+      const debriefData = {
+        q1_adaptation_noticed: responses.q1_adaptation_noticed,
+        q2_strategy_changed: responses.q2_strategy_changed,
+        timestamp: responses.timestamp,
+      }
+      
+      const submissionMethod = getAvailableSubmissionMethod()
+      
+      if (submissionMethod !== 'none') {
+        let result: { success: boolean; message?: string; error?: string }
+        
+        if (submissionMethod === 'email') {
+          result = await submitDataViaEmail(csvData, blockData, sessionParticipantId, debriefData)
+        } else {
+          result = await submitDataToServer(csvData, blockData, sessionParticipantId, debriefData)
+        }
+        
+        if (result.success) {
+          setEmailStatus('✅ Your complete data has been sent to the researcher!')
+        } else {
+          setEmailStatus(`⚠️ Submission failed: ${result.error || 'Unknown error'}. Please use the download button below.`)
+        }
+      } else {
+        setEmailStatus('ℹ️ Email not configured. Please use the download button to save your data.')
+      }
+    } catch (error) {
+      console.error('[Debrief] Submission error:', error)
+      setEmailStatus('⚠️ Submission failed. Please use the download button below.')
+    } finally {
+      setIsSubmitting(false)
+    }
+    
     console.log('Debrief responses:', responses)
   }
 
@@ -126,8 +241,9 @@ export default function Debrief() {
               <button 
                 onClick={handleSubmitQuestions}
                 className="submit-questions-button"
+                disabled={isSubmitting}
               >
-                Submit Responses
+                {isSubmitting ? '⏳ Submitting...' : 'Submit Responses'}
               </button>
             </>
           ) : (
@@ -139,9 +255,17 @@ export default function Debrief() {
 
         <section className="debrief-download-section">
           <h2 className="download-title">📥 Final Step: Save Your Data</h2>
+          
+          {emailStatus && (
+            <div className={`email-status ${emailStatus.includes('✅') ? 'success' : emailStatus.includes('⚠️') ? 'warning' : 'info'}`}>
+              {emailStatus}
+            </div>
+          )}
+          
           <p className="download-text">
-            Your data is currently stored <strong>only on this computer</strong>. 
-            Please download your session files below.
+            {getAvailableSubmissionMethod() !== 'none' 
+              ? 'Your data has been automatically sent to the researcher. You can also download it below as a backup.'
+              : 'Your data is currently stored only on this computer. Please download your session files below.'}
           </p>
           
           <div className="download-buttons">

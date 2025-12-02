@@ -15,7 +15,12 @@ interface SubmissionResult {
 export async function submitDataViaEmail(
   csvData: string,
   blockData: string | null,
-  participantId: string
+  participantId: string,
+  debriefData?: {
+    q1_adaptation_noticed: string
+    q2_strategy_changed: string
+    timestamp: string
+  } | null
 ): Promise<SubmissionResult> {
   const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || ''
   const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || ''
@@ -60,6 +65,12 @@ export async function submitDataViaEmail(
       const formattedBlockData = `\`\`\`csv\n${blockData}\n\`\`\``
       templateParams.block_data = formattedBlockData // Send as formatted text
       templateParams.block_filename = `blocks_${participantId}_${Date.now()}.csv`
+    }
+    
+    // Add debrief responses if available
+    if (debriefData) {
+      templateParams.debrief_responses = JSON.stringify(debriefData, null, 2)
+      templateParams.message += `\n\n📝 DEBRIEF RESPONSES:\nQ1 (Adaptation Noticed): ${debriefData.q1_adaptation_noticed}\nQ2 (Strategy Changed): ${debriefData.q2_strategy_changed}\nTimestamp: ${debriefData.timestamp}`
     }
     
     console.log('Sending email via EmailJS:', {
@@ -131,7 +142,12 @@ export async function submitDataViaEmail(
 export async function submitDataToServer(
   csvData: string,
   blockData: string | null,
-  participantId: string
+  participantId: string,
+  debriefData?: {
+    q1_adaptation_noticed: string
+    q2_strategy_changed: string
+    timestamp: string
+  } | null
 ): Promise<SubmissionResult> {
   const API_URL = import.meta.env.VITE_API_URL || ''
   
@@ -152,6 +168,7 @@ export async function submitDataToServer(
         participantId,
         csvData,
         blockData,
+        debriefData,
         metadata: {
           timestamp: new Date().toISOString(),
           userAgent: navigator.userAgent,

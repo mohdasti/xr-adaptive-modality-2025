@@ -228,6 +228,33 @@
   text-align: center;
 }
 
+.email-status {
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.email-status.success {
+  background-color: rgba(40, 167, 69, 0.2);
+  border: 2px solid rgba(40, 167, 69, 0.5);
+  color: #28a745;
+}
+
+.email-status.warning {
+  background-color: rgba(255, 193, 7, 0.2);
+  border: 2px solid rgba(255, 193, 7, 0.5);
+  color: #ffc107;
+}
+
+.email-status.info {
+  background-color: rgba(0, 217, 255, 0.2);
+  border: 2px solid rgba(0, 217, 255, 0.5);
+  color: #00d9ff;
+}
+
 @media (max-width: 640px) {
   .debrief-container {
     padding: 1rem;
