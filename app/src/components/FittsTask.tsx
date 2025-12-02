@@ -1430,46 +1430,7 @@ export function FittsTask({
             title={`Gaze cursor: (${cursorPos.x.toFixed(0)}, ${cursorPos.y.toFixed(0)})`}
           />
         )}
-        {/* Error Rate Feedback Overlay - Prominent on canvas, but only between trials (when START is visible) */}
-        {errorRateFeedback && errorRateFeedback.message && errorRateFeedback.color && showStart && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '20px', // Near top-left, but only when no target is present
-              left: '20px',
-              padding: '1rem 1.5rem',
-              borderRadius: '8px',
-              border: `3px solid ${errorRateFeedback.color}`,
-              backgroundColor: `${errorRateFeedback.color}20`, // 20 hex = ~12% opacity
-              color: errorRateFeedback.color,
-              fontSize: '1.5rem',
-              fontWeight: 700,
-              fontFamily: 'system-ui, -apple-system, sans-serif',
-              boxShadow: `0 0 20px ${errorRateFeedback.color}80`,
-              zIndex: 1000,
-              pointerEvents: 'none',
-              minWidth: '280px',
-              textAlign: 'center',
-              animation: errorRateFeedback.errorRate && errorRateFeedback.errorRate > 10 
-                ? 'error-pulse 1s ease-in-out infinite' 
-                : 'none',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.8rem' }}>{errorRateFeedback.icon || '•'}</span>
-              <span>{errorRateFeedback.message}</span>
-            </div>
-            <div style={{ 
-              fontSize: '0.875rem', 
-              marginTop: '0.5rem', 
-              fontWeight: '400', 
-              opacity: 0.9,
-              color: errorRateFeedback.color 
-            }}>
-              {errorRateFeedback.blockErrors} errors / {errorRateFeedback.totalBlockTrials} trials = {errorRateFeedback.errorRate?.toFixed(1)}%
-            </div>
-          </div>
-        )}
+        {/* Error rate feedback removed from canvas - shown in HUD only to reduce distraction */}
         
         {/* Countdown overlay for pressure mode */}
         {pressureEnabled && !showStart && targetPos && (
