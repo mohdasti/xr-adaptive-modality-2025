@@ -144,7 +144,14 @@ The study follows a structured participant flow:
    - Counterbalanced block sequence
    - 4 conditions: HaS, GaS, HaA, GaA
    - NASA-TLX after each block
-   - CSV export at completion
+   - Automatic data submission via email on completion
+
+7. **Debrief Page** (`/debrief`)
+   - Study explanation and gaze simulation disclosure
+   - Strategy questions (optional qualitative feedback)
+   - Automatic data submission with debrief responses
+   - Data download buttons (trial CSV, block CSV)
+   - Data deletion option
 
 ## Quick Start
 
@@ -302,10 +309,19 @@ git commit -m "Lock adaptation thresholds post-pilot"
 - **Calibration data**: Pixels-per-millimeter and pixels-per-degree (PPD) for gaze jitter normalization
 - **Trial-level data**: Movement time, errors, endpoint coordinates, spatial metrics, display metadata, practice flag, average FPS
 - **Block-level data**: Raw NASA-TLX (6 dimensions: mental, physical, temporal, performance, effort, frustration)
+- **Debrief responses**: Strategy questions about adaptation awareness and strategy changes (qualitative feedback)
 - **Display metadata**: Screen/window dimensions, device pixel ratio, zoom level, fullscreen status
 - **Performance metrics**: Frame rate (FPS) tracking for data quality filtering
-- **CSV export**: Separate files for trial data and block-level TLX
+- **Automatic data submission**: EmailJS integration for automatic email submission of all data (trials, blocks, debrief)
+- **CSV export**: Separate files for trial data, block-level TLX, and manual download options
 - **Data dictionary**: Complete documentation of all logged variables
+
+**Data Submission:**
+- Automatic email submission on debrief page load (all data included)
+- Automatic email re-submission when strategy questions are submitted
+- Automatic CSV download fallback when data exceeds EmailJS 50KB limit
+- Email includes trial CSV, block CSV, and debrief responses (JSON)
+- See `EMAILJS_TEMPLATE.txt` for template configuration
 
 ### NASA-TLX Workload Assessment
 
@@ -336,16 +352,29 @@ Tip: to test a different counterbalanced sequence locally, clear the stored part
 localStorage.removeItem('participantIndex'); location.reload();
 ```
 
-### Data Export
-- Trial CSV includes: `rt_ms`, `endpoint_error_px`, `confirm_type`, `adaptation_triggered`, `practice`, `avg_fps`, plus display metadata (screen/window size, DPR, zoom, fullscreen).
-- Demographics CSV includes: age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, fatigue level.
-- Calibration data includes: pixels_per_mm, pixels_per_degree (stored in sessionStorage, logged in CSV).
-- Block TLX CSV is logged once per block with six raw subscales (performance reverse‑scored in analysis).
+### Data Export & Submission
+
+**CSV Files:**
+- **Trial CSV**: Includes `rt_ms`, `endpoint_error_px`, `confirm_type`, `adaptation_triggered`, `practice`, `avg_fps`, plus display metadata (screen/window size, DPR, zoom, fullscreen)
+- **Block CSV**: NASA-TLX data logged once per block with six raw subscales (performance reverse‑scored in analysis)
+- **Demographics**: Age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, fatigue level (included in trial CSV)
+- **Calibration data**: Pixels_per_mm, pixels_per_degree (stored in sessionStorage, logged in CSV)
+
+**Automatic Email Submission (EmailJS):**
+- All data automatically emailed on debrief page: trial CSV, block CSV, and debrief responses
+- EmailJS template configured with conditional sections (see `EMAILJS_TEMPLATE.txt`)
+- **50KB Size Limit Handling**: If data exceeds EmailJS free tier limit, CSV files are automatically downloaded instead
+- Participant always has access to downloaded CSV files for manual backup
+
+**Manual Download:**
+- Download buttons available on debrief page for both trial and block CSV files
+- Data can be downloaded at any time during experiment via LoggerPane
 
 **Data Quality Filters:**
 - Practice trials (`practice: true`) should be excluded from main analysis
 - Trials with low FPS (`avg_fps < 30`) should be excluded from analysis
 - See `analysis/check_exclusions.R` for automated exclusion reporting
+- See `docs/ops/EMAILJS_SIZE_LIMIT.md` for EmailJS size limit handling details
 
 ---
 
@@ -461,21 +490,30 @@ Lightweight pub/sub system for inter-component communication:
 **Operations & Troubleshooting:**
 - [docs/ops/VERCEL_BUILD_FIX.md](docs/ops/VERCEL_BUILD_FIX.md) - Troubleshooting Vercel builds
 - [docs/ops/EMAILJS_SETUP.md](docs/ops/EMAILJS_SETUP.md) - EmailJS configuration
+- [docs/ops/EMAILJS_SIZE_LIMIT.md](docs/ops/EMAILJS_SIZE_LIMIT.md) - EmailJS 50KB size limit handling
+- [docs/ops/EMAILJS_TEMPLATE_CLEAN.md](docs/ops/EMAILJS_TEMPLATE_CLEAN.md) - Clean EmailJS template guide
 - [docs/ops/DEBUG_BLACK_SCREEN.md](docs/ops/DEBUG_BLACK_SCREEN.md) - Debugging guide
 
 ## Recent Updates
 
 **Latest improvements (2025):**
+- ✅ **Debrief Page**: Complete debriefing page with study explanation, gaze simulation disclosure, strategy questions, and data download/delete options
+- ✅ **Automatic Email Submission**: EmailJS integration for automatic data submission (trials, blocks, debrief responses) when participants reach debrief page
+- ✅ **EmailJS Size Limit Handling**: Automatic CSV download fallback when data exceeds 50KB limit (EmailJS free tier limitation)
+- ✅ **Strategy Questions**: Open-ended qualitative feedback questions about adaptation awareness and strategy changes on debrief page
 - ✅ **Demographics Collection**: Comprehensive form collecting age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, and fatigue level
 - ✅ **Physical Calibration**: Credit card calibration for pixels-per-degree (PPD) normalization of gaze simulation jitter
 - ✅ **Practice Block**: 10 trials each for Gaze and Hand modalities before the main experiment (flagged in data)
 - ✅ **FPS Telemetry**: Average frame rate tracking per trial for data quality filtering (exclude trials with FPS < 30)
 - ✅ **Comprehension Check**: Multiple-choice questions on Intro page to ensure participants understand the task
-- ✅ **Participant Flow**: Complete flow implemented: Intro → Demographics → SystemCheck → Calibration → Task
+- ✅ **Participant Flow**: Complete flow implemented: Intro → Demographics → SystemCheck → Calibration → Task → Debrief
 - ✅ **Timing Precision**: Using `performance.now()` for critical psychophysics timing measurements
 - ✅ **Gaze Simulation**: Physiologically-accurate simulation with normalized jitter based on calibration
-- ✅ **Error Rate Feedback**: ISO 9241-9 compliant block-level error rate indicator in HUD
-- ✅ **Bug Fixes**: Fixed React hooks violation, corrupted policy JSON, black screen after calibration
+- ✅ **Error Rate Feedback**: ISO 9241-9 compliant block-level error rate indicator in HUD (only shown between trials to reduce distraction)
+- ✅ **Start Button Modality Fix**: Start button is selectable via current modality (dwell for gaze), eliminating modality switching confound
+- ✅ **Visual Feedback Enhancement**: More prominent orange border/glow for adaptive conditions, stress-inducing timer colors (yellow→orange→red gradient)
+- ✅ **EmailJS Template**: Clean, production-ready template with conditional sections for trial data, block data, and debrief responses
+- ✅ **Bug Fixes**: Fixed React hooks violation, corrupted policy JSON, black screen after calibration, block progression stuck
 - ✅ Pre-registration documentation complete (design, hypotheses, methods)
 - ✅ Full R analysis pipeline (effective metrics, mixed models, visualizations)
 - ✅ Williams counterbalancing for block order (4-sequence design)
