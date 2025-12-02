@@ -103,16 +103,6 @@ export function FittsTask({
   const [isPaused, setIsPaused] = useState(false)
   const [pauseReason, setPauseReason] = useState<string>('')
   
-  // Error rate feedback from HUD (for canvas overlay)
-  const [errorRateFeedback, setErrorRateFeedback] = useState<{
-    message: string | null
-    color: string | null
-    icon: string | null
-    errorRate: number | null
-    blockErrors: number | null
-    totalBlockTrials: number | null
-  } | null>(null)
-  
   // Alignment gate state (P1 experimental feature)
   const alignmentGateEnabled = isAlignmentGateEnabled()
   const [pointerDown, setPointerDown] = useState(false)
@@ -1247,34 +1237,6 @@ export function FittsTask({
       console.log('[FittsTask] Reset gaze cursor for start state - waiting for mouse movement')
     }
   }, [showStart, modalityConfig.modality])
-  
-  // Listen for error rate feedback updates from HUD
-  useEffect(() => {
-    const handleErrorRateUpdate = (payload: {
-      message: string | null
-      color: string | null
-      icon: string | null
-      errorRate: number | null
-      blockErrors: number | null
-      totalBlockTrials: number | null
-    }) => {
-      if (payload.message) {
-        setErrorRateFeedback({
-          message: payload.message,
-          color: payload.color || '#ffc107',
-          icon: payload.icon || '•',
-          errorRate: payload.errorRate || 0,
-          blockErrors: payload.blockErrors || 0,
-          totalBlockTrials: payload.totalBlockTrials || 0,
-        })
-      } else {
-        setErrorRateFeedback(null)
-      }
-    }
-    
-    const unsubscribe = bus.on('error-rate:update', handleErrorRateUpdate)
-    return () => unsubscribe()
-  }, [])
   
   // Countdown timer for pressure mode
   useEffect(() => {
