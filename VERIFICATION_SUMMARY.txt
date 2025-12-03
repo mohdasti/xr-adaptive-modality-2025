@@ -1,0 +1,26 @@
+CRITICAL FIXES VERIFICATION SUMMARY
+=====================================
+
+1. COUNTERBALANCING (counterbalance.ts)
+   ✅ WILLIAMS_8 matrix is hardcoded (lines 39-48)
+   ✅ No generateWilliamsSquare function exists
+   ✅ No BASE_SEQUENCE cyclic rotation
+
+2. GAZE PHYSICS (useGazeSimulation.ts)
+   ✅ Angular velocity calculated: velocityDeg = velocityPx / pixelsPerDegree (line 171)
+   ✅ Saccade threshold uses velocityDeg (120 deg/s) (line 180)
+   ✅ Fixation threshold uses velocityDeg (30 deg/s) (line 226)
+
+3. PROJECTED ERROR (FittsTask.tsx)
+   ✅ Projected error calculated along task axis (lines 180-209)
+   ✅ Uses dot product projection (line 207)
+   ✅ Logged as projected_error_px (lines 280, 647, 706)
+
+4. TELEMETRY (FittsTask.tsx)
+   ✅ projected_error_px logged (lines 280, 647, 706)
+   ✅ target_reentry_count logged (lines 297, 673, 739)
+   ✅ pixels_per_degree logged (lines 295, 671, 737)
+   ✅ pixels_per_mm logged (lines 294, 670, 736)
+   ✅ verification_time_ms logged (lines 299, 675, 741)
+
+ALL FIXES VERIFIED PRESENT IN CODEBASE.
