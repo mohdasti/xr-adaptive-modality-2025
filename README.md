@@ -255,8 +255,8 @@ xr-adaptive-modality-2025/
 - Standard target selection paradigm (ISO 9241-9)
 - Configurable difficulty levels (ID: 1.7 - 5.6 bits)
 - **High-precision timing**: Uses `performance.now()` for sub-millisecond psychophysics timing
-- **Spatial metrics logging**: Endpoint coordinates, target centers, endpoint error (px)
-- **Effective metrics**: Computes We (effective width) and IDe (effective ID) for throughput
+- **Spatial metrics logging**: Endpoint coordinates, target centers, endpoint error (px), **projected error (px)** along task axis (ISO 9241-9 compliant)
+- **Effective metrics**: Computes We (effective width) and IDe (effective ID) for throughput using projected error
 - **Performance tracking**: Average FPS per trial for data quality filtering
 - **Practice block**: Automatic practice trials before main experiment (flagged in data)
 - Reaction time measurement
@@ -358,10 +358,11 @@ localStorage.removeItem('participantIndex'); location.reload();
 ### Data Export & Submission
 
 **CSV Files:**
-- **Trial CSV**: Includes `rt_ms`, `endpoint_error_px`, `confirm_type`, `adaptation_triggered`, `practice`, `avg_fps`, plus display metadata (screen/window size, DPR, zoom, fullscreen)
+- **Trial CSV**: Includes `rt_ms`, `endpoint_error_px`, **`projected_error_px`** (ISO 9241-9 compliant), `confirm_type`, `adaptation_triggered`, `practice`, `avg_fps`, plus display metadata (screen/window size, DPR, zoom, fullscreen)
+  - **Gaze interaction metrics**: `target_reentry_count` (measures drift in/out), `verification_time_ms` (decision phase isolation)
+  - **Calibration data**: `pixels_per_mm`, `pixels_per_degree` (stored in sessionStorage, logged in CSV)
 - **Block CSV**: NASA-TLX data logged once per block with six raw subscales (performance reverse‑scored in analysis)
 - **Demographics**: Age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, fatigue level (included in trial CSV)
-- **Calibration data**: Pixels_per_mm, pixels_per_degree (stored in sessionStorage, logged in CSV)
 
 **Automatic Email Submission (EmailJS):**
 - All data automatically emailed on debrief page: trial CSV, block CSV, and debrief responses
@@ -378,6 +379,11 @@ localStorage.removeItem('participantIndex'); location.reload();
 - Trials with low FPS (`avg_fps < 30`) should be excluded from analysis
 - See `analysis/check_exclusions.R` for automated exclusion reporting
 - See `docs/ops/EMAILJS_SIZE_LIMIT.md` for EmailJS size limit handling details
+
+**Data Verification:**
+- All critical metrics verified and working (see `CSV_VERIFICATION_REPORT.md` for detailed verification)
+- ISO 9241-9 compliant projected error calculation for rigorous Fitts' Law analysis
+- Gaze-specific metrics (target re-entries, verification time) captured for interaction analysis
 
 ---
 
@@ -512,7 +518,9 @@ Lightweight pub/sub system for inter-component communication:
 - ✅ **Comprehension Check**: Multiple-choice questions on Intro page to ensure participants understand the task
 - ✅ **Participant Flow**: Complete flow implemented: Intro → Demographics → SystemCheck → Calibration → Task → Debrief
 - ✅ **Timing Precision**: Using `performance.now()` for critical psychophysics timing measurements
-- ✅ **Gaze Simulation**: Physiologically-accurate simulation with normalized jitter based on calibration
+- ✅ **Gaze Simulation**: Physiologically-accurate simulation with normalized jitter based on calibration (angular velocity in deg/s)
+- ✅ **ISO 9241-9 Compliance**: Projected error calculation along task axis for rigorous Fitts' Law analysis
+- ✅ **Critical Metrics Logging**: All scientific metrics verified - `projected_error_px`, `target_reentry_count`, `verification_time_ms`, `pixels_per_mm`, `pixels_per_degree` (see `CSV_VERIFICATION_REPORT.md`)
 - ✅ **Error Rate Feedback**: ISO 9241-9 compliant block-level error rate indicator in HUD (only shown between trials to reduce distraction)
 - ✅ **Start Button Modality Fix**: Start button is selectable via current modality (dwell for gaze), eliminating modality switching confound
 - ✅ **Visual Feedback Enhancement**: More prominent orange border/glow for adaptive conditions, stress-inducing timer colors (yellow→orange→red gradient)
