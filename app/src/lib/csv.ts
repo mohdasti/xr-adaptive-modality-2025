@@ -477,6 +477,7 @@ export function createRowFromTrial(
     endpoint_x: payload.endpoint_x ?? payload.clickPos?.x ?? null,
     endpoint_y: payload.endpoint_y ?? payload.clickPos?.y ?? null,
     endpoint_error_px: payload.endpoint_error_px ?? null,
+    projected_error_px: payload.projected_error_px ?? null,
     rt_ms: payload.rt_ms || null,
     correct: payload.correct !== undefined ? payload.correct : null,
     err_type: payload.err_type || payload.error || null,
@@ -484,6 +485,10 @@ export function createRowFromTrial(
     confirm_type: payload.confirm_type || null,
     pupil_z_med: payload.pupil_z_med || null,
     adaptation_triggered: payload.adaptation_triggered ?? adaptationTriggered,
+    target_reentry_count: payload.target_reentry_count ?? null,
+    verification_time_ms: payload.verification_time_ms ?? null,
+    pixels_per_mm: payload.pixels_per_mm ?? null,
+    pixels_per_degree: payload.pixels_per_degree ?? null,
     // Display metadata captured at trial time
     screen_width: displayMeta?.screen_width ?? payload.screen_width ?? null,
     screen_height: displayMeta?.screen_height ?? payload.screen_height ?? null,
