@@ -108,6 +108,8 @@ export function TaskPane() {
           setParticipantIndex(idx)
           localStorage.setItem('participantIndex', String(idx))
           const sequence = sequenceForParticipant(idx)
+          // Debug logging for block sequence verification
+          console.log(`[TaskPane] Participant ${urlInfo.participantId}: index=${idx}, row=${idx % 8}, sequence=`, sequence)
           setBlockSequence(sequence)
           
           // Set session number from URL
