@@ -17,15 +17,20 @@ export default function Debrief() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [autoSubmitAttempted, setAutoSubmitAttempted] = useState(false)
   
-  const handleDownload = () => {
+  const handleDownload = (merged: boolean = false) => {
     const logger = getLogger()
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
     
-    // Download both files
-    logger.downloadCSV(`trials_${participantId}_session${sessionNum}_${timestamp}.csv`)
-    setTimeout(() => {
-      logger.downloadBlockCSV(`blocks_${participantId}_session${sessionNum}_${timestamp}.csv`)
-    }, 500)
+    if (merged) {
+      // Download merged file (trials + TLX in one)
+      logger.downloadMergedCSV(`experiment_${participantId}_session${sessionNum}_${timestamp}_merged.csv`)
+    } else {
+      // Download separate files
+      logger.downloadCSV(`trials_${participantId}_session${sessionNum}_${timestamp}.csv`)
+      setTimeout(() => {
+        logger.downloadBlockCSV(`blocks_${participantId}_session${sessionNum}_${timestamp}.csv`)
+      }, 500)
+    }
   }
   
   // Auto-submit data when page loads (if EmailJS is configured)
@@ -87,18 +92,14 @@ export default function Debrief() {
           const isSizeLimit = errorMsg.includes('exceeds EmailJS limit') || errorMsg.includes('50 KB')
           
           if (isSizeLimit) {
-            // Size limit - auto-download files
-            setEmailStatus('ℹ️ Data size exceeds email limit (50KB). Automatically downloading files...')
+            // Size limit - auto-download merged file
+            setEmailStatus('ℹ️ Data size exceeds email limit (50KB). Automatically downloading merged file...')
             
             setTimeout(() => {
               const logger = getLogger()
-              logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
-              if (blockData) {
-                setTimeout(() => {
-                  logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
-                }, 300)
-              }
-              setEmailStatus('✅ Files downloaded automatically! Note: EmailJS free tier doesn\'t support attachments for large files. Your CSV files have been saved to your Downloads folder.')
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+              logger.downloadMergedCSV(`experiment_${sessionParticipantId}_${timestamp}_merged.csv`)
+              setEmailStatus('✅ Merged CSV file downloaded! Please email it to m.dastgheib@gmail.com (see instructions below).')
             }, 300)
           } else {
             setEmailStatus(`⚠️ Automatic submission failed: ${errorMsg}. Please use the download button below.`)
@@ -169,18 +170,14 @@ export default function Debrief() {
           const isSizeLimit = errorMsg.includes('exceeds EmailJS limit') || errorMsg.includes('50 KB')
           
           if (isSizeLimit) {
-            // Size limit - auto-download files
-            setEmailStatus('ℹ️ Data size exceeds email limit (50KB). Automatically downloading files...')
+            // Size limit - auto-download merged file
+            setEmailStatus('ℹ️ Data size exceeds email limit (50KB). Automatically downloading merged file...')
             
             setTimeout(() => {
               const logger = getLogger()
-              logger.downloadCSV(`experiment_${sessionParticipantId}_${Date.now()}.csv`)
-              if (blockData) {
-                setTimeout(() => {
-                  logger.downloadBlockCSV(`tlx_${sessionParticipantId}_${Date.now()}.csv`)
-                }, 300)
-              }
-              setEmailStatus('✅ Files downloaded automatically! Note: EmailJS free tier doesn\'t support attachments for large files. Your CSV files have been saved to your Downloads folder.')
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
+              logger.downloadMergedCSV(`experiment_${sessionParticipantId}_${timestamp}_merged.csv`)
+              setEmailStatus('✅ Merged CSV file downloaded! Please email it to m.dastgheib@gmail.com (see instructions below).')
             }, 300)
           } else {
             setEmailStatus(`⚠️ Submission failed: ${errorMsg}. Please use the download button below.`)
@@ -301,17 +298,56 @@ export default function Debrief() {
           )}
           
           <p className="download-text">
-            {getAvailableSubmissionMethod() !== 'none' 
+            {emailStatus?.includes('✅ Your data has been automatically sent')
               ? 'Your data has been automatically sent to the researcher. You can also download it below as a backup.'
-              : 'Your data is currently stored only on this computer. Please download your session files below.'}
+              : emailStatus?.includes('exceeds email limit') || emailStatus?.includes('Merged CSV')
+              ? 'Due to file size limits, automatic email submission could not complete.'
+              : getAvailableSubmissionMethod() === 'none'
+              ? 'Automatic email submission is not configured.'
+              : 'Your data is currently stored only on this computer.'}
           </p>
+          
+          {!emailStatus?.includes('✅ Your data has been automatically sent') && (
+            <div className="email-instructions">
+              <h3 className="email-instructions-title">📧 Important: Please Email Your CSV File(s)</h3>
+              <p className="email-instructions-text">
+                {emailStatus?.includes('exceeds email limit') || emailStatus?.includes('Merged CSV')
+                  ? 'Your data file is too large for automatic submission. Please download the CSV file(s) below and email them to:'
+                  : 'Please download your CSV file(s) below and email them to the researcher at:'}
+              </p>
+              <div className="email-highlight">
+                <strong>m.dastgheib@gmail.com</strong>
+              </div>
+              <p className="email-instructions-text">
+                <strong>Steps:</strong>
+              </p>
+              <ol className="email-steps">
+                <li>Click the download button below to save your CSV file(s)</li>
+                <li>Open your email client (Gmail, Outlook, etc.)</li>
+                <li>Create a new email to <strong>m.dastgheib@gmail.com</strong></li>
+                <li>Attach the downloaded CSV file(s) to your email</li>
+                <li>Use subject line: <em>Experiment Data - {participantId}</em></li>
+                <li>Send the email</li>
+              </ol>
+              <p className="email-instructions-note">
+                <strong>Important:</strong> If you downloaded multiple files, please attach ALL CSV files to your email.
+              </p>
+            </div>
+          )}
           
           <div className="download-buttons">
             <button 
-              onClick={handleDownload}
+              onClick={() => handleDownload(true)}
               className="download-button primary"
             >
-              Download Session Data (CSV)
+              Download Merged CSV (Trials + TLX - Recommended)
+            </button>
+            
+            <button 
+              onClick={() => handleDownload(false)}
+              className="download-button secondary"
+            >
+              Download Separate Files (Trials + Blocks)
             </button>
             
             <button 
@@ -331,11 +367,15 @@ export default function Debrief() {
         </section>
 
         <section className="debrief-footer">
-          <p><strong>Principal Investigator:</strong> Mohammad Dastgheib</p>
-          <p><strong>Contact:</strong> m.dastgheib@gmail.com</p>
-          <p className="footer-note">
-            If you have questions about your rights as a participant, you may contact me at mdastgheib.com.
-          </p>
+          <div className="footer-contact">
+            <p><strong>Principal Investigator:</strong> Mohammad Dastgheib</p>
+            <p className="footer-email">
+              <strong>📧 Email:</strong> <a href="mailto:m.dastgheib@gmail.com" className="email-link">m.dastgheib@gmail.com</a>
+            </p>
+            <p className="footer-note">
+              If you have questions about your rights as a participant, you may contact me at mdastgheib.com.
+            </p>
+          </div>
         </section>
       </div>
     </div>

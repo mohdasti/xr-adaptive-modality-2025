@@ -74,6 +74,13 @@ export const CSV_HEADERS = [
   'dpi',
   'practice',
   'avg_fps',
+  // TLX columns (merged from block data)
+  'tlx_mental',
+  'tlx_physical',
+  'tlx_temporal',
+  'tlx_performance',
+  'tlx_effort',
+  'tlx_frustration',
 ] as const
 
 export type CSVRow = Record<string, string | number | boolean | null>
@@ -386,6 +393,93 @@ export class CSVLogger {
       return
     }
     const csvContent = this.toBlockCSV()
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.style.display = 'none'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Merge TLX block data into trial CSV rows
+   * Each trial row gets TLX values from its corresponding block
+   */
+  toMergedCSV(): string {
+    // Create a map of block_number -> TLX values
+    const blockTLXMap = new Map<number, {
+      tlx_mental: number | null
+      tlx_physical: number | null
+      tlx_temporal: number | null
+      tlx_performance: number | null
+      tlx_effort: number | null
+      tlx_frustration: number | null
+    }>()
+
+    for (const blockRow of this.blockRows) {
+      blockTLXMap.set(blockRow.block_number, {
+        tlx_mental: blockRow.tlx_mental ?? null,
+        tlx_physical: blockRow.tlx_physical ?? null,
+        tlx_temporal: blockRow.tlx_temporal ?? null,
+        tlx_performance: blockRow.tlx_performance ?? null,
+        tlx_effort: blockRow.tlx_effort ?? null,
+        tlx_frustration: blockRow.tlx_frustration ?? null,
+      })
+    }
+
+    // Merge TLX data into trial rows
+    const mergedRows: CSVRow[] = this.rows.map((row) => {
+      const blockNumber = typeof row.block_number === 'number' ? row.block_number : 
+                         typeof row.block_number === 'string' ? parseInt(row.block_number, 10) : null
+      
+      const tlxData = blockNumber !== null && !isNaN(blockNumber) 
+        ? blockTLXMap.get(blockNumber) 
+        : null
+
+      return {
+        ...row,
+        tlx_mental: tlxData?.tlx_mental ?? null,
+        tlx_physical: tlxData?.tlx_physical ?? null,
+        tlx_temporal: tlxData?.tlx_temporal ?? null,
+        tlx_performance: tlxData?.tlx_performance ?? null,
+        tlx_effort: tlxData?.tlx_effort ?? null,
+        tlx_frustration: tlxData?.tlx_frustration ?? null,
+      }
+    })
+
+    // Generate CSV with merged data
+    const lines: string[] = []
+    lines.push(this.headers.join(','))
+
+    for (const row of mergedRows) {
+      const values = this.headers.map((header) => {
+        const value = row[header]
+        if (value === null || value === undefined) return ''
+        
+        const strValue = String(value)
+        if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+          return `"${strValue.replace(/"/g, '""')}"`
+        }
+        return strValue
+      })
+      lines.push(values.join(','))
+    }
+
+    return lines.join('\n')
+  }
+
+  /**
+   * Download merged CSV (trials + TLX data in one file)
+   */
+  downloadMergedCSV(filename: string = 'experiment_data_merged.csv'): void {
+    const csvContent = this.toMergedCSV()
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
 

@@ -140,6 +140,68 @@
   border-color: #dc3545;
 }
 
+.email-instructions {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 193, 7, 0.05) 100%);
+  border: 2px solid rgba(255, 193, 7, 0.5);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.email-instructions-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #ffc107;
+  margin: 0 0 1rem 0;
+}
+
+.email-instructions-text {
+  color: #e0e0e0;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.email-highlight {
+  background: rgba(255, 193, 7, 0.2);
+  border: 2px solid #ffc107;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  text-align: center;
+  font-size: 1.25rem;
+}
+
+.email-highlight strong {
+  color: #ffc107;
+  font-weight: 700;
+}
+
+.email-steps {
+  color: #e0e0e0;
+  margin: 1rem 0;
+  padding-left: 2rem;
+  line-height: 1.8;
+}
+
+.email-steps li {
+  margin-bottom: 0.5rem;
+}
+
+.email-steps strong {
+  color: #ffc107;
+}
+
+.email-instructions-note {
+  color: #b0b0b0;
+  font-size: 0.95rem;
+  margin-top: 0.75rem;
+  font-style: italic;
+  background: rgba(255, 193, 7, 0.1);
+  padding: 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid #ffc107;
+}
+
 .debrief-footer {
   padding-top: 2rem;
   border-top: 1px solid #2a2a2a;
@@ -149,6 +211,34 @@
 
 .debrief-footer p {
   margin: 0.5rem 0;
+}
+
+.footer-contact {
+  background: rgba(42, 42, 42, 0.6);
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.footer-email {
+  margin: 1rem 0 !important;
+  font-size: 1rem !important;
+  color: #e0e0e0 !important;
+}
+
+.email-link {
+  color: #00d9ff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1.1rem;
+  border-bottom: 2px solid #00d9ff;
+  transition: all 0.2s ease;
+}
+
+.email-link:hover {
+  color: #00ffff;
+  border-bottom-color: #00ffff;
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.5);
 }
 
 .footer-note {
