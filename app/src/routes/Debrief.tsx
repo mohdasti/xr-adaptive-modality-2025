@@ -23,12 +23,13 @@ export default function Debrief() {
     
     if (merged) {
       // Download merged file (trials + TLX in one)
-      logger.downloadMergedCSV(`experiment_${participantId}_session${sessionNum}_${timestamp}_merged.csv`)
+      // Format: {participant_id}_{date_time}_merged.csv
+      logger.downloadMergedCSV(`${participantId}_${timestamp}_merged.csv`)
     } else {
       // Download separate files
-      logger.downloadCSV(`trials_${participantId}_session${sessionNum}_${timestamp}.csv`)
+      logger.downloadCSV(`trials_${participantId}_${timestamp}.csv`)
       setTimeout(() => {
-        logger.downloadBlockCSV(`blocks_${participantId}_session${sessionNum}_${timestamp}.csv`)
+        logger.downloadBlockCSV(`blocks_${participantId}_${timestamp}.csv`)
       }, 500)
     }
   }
@@ -98,7 +99,8 @@ export default function Debrief() {
             setTimeout(() => {
               const logger = getLogger()
               const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
-              logger.downloadMergedCSV(`experiment_${sessionParticipantId}_${timestamp}_merged.csv`)
+              // Format: {participant_id}_{date_time}_merged.csv
+              logger.downloadMergedCSV(`${participantId}_${timestamp}_merged.csv`)
               setEmailStatus('✅ Merged CSV file downloaded! Please email it to m.dastgheib@gmail.com (see instructions below).')
             }, 300)
           } else {
@@ -176,7 +178,8 @@ export default function Debrief() {
             setTimeout(() => {
               const logger = getLogger()
               const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
-              logger.downloadMergedCSV(`experiment_${sessionParticipantId}_${timestamp}_merged.csv`)
+              // Format: {participant_id}_{date_time}_merged.csv
+              logger.downloadMergedCSV(`${participantId}_${timestamp}_merged.csv`)
               setEmailStatus('✅ Merged CSV file downloaded! Please email it to m.dastgheib@gmail.com (see instructions below).')
             }, 300)
           } else {
