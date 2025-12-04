@@ -39,10 +39,13 @@ def load_data(input_path: Path) -> pd.DataFrame:
     data = pd.concat(dfs, ignore_index=True)
     
     # Preprocessing
+    # Filter: 150ms <= RT <= 6000ms (matches experimental timeout)
+    # Lower bound: minimum valid reaction time (150ms)
+    # Upper bound: experimental timeout (6s) - excludes outliers and system failures
     data = data[
         (data['rt_ms'].notna()) & 
-        (data['rt_ms'] > 0) & 
-        (data['rt_ms'] < 10000) &
+        (data['rt_ms'] >= 150) & 
+        (data['rt_ms'] <= 6000) &
         (data['correct'].notna())
     ].copy()
     
