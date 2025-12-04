@@ -12,7 +12,7 @@ compute_effective_metrics <- function(trials) {
   trials <- trials %>%
     filter(
       movement_time_ms >= 150, 
-      movement_time_ms <= 5000,
+      movement_time_ms <= 6000,
       !is.na(endpoint_x), !is.na(endpoint_y),
       !is.na(target_center_x), !is.na(target_center_y)
     )

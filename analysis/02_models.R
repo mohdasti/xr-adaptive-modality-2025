@@ -46,7 +46,7 @@ trial <- trial %>%
     block_number = factor(block_number)
   )
 
-rt <- trial %>% filter(error == 0, movement_time_ms >= 150, movement_time_ms <= 5000)
+rt <- trial %>% filter(error == 0, movement_time_ms >= 150, movement_time_ms <= 6000)
 
 # MODEL 1: RT
 m_rt <<- lmer(

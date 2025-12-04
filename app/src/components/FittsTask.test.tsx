@@ -24,7 +24,7 @@ describe('FittsTask', () => {
     },
     onTrialComplete: vi.fn(),
     onTrialError: vi.fn(),
-    timeout: 10000,
+    timeout: 6000,
   }
 
   it('renders start button initially', () => {

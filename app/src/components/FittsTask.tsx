@@ -70,7 +70,7 @@ export function FittsTask({
   isPractice = false,
   onTrialComplete,
   onTrialError,
-  timeout = 10000,
+  timeout = 6000,
 }: FittsTaskProps) {
   // Suppress unused warning for future use
   void cameraEnabled

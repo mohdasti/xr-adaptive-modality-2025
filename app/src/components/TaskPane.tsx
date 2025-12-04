@@ -1117,7 +1117,7 @@ export function TaskPane() {
             isPractice={isPracticeBlock}
             onTrialComplete={handleFittsTrialComplete}
             onTrialError={handleFittsTrialError}
-            timeout={10000}
+            timeout={6000}
           />
         </>
       )}

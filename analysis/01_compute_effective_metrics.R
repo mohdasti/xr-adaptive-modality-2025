@@ -21,7 +21,7 @@ if (!"error" %in% names(trial)) {
 }
 
 rt <- trial %>%
-  filter(error == 0, movement_time_ms >= 150, movement_time_ms <= 5000, !is.na(projected_error_px)) %>%
+  filter(error == 0, movement_time_ms >= 150, movement_time_ms <= 6000, !is.na(projected_error_px)) %>%
   mutate(
     participant_id = factor(participant_id),
     modality = factor(modality, levels = c("hand","gaze")),
