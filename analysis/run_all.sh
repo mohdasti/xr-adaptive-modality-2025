@@ -100,10 +100,45 @@ echo "  TODO: Export summary tables"
 echo ""
 
 # ============================================================================
-# Stage 3: Models (TODO)
+# Stage 3: Decision Models (LBA)
 # ============================================================================
 
-echo -e "${YELLOW}[3/5] Models (TODO: implement)${NC}"
+echo -e "${GREEN}[3/5] Decision Models (LBA)${NC}"
+
+# Check if Python is available
+if ! command -v python3 &> /dev/null; then
+  echo -e "${YELLOW}⚠ Python3 not available, skipping LBA analysis${NC}"
+else
+  # Check if PyMC is available
+  if python3 -c "import pymc" 2>/dev/null; then
+    echo "  Running LBA analysis..."
+    cd "$PROJECT_ROOT"
+    
+    LBA_SCRIPT="$PROJECT_ROOT/analysis/py/lba.py"
+    if [ -f "$LBA_SCRIPT" ]; then
+      if python3 "$LBA_SCRIPT" --input "$PROJECT_ROOT/data/clean/" --output "$RESULTS_DIR" 2>&1 | tee "$RESULTS_DIR/lba_analysis.log"; then
+        echo -e "${GREEN}✓ LBA analysis complete${NC}"
+      else
+        LBA_EXIT=$?
+        echo -e "${YELLOW}⚠ LBA analysis had issues (exit code: $LBA_EXIT)${NC}"
+        echo "  See $RESULTS_DIR/lba_analysis.log for details"
+      fi
+    else
+      echo -e "${YELLOW}⚠ LBA script not found: $LBA_SCRIPT${NC}"
+    fi
+  else
+    echo -e "${YELLOW}⚠ PyMC not installed. Install with: pip install pymc arviz${NC}"
+    echo -e "${YELLOW}  Skipping LBA analysis${NC}"
+  fi
+fi
+
+echo ""
+
+# ============================================================================
+# Stage 4: Statistical Models (TODO)
+# ============================================================================
+
+echo -e "${YELLOW}[4/6] Statistical Models (TODO: implement)${NC}"
 echo "  TODO: Run LMEM for log-RT (H1, H2, H3)"
 echo "  TODO: Run GLMM for errors (H3)"
 echo "  TODO: Run TOST equivalence test (H2)"
@@ -112,20 +147,20 @@ echo "  TODO: Export model summaries and EMMs"
 echo ""
 
 # ============================================================================
-# Stage 4: Visualizations (TODO)
+# Stage 5: Visualizations (TODO)
 # ============================================================================
 
-echo -e "${YELLOW}[4/5] Visualizations (TODO: implement)${NC}"
+echo -e "${YELLOW}[5/6] Visualizations (TODO: implement)${NC}"
 echo "  TODO: Create combined panel (MT, Error, TP, TLX)"
 echo "  TODO: Generate Fitts fit plots"
 echo "  TODO: Export figures"
 echo ""
 
 # ============================================================================
-# Stage 5: Render Mini-Report (TODO)
+# Stage 6: Render Mini-Report (TODO)
 # ============================================================================
 
-echo -e "${YELLOW}[5/5] Render Mini-Report (TODO: implement)${NC}"
+echo -e "${YELLOW}[6/6] Render Mini-Report (TODO: implement)${NC}"
 echo "  TODO: Compile validation results"
 echo "  TODO: Summarize descriptive statistics"
 echo "  TODO: Extract key model results"
@@ -143,7 +178,8 @@ echo ""
 echo "Current status:"
 echo "  ✓ Validation: Implemented"
 echo "  ○ Summarize: TODO"
-echo "  ○ Models: TODO"
+echo "  ✓ Decision Models (LBA): Implemented"
+echo "  ○ Statistical Models: TODO"
 echo "  ○ Visualizations: TODO"
 echo "  ○ Report: TODO"
 echo ""

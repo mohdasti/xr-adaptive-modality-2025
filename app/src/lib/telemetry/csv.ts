@@ -1,5 +1,11 @@
 /**
  * CSV writer for telemetry trial data
+ * 
+ * This exporter dynamically includes all fields from TrialRow objects,
+ * including movement quality metrics such as:
+ * - submovement_count: Number of velocity peaks (intermittent control proxy)
+ * - target_reentry_count: Number of target re-entries (control stability)
+ * - verification_time_ms: Time from first target entry to selection
  */
 
 import type { TrialRow } from './collector'
@@ -8,6 +14,9 @@ import type { TrialRow } from './collector'
  * Convert trial rows to CSV format
  * @param trialRows - Array of trial rows to convert
  * @returns CSV string with headers
+ * 
+ * Note: All fields present in TrialRow objects are automatically included.
+ * This includes hybrid analysis metrics like submovement_count.
  */
 export function toCSV(trialRows: TrialRow[]): string {
   if (trialRows.length === 0) {
@@ -15,6 +24,7 @@ export function toCSV(trialRows: TrialRow[]): string {
   }
 
   // Collect all unique keys from all rows
+  // This automatically includes all fields like submovement_count, target_reentry_count, etc.
   const allKeys = new Set<string>()
   trialRows.forEach((row) => {
     Object.keys(row).forEach((key) => allKeys.add(key))

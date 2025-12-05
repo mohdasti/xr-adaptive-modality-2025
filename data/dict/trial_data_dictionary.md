@@ -30,4 +30,5 @@ Block-level TLX responses are exported to `block_data.csv` with the following co
 | is_fullscreen | TRUE/FALSE | boolean | Fullscreen compliance |
 | user_agent | string | text | Browser user agent |
 | adaptation_triggered | 0/1 | binary | Trial flagged as adaptation trigger |
+| submovement_count | count | integer | Number of velocity peaks detected during the movement. Proxy for intermittent control updates (Meyer et al., 1988) |
 

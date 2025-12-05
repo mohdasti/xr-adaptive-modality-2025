@@ -148,6 +148,25 @@ export function FittsTask({
     lastFrameTime: null,
   })
 
+  // Submovement tracking (for Hybrid Analysis)
+  const submovementTrackingRef = useRef<{
+    previousPos: Position | null
+    previousTime: number | null
+    velocities: number[] // Recent velocity history for peak detection
+    peakVelocity: number // Maximum velocity seen so far in this trial
+    submovementCount: number // Count of detected submovements
+    lastVelocity: number // Last calculated velocity
+    isRising: boolean // Whether velocity is currently rising
+  }>({
+    previousPos: null,
+    previousTime: null,
+    velocities: [],
+    peakVelocity: 0,
+    submovementCount: 0,
+    lastVelocity: 0,
+    isRising: false,
+  })
+
   const getSpatialMetrics = useCallback(
     (localPoint?: Position | null) => {
     const canvasRect = canvasRef.current?.getBoundingClientRect()
@@ -230,6 +249,53 @@ export function FittsTask({
     return avgFPS
   }, [])
 
+  // Calculate velocity between two positions over a time delta
+  const calculateVelocity = useCallback(
+    (pos1: Position, pos2: Position, deltaTime: number): number => {
+      if (deltaTime <= 0) return 0
+      const dx = pos2.x - pos1.x
+      const dy = pos2.y - pos1.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      return (distance / deltaTime) * 1000 // Convert to px/s
+    },
+    []
+  )
+
+  // Detect velocity peaks (submovements)
+  // A submovement is defined as a velocity peak that exceeds 10% of peak velocity
+  // followed by a decrease
+  const detectSubmovement = useCallback((currentVelocity: number): boolean => {
+    const tracking = submovementTrackingRef.current
+    
+    // Update peak velocity if current is higher
+    if (currentVelocity > tracking.peakVelocity) {
+      tracking.peakVelocity = currentVelocity
+    }
+    
+    // Need at least some movement to detect peaks
+    if (tracking.peakVelocity === 0) return false
+    
+    // Threshold: 10% of peak velocity
+    const threshold = tracking.peakVelocity * 0.1
+    
+    // Track velocity trend
+    const wasRising = tracking.isRising
+    const isRisingNow = currentVelocity > tracking.lastVelocity
+    
+    // Detect peak: velocity was rising, now decreasing, and above threshold
+    if (wasRising && !isRisingNow && currentVelocity > threshold) {
+      tracking.isRising = false
+      tracking.submovementCount++
+      return true
+    }
+    
+    // Update state
+    tracking.isRising = isRisingNow
+    tracking.lastVelocity = currentVelocity
+    
+    return false
+  }, [])
+
   const handleTimeout = useCallback(() => {
     if (!trialDataRef.current) return
     if (isPaused || isBlockedState()) return // Don't process if paused
@@ -293,10 +359,12 @@ export function FittsTask({
       // Calibration data (for post-hoc visual angle calculations)
       pixels_per_mm: calibrationData?.pixelsPerMM ?? null,
       pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
-      // Target re-entry tracking (proxy for frustration in gaze interactions)
-      target_reentry_count: targetReEntryCountRef.current,
-      // Verification time (time from first target entry to timeout)
-      verification_time_ms: verification_time_ms,
+          // Target re-entry tracking (proxy for frustration in gaze interactions)
+          target_reentry_count: targetReEntryCountRef.current,
+          // Verification time (time from first target entry to timeout)
+          verification_time_ms: verification_time_ms,
+          // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
+          submovement_count: submovementTrackingRef.current.submovementCount,
     })
 
     onTrialError('timeout')
@@ -434,6 +502,17 @@ export function FittsTask({
         lastFrameTime: null,
       }
       
+      // Reset submovement tracking
+      submovementTrackingRef.current = {
+        previousPos: null,
+        previousTime: null,
+        velocities: [],
+        peakVelocity: 0,
+        submovementCount: 0,
+        lastVelocity: 0,
+        isRising: false,
+      }
+      
       const startTime = performance.now()
       setTrialStartTime(startTime)
       
@@ -554,6 +633,64 @@ export function FittsTask({
       }
     }
   }, [trialStartTime, showStart, targetPos])
+
+  // Velocity tracking loop for submovement detection
+  // Use a ref to track cursor position to avoid dependency on cursorPos state
+  const cursorPosRef = useRef<Position>(cursorPos)
+  useEffect(() => {
+    cursorPosRef.current = cursorPos
+  }, [cursorPos])
+  
+  useEffect(() => {
+    if (!trialStartTime || showStart || !targetPos) return
+    
+    let velocityTrackingFrameId: number | null = null
+    
+    const trackVelocity = () => {
+      const tracking = submovementTrackingRef.current
+      const currentTime = performance.now()
+      // Read current cursor position from ref (always up-to-date)
+      const currentPos = cursorPosRef.current
+      
+      // Initialize on first frame
+      if (tracking.previousTime === null || tracking.previousPos === null) {
+        tracking.previousPos = { ...currentPos }
+        tracking.previousTime = currentTime
+        velocityTrackingFrameId = requestAnimationFrame(trackVelocity)
+        return
+      }
+      
+      // Calculate velocity
+      const deltaTime = currentTime - tracking.previousTime
+      if (deltaTime > 0) {
+        const velocity = calculateVelocity(tracking.previousPos, currentPos, deltaTime)
+        
+        // Detect submovement peaks
+        detectSubmovement(velocity)
+        
+        // Store velocity history (keep last 60 samples for smoothing)
+        tracking.velocities.push(velocity)
+        if (tracking.velocities.length > 60) {
+          tracking.velocities.shift()
+        }
+      }
+      
+      // Update previous state
+      tracking.previousPos = { ...currentPos }
+      tracking.previousTime = currentTime
+      
+      velocityTrackingFrameId = requestAnimationFrame(trackVelocity)
+    }
+    
+    // Start tracking
+    velocityTrackingFrameId = requestAnimationFrame(trackVelocity)
+    
+    return () => {
+      if (velocityTrackingFrameId !== null) {
+        cancelAnimationFrame(velocityTrackingFrameId)
+      }
+    }
+  }, [trialStartTime, showStart, targetPos, calculateVelocity, detectSubmovement])
   
   const completeSelection = useCallback(
     (clickPos: Position, isClick: boolean = false) => {
@@ -673,6 +810,8 @@ export function FittsTask({
           target_reentry_count: targetReEntryCountRef.current,
           // Verification time (time from first target entry to selection)
           verification_time_ms: verification_time_ms,
+          // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
+          submovement_count: submovementTrackingRef.current.submovementCount,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -739,6 +878,8 @@ export function FittsTask({
           target_reentry_count: targetReEntryCountRef.current,
           // Verification time (time from first target entry to selection)
           verification_time_ms: verification_time_ms,
+          // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
+          submovement_count: submovementTrackingRef.current.submovementCount,
         })
         
         // Clear trial start time to prevent duplicate completions
@@ -1268,6 +1409,8 @@ export function FittsTask({
               // Practice and FPS tracking
               practice: isPractice,
               avg_fps: avgFPS,
+              // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
+              submovement_count: submovementTrackingRef.current.submovementCount,
             })
             onTrialError('slip')
           }
