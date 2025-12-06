@@ -322,7 +322,7 @@ export class CSVLogger {
     // Data rows
     for (const row of this.rows) {
       // Merge debrief data into row
-      const rowWithDebrief = {
+      const rowWithDebrief: CSVRow = {
         ...row,
         ...debriefData,
       }
