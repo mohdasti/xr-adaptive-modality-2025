@@ -107,6 +107,14 @@
   text-transform: none;
 }
 
+.tlx-description-text {
+  font-size: 0.875rem;
+  color: #b0b0b0;
+  margin: 0.5rem 0 0.75rem 0;
+  line-height: 1.5;
+  font-style: italic;
+}
+
 .tlx-value {
   font-size: 1.5rem;
   font-weight: 700;

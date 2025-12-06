@@ -223,11 +223,16 @@ xr-adaptive-modality-2025/
 │   ├── raw/                  # Raw data files (gitignored)
 │   ├── clean/                # Processed data (trial_data.csv, block_data.csv)
 │   └── dict/                 # Data dictionaries
-├── analysis/                 # Analysis scripts (R)
+├── analysis/                 # Analysis scripts (R + Python)
 │   ├── compute_effective_metrics.R  # Compute We, IDe, throughput
+│   ├── 02_models.R                  # Primary models (RT, Errors) + Hybrid Analysis models
 │   ├── primary_models.R              # Mixed-effects models (RT, Errors, TP, TLX)
 │   ├── check_exclusions.R           # Exclusion reporting
-│   └── visualizations.R             # Summary figures
+│   ├── visualizations.R             # Summary figures
+│   └── py/                          # Python analysis scripts
+│       ├── lba.py                   # Linear Ballistic Accumulator (LBA) for verification phase
+│       └── archive/                  # Deprecated scripts
+│           └── ddm_hddm.py.bak      # DDM (deprecated - error rate too low for convergence)
 ├── docs/                     # Documentation
 │   ├── preregistration.md    # Pre-registered study design
 │   ├── hypotheses.md         # H1-H5 hypotheses
@@ -326,6 +331,8 @@ git commit -m "Lock adaptation thresholds post-pilot"
 ### NASA-TLX Workload Assessment
 
 - **Raw NASA-TLX**: Six 0-100 sliders (no weighting)
+- **All 6 standard dimensions**: Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration
+- **Clear descriptions**: Each dimension includes explanatory text to help participants understand what they're rating
 - **Performance reverse-scored**: 100 - performance in analysis
 - **Block-level logging**: Collected once per block after completion
 - **Total score**: Sum of all six dimensions (0-600 range)
@@ -360,6 +367,7 @@ localStorage.removeItem('participantIndex'); location.reload();
 **CSV Files:**
 - **Trial CSV**: Includes `rt_ms`, `endpoint_error_px`, **`projected_error_px`** (ISO 9241-9 compliant), `confirm_type`, `adaptation_triggered`, `practice`, `avg_fps`, plus display metadata (screen/window size, DPR, zoom, fullscreen)
   - **Gaze interaction metrics**: `target_reentry_count` (measures drift in/out), `verification_time_ms` (decision phase isolation)
+  - **Hybrid Analysis metrics**: `submovement_count` (velocity peaks, intermittent control proxy - Meyer et al., 1988)
   - **Calibration data**: `pixels_per_mm`, `pixels_per_degree` (stored in sessionStorage, logged in CSV)
 - **Block CSV**: NASA-TLX data logged once per block with six raw subscales (performance reverse‑scored in analysis)
 - **Demographics**: Age, gender, gaming frequency, input device, vision correction, handedness, motor impairment, fatigue level (included in trial CSV)
@@ -414,13 +422,23 @@ The analysis pipeline follows the pre-registered plan:
    - Computes throughput (TP = IDe / MT in seconds)
    - Exports condition-level summaries
 
-2. **Primary Models** (`primary_models.R`)
+2. **Primary Models** (`02_models.R` and `primary_models.R`)
    - LMEM for Movement Time (log-RT) with Modality × UI Mode interaction
    - GLMM for Error rates (binomial)
    - LMEM for Throughput
    - LMEM for NASA-TLX (raw total, reverse-scored performance)
+   - **Hybrid Analysis Models** (movement quality metrics):
+     - Submovement Cost: `lmer(submovement_count ~ modality * ui_mode * IDe + ...)`
+     - Control Stability: `glmer(target_reentry_count ~ modality * ui_mode + ...)` (Poisson/NB)
+     - Verification Time: `lmer(verification_time_ms ~ modality * ui_mode + ...)` (LBA proxy)
    - TOST equivalence test for RT (non-inferiority ±5%)
    - Participant and trial-level exclusions applied
+
+3. **Decision Models** (`analysis/py/lba.py`)
+   - Hierarchical Linear Ballistic Accumulator (LBA) for verification phase modeling
+   - Parameters separated by modality and ui_mode
+   - Exports `lba_parameters.json` for decision component analysis
+   - Note: DDM deprecated (error rate ~3% too low for reliable convergence)
 
 3. **Exclusion Reporting** (`check_exclusions.R`)
    - Generates participant-level exclusion report
@@ -434,10 +452,15 @@ The analysis pipeline follows the pre-registered plan:
 
 **Run all analyses:**
 ```bash
+# R analysis pipeline
 Rscript analysis/compute_effective_metrics.R
 Rscript analysis/check_exclusions.R
+Rscript analysis/02_models.R              # Primary + Hybrid Analysis models
 Rscript analysis/primary_models.R
-Rscript analysis/visualizations.R   # optional
+Rscript analysis/visualizations.R         # optional
+
+# Python decision models (LBA)
+python analysis/py/lba.py --input data/clean/ --output results/
 ```
 
 **Outputs:**
@@ -448,6 +471,10 @@ Rscript analysis/visualizations.R   # optional
 - `results/tables/emmeans_error.csv`
 - `results/tables/emmeans_tp.csv`
 - `results/tables/emmeans_TLX.csv`
+- `results/tables/emmeans_submovement.csv` (Hybrid Analysis)
+- `results/tables/emmeans_reentry.csv` (Hybrid Analysis)
+- `results/tables/emmeans_verification.csv` (Hybrid Analysis)
+- `results/lba_parameters.json` (LBA parameters by modality/ui_mode)
 - `results/figures/summary_panel.png`
 
 ---
@@ -520,7 +547,10 @@ Lightweight pub/sub system for inter-component communication:
 - ✅ **Timing Precision**: Using `performance.now()` for critical psychophysics timing measurements
 - ✅ **Gaze Simulation**: Physiologically-accurate simulation with normalized jitter based on calibration (angular velocity in deg/s)
 - ✅ **ISO 9241-9 Compliance**: Projected error calculation along task axis for rigorous Fitts' Law analysis
-- ✅ **Critical Metrics Logging**: All scientific metrics verified - `projected_error_px`, `target_reentry_count`, `verification_time_ms`, `pixels_per_mm`, `pixels_per_degree` (see `CSV_VERIFICATION_REPORT.md`)
+- ✅ **Critical Metrics Logging**: All scientific metrics verified - `projected_error_px`, `target_reentry_count`, `verification_time_ms`, `submovement_count`, `pixels_per_mm`, `pixels_per_degree` (see `CSV_VERIFICATION_REPORT.md`)
+- ✅ **Hybrid Analysis**: Movement quality metrics (submovement count, control stability, verification time) for quantifying control loop costs
+- ✅ **LBA Migration**: Switched from DDM to Linear Ballistic Accumulator for verification phase modeling (DDM error rate too low for convergence)
+- ✅ **TLX Form Improvements**: Added clear descriptions for all 6 NASA-TLX dimensions to improve participant understanding
 - ✅ **Error Rate Feedback**: ISO 9241-9 compliant block-level error rate indicator in HUD (only shown between trials to reduce distraction)
 - ✅ **Start Button Modality Fix**: Start button is selectable via current modality (dwell for gaze), eliminating modality switching confound
 - ✅ **Visual Feedback Enhancement**: More prominent orange border/glow for adaptive conditions, stress-inducing timer colors (yellow→orange→red gradient)

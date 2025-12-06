@@ -60,13 +60,37 @@ export function TLXForm({ blockNumber, isOpen, onSubmit, onClose }: TLXFormProps
     }))
   }
 
-  const items: Array<{ key: keyof TLXValues; label: string; helper?: string }> = [
-    { key: 'mental', label: 'Mental Demand' },
-    { key: 'physical', label: 'Physical Demand' },
-    { key: 'temporal', label: 'Temporal Demand' },
-    { key: 'performance', label: 'Performance', helper: '(0 = perfect, 100 = poor)' },
-    { key: 'effort', label: 'Effort' },
-    { key: 'frustration', label: 'Frustration' },
+  const items: Array<{ key: keyof TLXValues; label: string; description: string }> = [
+    { 
+      key: 'mental', 
+      label: 'Mental Demand',
+      description: 'How much mental and perceptual activity was required? (e.g., thinking, deciding, calculating, remembering, looking, searching)'
+    },
+    { 
+      key: 'physical', 
+      label: 'Physical Demand',
+      description: 'How much physical activity was required? (e.g., pushing, pulling, turning, controlling, activating)'
+    },
+    { 
+      key: 'temporal', 
+      label: 'Temporal Demand',
+      description: 'How much time pressure did you feel due to the rate or pace at which the tasks or task elements occurred?'
+    },
+    { 
+      key: 'performance', 
+      label: 'Performance',
+      description: 'How successful were you in accomplishing what you were asked to do? (0 = perfect, 100 = failure)'
+    },
+    { 
+      key: 'effort', 
+      label: 'Effort',
+      description: 'How hard did you have to work (mentally and physically) to accomplish your level of performance?'
+    },
+    { 
+      key: 'frustration', 
+      label: 'Frustration',
+      description: 'How insecure, discouraged, irritated, stressed, and annoyed were you?'
+    },
   ]
 
   if (!isOpen) return null
@@ -83,15 +107,15 @@ export function TLXForm({ blockNumber, isOpen, onSubmit, onClose }: TLXFormProps
         </div>
 
         <div className="tlx-form">
-          {items.map(({ key, label, helper }) => (
+          {items.map(({ key, label, description }) => (
             <div className="tlx-item" key={key}>
               <div className="tlx-label-row">
                 <label className="tlx-label">
                   {label}
-                  {helper && <span className="tlx-helper">{helper}</span>}
                 </label>
                 <span className="tlx-value">{values[key]}</span>
               </div>
+              <p className="tlx-description-text">{description}</p>
               <input
                 type="range"
                 min="0"
