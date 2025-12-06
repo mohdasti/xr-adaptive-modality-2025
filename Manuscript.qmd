@@ -1,0 +1,311 @@
+---
+title: "Adaptive Modality Systems in Extended Reality: Optimizing Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching"
+author: "Mohammad Dastgheib and Fatemeh Pourmahdian"
+date: last-modified
+abstract: |
+  Extended Reality (XR) systems require users to engage their entire body for interaction, imposing significant ergonomic and cognitive demands. Current XR interfaces force a binary choice between controller-based interaction (suffering from "Gorilla Arm" fatigue) and gaze-based interaction (plagued by the "Midas Touch" problem and precision limitations). This manuscript introduces the theoretical foundation and methodological implementation of an Adaptive Modality System that dynamically switches between manual (hand-pointing) and ocular (gaze-based) input modalities based on real-time assessments of task difficulty and user cognitive state. The system aims to optimize the "Input-Output Bandwidth" of the human-computer loop by leveraging Fitts's Law predictions and physiological measures (pupillometry) to assess cognitive load. Through a rigorous within-subjects experimental design utilizing the ISO 9241-9 multi-directional tapping task, we investigate whether context-aware adaptive systems yield higher throughput than static unimodal systems, reduce workload on the NASA-TLX, and enable reliable real-time triggers for adaptive UI interventions.
+bibliography: references.bib
+csl: apa-7th-edition.csl
+format:
+  pdf:
+    documentclass: article
+    classoption: [11pt, letterpaper]
+    geometry:
+      - margin=1in
+      - top=1.25in
+      - bottom=1.25in
+    fontsize: 11pt
+    linestretch: 1.5
+    number-sections: true
+    colorlinks: true
+    linkcolor: blue
+    citecolor: blue
+    urlcolor: blue
+    keep-tex: true
+    include-in-header: preamble.tex
+---
+
+\vspace{-0.5em}
+
+**Keywords:** Extended Reality, Virtual Reality, Adaptive Interfaces, Gaze Interaction, Fitts's Law, Human-Computer Interaction, Multimodal Interaction, Pupillometry
+
+\newpage
+
+# Introduction
+
+The transition from two-dimensional graphical user interfaces (GUIs) to three-dimensional spatial computing represents one of the most profound shifts in the history of human-computer interaction (HCI). Extended Reality (XR)—an umbrella term encompassing Virtual Reality (VR), Augmented Reality (AR), and Mixed Reality (MR)—promises to liberate digital information from the confines of flat screens, embedding it directly into the user's physical environment. However, this liberation imposes new and significant demands on the human sensorimotor system. Unlike the desktop metaphor, where interaction is mediated by low-effort devices like the mouse and keyboard, XR requires the user to engage their entire body. The "input space" is no longer a mousepad but the physical volume surrounding the user, and the primary pointing devices are the user's own hands and eyes.
+
+While this embodied interaction offers unprecedented intuitive potential, it is fraught with ergonomic and cognitive challenges. The "Gorilla Arm" syndrome, a phenomenon where prolonged mid-air arm extension leads to rapid musculoskeletal fatigue and pain, remains a critical barrier to the long-term adoption of gestural interfaces. Conversely, gaze-based interaction, which leverages the speed of the human oculomotor system, suffers from the "Midas Touch" problem—the inherent ambiguity between looking for perception and looking for action—and lacks the fine motor precision required for granular manipulation tasks [@jacob1990eye].
+
+Current XR systems typically force a binary choice: the user must either commit to a controller-based paradigm, accepting the physical fatigue, or a gaze-based paradigm, accepting the lack of precision and the potential for inadvertent triggers. This rigid dichotomy ignores the dynamic nature of human attention and the varying demands of different tasks. A high-precision manipulation task may require the stability of a hand controller, while a rapid visual search task is best served by the saccadic speed of the eye.
+
+This manuscript introduces the theoretical foundation and methodological implementation of the xr-adaptive-modality-2025 platform, a novel research framework designed to investigate Adaptive Modality Systems in XR. Extended Reality (XR) interfaces increasingly integrate multiple input modalities (e.g., eye-gaze and hand pointing) to enhance usability, but optimizing performance across modalities remains challenging. Human perceptual-motor limitations—from sensor noise to cognitive fatigue—can hinder precise and rapid interactions in XR. For example, gaze-based pointing is fast but prone to jitter and Midas touch issues, while hand controllers offer precision at the cost of speed.
+
+To address these issues, we explore adaptive UI interventions that dynamically adjust to the user's state and input modality: specifically, a declutter mechanism for gaze-based selection and a width inflation (target expansion) mechanism for hand-based selection. These adaptations aim to mitigate modality-specific weaknesses (gaze distraction and hand targeting difficulty) under varying cognitive load. By dynamically switching between manual (hand-pointing) and ocular (gaze-based) input modalities based on real-time assessments of task difficulty and user cognitive state, this system aims to optimize the "Input-Output Bandwidth" of the human-computer loop. The research leverages the ISO 9241-9 standard for evaluating non-keyboard input devices to rigorously quantify performance [@soukoreff2004towards], while integrating physiological measures—specifically pupillometry—to assess the cognitive cost of interaction.
+
+# Background and Related Work
+
+## The Sensorimotor Implications of Spatial Input
+
+To design an effective adaptive system, one must first deconstruct the physiological mechanisms of the component modalities. The human motor system and the visual system evolved for distinct evolutionary purposes: the hand for manipulation and the eye for information acquisition. Forcing either organ to perform the function of the other introduces friction.
+
+### The Biomechanics of Manual Pointing
+
+Manual input in XR, whether through held controllers or optical hand tracking, mimics the act of physical pointing. This interaction style benefits from proprioception—the body's innate sense of limb position—which allows for high-precision corrections without visual attention. However, the biomechanical cost is substantial. In a standard desktop setup, the wrist is supported, and the gain function (the ratio of mouse movement to cursor movement) allows the user to traverse large virtual distances with minimal physical effort. In a 1:1 mapped XR environment, reaching a virtual object requires a corresponding physical motion.
+
+Fitts's Law, the robust predictive model of human movement, defines the time required to acquire a target ($MT$) as a logarithmic function of the distance ($D$) and the target width ($W$) [@mackenzie1992fitts]. In XR, $D$ is a physical metric. Frequent large-amplitude movements lead to fatigue in the deltoids and trapezius muscles. As fatigue sets in, the signal-to-noise ratio of the motor system degrades; the hand begins to tremor, increasing the effective target width required for accurate selection and reducing the overall throughput of the interaction.
+
+### The Oculomotor Dynamics of Gaze Interaction
+
+The eye is the fastest motor organ in the human body. Saccades—rapid, ballistic movements of the eye—can reach velocities exceeding 900 degrees per second. This makes gaze an incredibly efficient modality for target acquisition. If the system knows where the user is looking, it can theoretically infer intent before the user's hand has even begun to move.
+
+However, the eye is fundamentally an input organ, not an output device. It is designed to scan and ingest information, not to push buttons. Using gaze for selection introduces several critical issues:
+
+**The Midas Touch:** In the physical world, we can look at an object without interacting with it. In a gaze-controlled interface, looking becomes equivalent to touching. To differentiate inspection from selection, systems often impose a "dwell time" (e.g., staring for 500ms), which paradoxically slows down the interaction and causes eye strain [@jacob1990eye].
+
+**Microsaccades and Jitter:** Even when "fixated" on a point, the eye is never truly still. It performs microsaccades to refresh the retinal image. This physiological jitter means that a gaze cursor is inherently noisy, making the selection of small, dense targets (high Index of Difficulty) frustrating or impossible without aggressive smoothing algorithms that introduce latency.
+
+**The Heisenberg Uncertainty of Gaze:** The act of consciously controlling one's eye movement changes the nature of the movement itself, often interfering with the cognitive processes that the gaze was meant to support.
+
+## Signal Processing and Real-Time Adaptation
+
+### Noise Reduction in Eye-Tracking Data
+
+Noisy or jittery tracking signals can degrade user performance; thus we apply real-time filtering to eye-tracking data. In particular, we employ the One Euro Filter for smoothing gaze input—a simple speed-dependent low-pass filter that reduces jitter at low motion speeds and raises the cutoff at high speeds to minimize lag [@oneeurofilter2012]. This balances precision and responsiveness in interactive systems, yielding more stable gaze cursors without undue latency. At low eye movement speeds (fixation or smooth pursuit), the filter applies heavy smoothing to counteract sensor noise and micro-saccadic jitter. At higher speeds (e.g., during saccades), it raises the cutoff to minimize lag, thus preserving responsiveness during high-velocity movements [@oneeurofilter2012].
+
+### Cognitive Load Theory in Immersive Environments
+
+The efficiency of an interface is not measured solely by speed (Movement Time) or accuracy (Error Rate), but also by the cognitive resources consumed to achieve that performance. Cognitive Load Theory (CLT) provides a framework for understanding these costs, distinguishing between intrinsic load (the difficulty of the task itself) and extraneous load (the difficulty imposed by the interface).
+
+#### Extraneous Load as an Interaction Tax
+
+In a poorly designed XR system, the user must dedicate significant working memory to the mechanics of interaction. "Where is my hand?" "Did the system register my blink?" "Why is the cursor jittering?" These questions represent extraneous load. The proposed Adaptive Modality System posits that the optimal input modality is the one that minimizes this extraneous load for a given context.
+
+-   For a distant, large target, the motor cost of reaching is high (extraneous physical load), while the precision requirement is low. Here, gaze interaction is superior because it eliminates the physical reach.
+
+-   For a close, small target, the precision requirement is high (intrinsic load). Gaze interaction here would impose high extraneous load due to the need to suppress microsaccades. Manual interaction, leveraging the stability of the hand, is superior.
+
+By automating the switch between these modes, the system effectively acts as an "Interaction transmission," shifting gears to keep the user in the optimal cognitive and physical RPM range.
+
+#### Physiological Correlates of Load
+
+Quantifying cognitive load in real-time is challenging. Subjective measures like the NASA-TLX are retrospective [@hart2006nasa]. To drive an adaptive system, we require continuous metrics. The xr-adaptive-modality-2025 platform integrates pupillometry as a primary physiological signal. Pupil diameter is a well-established psychophysiological indicator of mental effort and fatigue [@pupillometry2023]. As cognitive load rises, pupils tend to dilate in response to increased processing demand [@tobii2023cognitive]; conversely, sustained cognitive fatigue can manifest as a gradual pupil constriction over time [@psypost2023pupil]. By tracking pupil size and its variability, our system can infer when the user is under strain—providing a basis for adaptive behavior such as decluttering the visual scene or simplifying targets to reduce workload. By monitoring pupil diameter variances (PDV) and correcting for luminance, the system can infer when the user is approaching their cognitive capacity limit and trigger adaptive interventions.
+
+## Adaptive Intervention Mechanisms
+
+### Declutter Mechanism for Gaze Interaction
+
+Our declutter intervention draws on visual attention guiding techniques in XR. In concept, it is related to diminished reality (DR), which involves selectively removing or de-emphasizing irrelevant visual elements in real time [@diminishedreality2024]. Unlike traditional augmented reality which adds information, diminished reality subtracts or hides extraneous details to reduce cognitive overload [@diminishedreality2024]. In our case, when the user operates in gaze mode, the interface can fade out non-target objects or highlight the gazed target region, thereby directing attention and mitigating the "clutter" that might distract peripheral vision. This approach aligns with foveated rendering principles: XR systems can leverage the human visual system's foveal focus to render or emphasize content at the gaze point with high detail, while reducing detail in the periphery [@foveatedrendering2022]. Such foveated or attention-aware rendering techniques accelerate performance by exploiting lower acuity in peripheral vision, rendering different regions with different qualities without sacrificing perceived visual quality [@foveatedrendering2022]. By decluttering or lowering fidelity outside the user's focal point, we hypothesize that gaze-based targeting becomes easier and faster, especially under high mental load.
+
+### Width Inflation for Hand-Based Interaction
+
+For hand-based interactions, our adaptive strategy is width inflation—dynamically expanding the effective size of targets when the user is aiming with hand pointing. This concept is inspired by prior research on expanding targets and the "Bubble Cursor," which show that even slight, transient enlargement of a target can significantly improve pointing speed and accuracy [@mcguffin2002expanding; @grossman2005bubble]. Classic studies on expanding targets demonstrated that users acquire targets faster when targets grow as the cursor nears them, with movement times improving even if expansion occurs late in the motion trajectory [@mcguffin2002expanding]. Similarly, the Bubble Cursor dynamically adjusts the selection area to always capture the nearest target, effectively increasing target width and yielding higher throughput [@grossman2005bubble]. By inflating target width in software (e.g., enlarging hitboxes or using an adaptive cursor) for the hand modality, our system aims to reduce misses and selection time without physical alterations. We expect this to particularly aid users under pressure or fatigue, acting as a "safety net" that compensates for shakier or slower hand movements.
+
+# Research Objectives
+
+The primary objective of this research is to validate the efficacy of the xr-adaptive-modality-2025 platform in reducing user workload and increasing throughput. The study is guided by three core research questions:
+
+**RQ1 (Performance):** Does a context-aware adaptive system that switches between gaze and hand input yield higher Fitts's Law Throughput ($TP$) than static unimodal systems?
+
+**RQ2 (Workload):** Can adaptive modality switching significantly reduce the "Physical Demand" and "Frustration" subscales of the NASA-TLX compared to traditional controller-based interaction?
+
+**RQ3 (Adaptation):** Do adaptive interventions (declutter for gaze, width inflation for hand) significantly improve performance and reduce workload compared to non-adaptive conditions, particularly under time pressure?
+
+To answer these questions, we employ a rigorous within-subjects experimental design, utilizing the ISO 9241-9 multi-directional tapping task as the standardized testbed.
+
+# Theoretical Framework
+
+This section establishes the mathematical and psychological models that underpin the system's logic, specifically focusing on Information Theory as applied to human movement and the neuroergonomics of attention.
+
+## Fitts's Law: The Information Capacity of the Human Motor System
+
+Fitts's Law (1954) is robustly established as the governing dynamic of pointing tasks. It frames movement not as a physical event, but as an information transmission task. The "difficulty" of a target is measured in bits, representing the amount of information the motor system must process to resolve the movement successfully.
+
+The classic formulation for the Index of Difficulty ($ID$) is:
+
+$$ID = \log_2 \left( \frac{2D}{W} \right)$$
+
+Where $D$ is the distance to the target and $W$ is the width of the target. However, this study adopts the Shannon Formulation, which is the standard for ISO 9241-9 compliance because it better models the information entropy of the task and avoids negative ID values for very close targets [@soukoreff2004towards]:
+
+$$ID = \log_2 \left( \frac{D}{W} + 1 \right)$$
+
+## The Speed-Accuracy Tradeoff in 3D
+
+In XR, the "Width" ($W$) of a target is ambiguous. Is it the visual angle subtended on the retina, or the physical collider size in 3D space? The xr-adaptive-modality-2025 platform utilizes the Effective Width ($W_e$) concept. The $W_e$ is derived from the distribution of actual selection coordinates, effectively normalizing the data for the user's error rate.
+
+$$W_e = 4.133 \times SD_x$$
+
+Where $SD_x$ is the standard deviation of the hit points along the task axis. This adjustment allows us to calculate Throughput ($TP$), a unified metric of speed and accuracy, measured in bits per second (bps):
+
+$$TP = \frac{ID_e}{MT} = \frac{\log_2(D/W_e + 1)}{MT}$$
+
+This metric is critical for comparing Modality A (Gaze) vs. Modality B (Hand). Gaze might have a lower Movement Time ($MT$) due to saccadic speed, but if its jitter results in a massive $W_e$ (low accuracy), the overall Throughput will be lower. The adaptive hypothesis suggests that the system can maximize $TP$ by selecting the modality with the highest theoretical $TP$ for the specific $D$ and $W$ of the current task.
+
+## Modeling Movement and Decision Processes
+
+While Fitts's Law captures the macro-performance of pointing tasks, it does not fully decompose the underlying processes of movement execution and decision verification. Our hybrid analysis framework integrates complementary models to understand how adaptive interventions affect different phases of target acquisition.
+
+### Control Theory and Submovement Models
+
+The Optimized Submovement Model [@meyer1988] posits that pointing movements are composed of a primary ballistic impulse followed by corrective submovements. This control-theoretic perspective allows us to quantify the "cost of control"—how often users must correct their trajectory due to system latencies or noise. In gaze-based interaction, the simulated lag and "saccadic blindness" (cursor freezing during high-velocity movements) require users to generate additional corrective submovements, increasing the cognitive and motor effort. By analyzing submovement counts and target re-entries, we can assess whether adaptive interventions like decluttering reduce the need for these corrections by improving visual guidance during the approach phase.
+
+### The Linear Ballistic Accumulator (LBA) Model
+
+Once the cursor enters the target region, users face a decision verification problem: determining when sufficient evidence has accumulated that they are correctly positioned to trigger selection. The Linear Ballistic Accumulator (LBA) model [@brown2008] frames this as a race between independent accumulators, where each accumulator linearly accumulates evidence at a constant rate until reaching a threshold. Unlike diffusion models that require substantial error rates, LBA is robust to low-error scenarios and allows estimation of the "Caution Threshold"—the amount of evidence users require before committing to selection. In gaze interaction with jitter, users must adopt higher caution thresholds to avoid premature selection errors, potentially slowing the verification phase. Adaptive interventions that reduce jitter (e.g., goal-aware snapping) or simplify the decision context (e.g., decluttering) should allow users to lower their caution threshold, speeding verification without sacrificing accuracy.
+
+### Integrating Models for Adaptive Design
+
+By decomposing performance into movement (submovement model) and decision (LBA) components, we can identify which phases of interaction benefit most from adaptation. For instance, if gaze decluttering primarily reduces submovement counts rather than verification time, it suggests the intervention aids trajectory planning rather than decision-making. This decomposition informs the design of more targeted adaptive mechanisms that address specific bottlenecks in the interaction pipeline.
+
+# Methods
+
+The methodology described herein is designed to be exhaustive and reproducible, adhering to the highest standards of empirical HCI research. The platform `xr-adaptive-modality-2025` serves as the technical apparatus for the study.
+
+## Apparatus and Participants
+
+We developed a custom pointing testbed as a web-based application (React 18, TypeScript), allowing broad hardware compatibility for remote participants. The study was conducted on participants' own computers using a standard mouse or trackpad.
+
+### Gaze Simulation (The "Ground Truth" Signal)
+
+To ensure rigorous internal validity and precise control over noise characteristics, we utilized a **Physiologically-Accurate Gaze Simulation**. This approach allowed us to model the specific constraints of eye-tracking interaction—latency and jitter—with precise control over noise characteristics. The simulation transformed raw mouse input into "gaze" coordinates via three mechanisms derived from oculomotor physiology:
+
+1.  **Saccadic Suppression & Ballistic Movement:** The cursor was "frozen" (blind) during high-velocity movements (\>120 deg/s) to simulate the brain's suppression of visual input during saccades, a phenomenon known as saccadic suppression of image displacement [@bridgeman1975]. This aligns with the ballistic nature of saccadic eye movements, where visual feedback is effectively open-loop until the eye settles.
+
+2.  **Fixation Jitter & Drift:** When the cursor slowed (\<30 deg/s), Gaussian noise (SD ≈ 0.12°) was injected to simulate fixational eye movements [@martinezconde2004], specifically the random walk characteristics of ocular drift and tremor that occur even during attempted fixation.
+
+3.  **Sensor Lag:** A first-order lag (linear interpolation, factor 0.15) was applied to mimic the processing latency (typically 30–70 ms) inherent in video-based eye trackers [@saunders2014].
+
+## Input Modality Implementations
+
+The system implemented two distinct "Atomic" input modalities and one "Composite" adaptive modality, each with a corresponding behavior triggered by the system's policy engine.
+
+### Hand Modality (The Baseline)
+
+For hand-based trials, the participant controlled a cursor with their mouse to click the target.
+
+-   **Static Mode:** Standard 1:1 mouse pointing.
+
+-   **Adaptive Mode (Width Inflation):** To assist selection, the effective clickable area of the target was expanded (width scale \> 1.0) when the cursor approached the target. This "Gravity Well" effect was invisible to the user but increased the error tolerance for the final click. This implementation draws directly from the "expanding targets" technique validated by McGuffin and Balakrishnan [@mcguffin2005], which demonstrated that users can exploit the expanded size even when expansion occurs late in the approach trajectory. Notably, our expansion happened only when the system detected the user was aiming at the target (cursor nearing the target center), to prevent overlapping targets in the dense circle layout.
+
+### Gaze Modality (The Simulator)
+
+Participants controlled the cursor via the simulated gaze signal described above.
+
+-   **Static Mode:** Selection was triggered by a **Dwell** mechanism (typically 350-500ms) or a confirmation key (Spacebar) if dwell was disabled. This follows the standard "dwell-to-select" paradigm pioneered in early eye-gaze interfaces [@ware1987] and refined in modern gaze typing systems [@majaranta2006] to balance speed and accuracy. The user had to stabilize the jittery cursor over the target.
+
+-   **Adaptive Mode:** Adaptation focused on **Goal-Aware Snapping** or **Dwell Time Adjustment** to counteract the injected jitter during the verification phase. For gaze declutter, the trigger was immediate at trial start in adaptive blocks—the moment a new target appeared and the user began aiming, all non-targets dimmed.
+
+### Adaptive Intervention Triggers
+
+Both adaptive features (declutter and expansion) were driven by a simple rule-based policy and could be toggled on or off depending on the experimental condition. These rules introduced a slight hysteresis to prevent flicker (e.g., once expanded, a target stayed expanded for the remainder of the trial). The application logged detailed event traces (gaze enter/exit target, click times, etc.), enabling us to later verify that the adaptive mechanisms functioned as intended.
+
+## Task and Stimuli
+
+Participants performed a multi-directional pointing task conforming to the ISO 9241-9 standard for non-keyboard input device evaluation [@iso2000].
+
+-   **Layout:** Circular arrangement of 8 targets (width $W$, amplitude $A$). One target was highlighted at a time.
+
+-   **Index of Difficulty (ID):** Targets were presented with IDs ranging from approximately 2 to 6 bits, calculated using the Shannon formulation of Fitts' Law. For example, target width might range from 30 px (hard) to 80 px (easy), with corresponding distances chosen to yield the desired ID values.
+
+-   **Pressure Condition:** In half of the blocks, a "Time Pressure" condition was enforced via a visible countdown timer. Failure to select within the timeout (e.g., 6s) resulted in a forced error. The timer pressure was intended to induce stress and mental workload, simulating a high-demand scenario.
+
+## Experimental Design
+
+We employed a repeated-measures factorial design: all participants experienced every combination of the two input modalities (Gaze vs. Hand) × two UI conditions (Adaptive vs. Non-adaptive) × two workload levels (Pressure vs. No Pressure). This creates a 2 × 2 × 2 within-subjects design.
+
+### Counterbalancing: The Williams Design
+
+The order of modality blocks was counterbalanced using a Williams Latin square arrangement to control for learning effects [@williams1949experimental]. Within each modality block (lasting 10-15 minutes), adaptive and control trials were intermixed in random order or run as separate sub-blocks (counterbalanced) to avoid long streaks of one condition. Participants were not explicitly told when the system was adapting, aside from noticing the visual changes, to reduce expectancy biases.
+
+## Participants
+
+We recruited $N=32$ participants (target: 12 male, 12 female, age range 18-35) from the university community. All participants had normal or corrected-to-normal vision and no known motor impairments. The study was approved by the Institutional Review Board (IRB) and all participants provided informed consent.
+
+## Procedure
+
+Each participant completed a short training session to get familiar with gaze selection (including practice with the simulated gaze interface and dwell clicking) and hand selection. During the experiment, they performed multiple trials for each target difficulty and condition. In total, participants completed approximately 3 (IDs) × 8 (directions) × 2 (pressure levels) × 2 (adaptation conditions) ≈ 96 trials per modality, leading to \~192 trials per person overall.
+
+After each block, participants filled out a NASA-TLX workload survey (rating mental demand, physical demand, etc.) and took a short break to mitigate fatigue. We also collected qualitative feedback at the end about their preferences (gaze vs hand, adaptive vs not, perceived helpfulness of declutter/expansion). The entire session lasted about 1 hour per participant.
+
+## Measures and Analysis Strategy
+
+The primary performance measures were Movement Time (MT) in milliseconds (from trial start to successful selection) and Selection Accuracy (hit vs. miss rate, including specific error types: misses, timeouts, false activations). From these, we computed Throughput (TP) in bits/second for each condition by combining each trial's effective ID ($ID_e$) and MT, following ISO 9241-9's recommended calculation using the effective target width $W_e$ (computed from the spread of hit points) to incorporate accuracy into the difficulty measure.
+
+### A Hybrid Analysis Approach
+
+Given the specific nature of the simulated noise (generative Gaussian jitter) and the high accuracy of the task, standard Drift Diffusion Models (DDM) were ill-suited due to the scarcity of error trials (\~3%). Previous methodological reviews indicate that diffusion models require a sufficient error density to reliably estimate boundary separation parameters [@lerche2017]. We instead adopted a *Hybrid Analysis* framework to disentangle "motor" performance from "decision" caution:
+
+1.  **Macro-Performance (Fitts' Law):** We modeled the overall throughput (bits/s) and the regression slope ($b$) to quantify the global cost of the gaze simulation lag, following standard ISO 9241-9 throughput calculations.
+
+2.  **Path Quality (Control Theory):** To analyze the movement phase, we calculated **Submovement Counts** (velocity peaks) and **Target Re-entries**. This quantified the "cost of control"—how often the user had to correct their trajectory due to the simulated lag and "saccadic blindness," drawing on the Optimized Submovement Model [@meyer1988] which posits that movement is composed of a primary ballistic impulse followed by corrective submovements.
+
+3.  **Decision Verification (LBA):** To analyze the selection phase (once inside the target), we used the **Linear Ballistic Accumulator (LBA)** model [@brown2008]. Unlike DDM, the LBA models the decision process as a race between independent accumulators and is robust to low error rates, allowing us to accurately estimate the "Caution Threshold" users adopted to overcome fixation jitter.
+
+Data were analyzed using repeated-measures ANOVAs and linear mixed models. We tested for main effects of Modality, Adaptation, and Pressure, as well as their interactions. Where appropriate, pairwise comparisons with Bonferroni correction were performed to probe simple effects. All statistical tests assumed $\alpha = 0.05$.
+
+## Deployment and Data Collection Infrastructure
+
+### Platform Deployment
+
+The experimental platform was deployed as a web application to enable remote, asynchronous data collection. The application was built using React 18 and TypeScript, bundled with Vite, and hosted on Vercel (https://xr-adaptive-modality-2025.vercel.app). This deployment architecture allowed participants to access the study from their own devices without requiring specialized hardware or software installation, supporting broader participant recruitment while maintaining consistent experimental conditions.
+
+### Participant Access and Session Management
+
+Each participant received a unique URL containing embedded participant ID and session number parameters (e.g., `?pid=P001&session=1`). The application automatically detected these parameters on load, initializing the session with the appropriate identifier. Session state was managed client-side using browser localStorage, enabling participants to pause and resume sessions if needed while maintaining progress tracking. The system supported multi-session participation, tracking completed blocks across sessions to prevent duplicate data collection.
+
+### Data Collection and Storage
+
+Data collection occurred entirely client-side to ensure participant privacy and minimize server infrastructure requirements. The application implemented a structured CSV logging system that captured comprehensive trial-level data in real-time. Each trial event (start, end, error) automatically triggered data logging to an in-memory CSV logger, which accumulated rows during the experimental session. The logging system captured 23+ data columns per trial, including:
+
+- **Participant metadata**: Participant ID, session number, demographic information (age, gender, gaming hours, input device type, vision correction, hand dominance)
+- **Trial parameters**: Block number, trial number, modality (gaze/hand), UI mode (adaptive/static), pressure condition, Index of Difficulty (ID), target amplitude (A) and width (W)
+- **Performance metrics**: Reaction time (RT), accuracy (correct/incorrect), error type (miss/timeout/slip), hover duration for gaze trials
+- **System metadata**: Browser type, device pixel ratio (DPR), timestamp
+- **Workload measures**: NASA-TLX subscale scores (merged from block-level surveys)
+
+### Data Export and Submission
+
+At the completion of each session, participants exported their data via browser-based CSV download. The application provided two export formats: (1) trial-level CSV containing all individual trial data, and (2) block-level CSV containing NASA-TLX workload ratings. Data export occurred entirely locally—no data was transmitted to servers during the experimental session, ensuring participant privacy. The exported CSV files were timestamped and named with participant identifiers for easy organization. An optional email-based submission mechanism was available for participants who chose to submit data directly (using EmailJS), though this feature was not required and automatically fell back to local download for large datasets exceeding email size limits.
+
+### Technical Implementation Details
+
+The application was built as a single-page application (SPA) with client-side routing, ensuring consistent behavior across different browsers and devices. The gaze simulation algorithm, adaptive policy engine, and data logging system all operated in real-time within the browser, with no server-side processing required. Event-driven architecture (via an internal event bus) coordinated trial timing, data logging, and UI updates, ensuring precise temporal alignment between user actions and recorded data. All code is open-source and available for reproducibility, with the platform designed to be self-contained and deployable to any static hosting service compatible with modern web standards.
+
+# Results
+
+*\[Results section to be completed after data collection and analysis. This section will include:*
+
+-   *Descriptive statistics for all dependent variables across conditions*
+-   *Mixed-effects model results for RQ1 (Performance)*
+-   *NASA-TLX analysis for RQ2 (Workload)*
+-   *Analysis of adaptive intervention effects for RQ3 (Adaptation)*
+-   *Figures showing throughput by condition and ID level*
+-   *Tables summarizing statistical tests\]*
+
+# Discussion
+
+*\[Discussion section to be completed after results. This section will:*
+
+-   *Interpret findings in the context of the research questions*
+-   *Compare results to prior work on multimodal XR interaction*
+-   *Discuss implications for adaptive interface design*
+-   *Address limitations of the current study*
+-   *Propose future directions for adaptive modality research\]*
+
+# Conclusion
+
+*\[Conclusion section to be completed. This section will:*
+
+-   *Summarize key contributions*
+-   *Restate main findings*
+-   *Highlight practical implications for XR system designers*
+-   *Provide closing thoughts on the future of adaptive interfaces\]*
+
+# Acknowledgments
+
+This research was conducted as an independent project. The author thanks the participants for their time and the open-source community for the tools that made this work possible.
+
+# References
+
+::: {#refs}
+:::

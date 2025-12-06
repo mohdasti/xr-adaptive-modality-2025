@@ -1,0 +1,51 @@
+% ArXiv-style preamble for proper author metadata display
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    pdfauthor={Mohammad Dastgheib and Fatemeh Pourmahdian},
+    pdftitle={Adaptive Modality Systems in Extended Reality},
+    pdfkeywords={Extended Reality, Virtual Reality, Adaptive Interfaces, Gaze Interaction, Fitts's Law, Human-Computer Interaction, Multimodal Interaction, Pupillometry}
+}
+
+% Required packages
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{orcidlink}
+
+% Customize title page formatting with proper author block
+\makeatletter
+\renewcommand{\@maketitle}{%
+  \newpage
+  \null
+  \vskip 2em%
+  \begin{center}%
+    \let \footnote \thanks
+    {\LARGE \@title \par}%
+    \vskip 1.5em%
+    {\large
+      \begin{tabular}[t]{c}%
+        Mohammad Dastgheib\textsuperscript{1} \orcidlink{0000-0001-7684-3731} \\
+        University of California, Riverside \\
+        \href{mailto:mohammad.dastgheib@email.ucr.edu}{\texttt{mohammad.dastgheib@email.ucr.edu}} \\[0.5em]
+        Fatemeh Pourmahdian \orcidlink{0009-0007-5473-2070} \\
+        \href{mailto:fatemepourmahd@gmail.com}{\texttt{fatemepourmahd@gmail.com}}
+      \end{tabular}\par}%
+    \vskip 1em%
+    {\large \@date \par}%
+  \end{center}%
+  \vskip 0.5em%
+  \begin{center}
+    \footnotesize
+    \begin{tabular}{@{}l@{}}
+      \textsuperscript{1}Corresponding author: \href{mailto:mdast003@ucr.edu}{\texttt{mdast003@ucr.edu}}
+    \end{tabular}
+  \end{center}%
+  \par
+  \vskip 1.5em%
+}
+\makeatother
