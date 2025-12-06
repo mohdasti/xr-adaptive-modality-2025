@@ -348,9 +348,22 @@ export default function Debrief() {
             
             <button 
               onClick={() => handleDownload(false)}
-              className="download-button secondary"
+              className="download-button alternate"
             >
               Download Separate Files (Trials + Blocks)
+            </button>
+            
+            <button 
+              onClick={() => {
+                window.close()
+                // Fallback if window.close() doesn't work (some browsers block it)
+                setTimeout(() => {
+                  window.location.href = '/'
+                }, 100)
+              }}
+              className="download-button exit"
+            >
+              Exit
             </button>
             
             <button 
@@ -362,7 +375,7 @@ export default function Debrief() {
                   window.location.href = '/'
                 }
               }}
-              className="download-button secondary"
+              className="download-button danger"
             >
               Delete My Data &amp; Exit
             </button>

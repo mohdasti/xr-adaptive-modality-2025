@@ -81,6 +81,10 @@ export const CSV_HEADERS = [
   'tlx_performance',
   'tlx_effort',
   'tlx_frustration',
+  // Debrief response columns
+  'debrief_q1_adaptation_noticed',
+  'debrief_q2_strategy_changed',
+  'debrief_timestamp',
 ] as const
 
 export type CSVRow = Record<string, string | number | boolean | null>
@@ -269,18 +273,62 @@ export class CSVLogger {
   }
 
   /**
+   * Get debrief responses from sessionStorage
+   */
+  private getDebriefResponses(): {
+    debrief_q1_adaptation_noticed: string | null
+    debrief_q2_strategy_changed: string | null
+    debrief_timestamp: string | null
+  } {
+    if (typeof window === 'undefined') {
+      return {
+        debrief_q1_adaptation_noticed: null,
+        debrief_q2_strategy_changed: null,
+        debrief_timestamp: null,
+      }
+    }
+
+    try {
+      const stored = sessionStorage.getItem('debrief_responses')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return {
+          debrief_q1_adaptation_noticed: parsed.q1_adaptation_noticed || null,
+          debrief_q2_strategy_changed: parsed.q2_strategy_changed || null,
+          debrief_timestamp: parsed.timestamp || null,
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load debrief responses from sessionStorage:', e)
+    }
+
+    return {
+      debrief_q1_adaptation_noticed: null,
+      debrief_q2_strategy_changed: null,
+      debrief_timestamp: null,
+    }
+  }
+
+  /**
    * Convert to CSV string
    */
   toCSV(): string {
     const lines: string[] = []
+    const debriefData = this.getDebriefResponses()
 
     // Header row
     lines.push(this.headers.join(','))
 
     // Data rows
     for (const row of this.rows) {
+      // Merge debrief data into row
+      const rowWithDebrief = {
+        ...row,
+        ...debriefData,
+      }
+
       const values = this.headers.map((header) => {
-        const value = row[header]
+        const value = rowWithDebrief[header]
         if (value === null || value === undefined) return ''
         
         // Escape quotes and wrap in quotes if contains comma
@@ -413,6 +461,8 @@ export class CSVLogger {
    * Each trial row gets TLX values from its corresponding block
    */
   toMergedCSV(): string {
+    const debriefData = this.getDebriefResponses()
+    
     // Create a map of block_number -> TLX values
     const blockTLXMap = new Map<number, {
       tlx_mental: number | null
@@ -434,7 +484,7 @@ export class CSVLogger {
       })
     }
 
-    // Merge TLX data into trial rows
+    // Merge TLX data and debrief data into trial rows
     const mergedRows: CSVRow[] = this.rows.map((row) => {
       const blockNumber = typeof row.block_number === 'number' ? row.block_number : 
                          typeof row.block_number === 'string' ? parseInt(row.block_number, 10) : null
@@ -451,6 +501,7 @@ export class CSVLogger {
         tlx_performance: tlxData?.tlx_performance ?? null,
         tlx_effort: tlxData?.tlx_effort ?? null,
         tlx_frustration: tlxData?.tlx_frustration ?? null,
+        ...debriefData,
       }
     })
 
