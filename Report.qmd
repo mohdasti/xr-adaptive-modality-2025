@@ -1,0 +1,2213 @@
+
+---
+title: "XR Adaptive Modality: Experiment Report"
+author: "Mohammad Dastgheib"
+date: last-modified
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+    fig-width: 10
+    fig-height: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(scales)
+library(ggsci)  # For pal_npg() function
+library(lme4)
+library(lmerTest)
+library(emmeans)
+
+# --- COLOR PALETTE ---
+# Use Nature Publishing Group (NPG) palette from scales package
+npg_pal <- pal_npg("nrc")(10)  # Get 10 colors from the palette
+
+# For 2-level factors (e.g., static/adaptive), use first 2 colors
+custom_palette_2 <- npg_pal[1:2]
+
+# For multi-level factors (e.g., TLX scales with 6 levels), use first 6 colors
+custom_palette_multi <- npg_pal[1:6]
+
+# --- DATA LOADING ---
+# Load the latest clean data
+# Try multiple possible paths (relative to report location or working directory)
+data_paths <- c(
+  "data/clean/trial_data.csv",           # If running from project root
+  "../data/clean/trial_data.csv"         # If running from subdirectory
+)
+
+df_raw <- NULL
+for (path in data_paths) {
+  if (file.exists(path)) {
+    tryCatch({
+      df_raw <- read_csv(path, show_col_types = FALSE)
+      cat("Loaded data from:", path, "\n")
+      break
+    }, error = function(e) {
+      # Continue to next path
+    })
+  }
+}
+
+if (is.null(df_raw)) {
+  stop("Could not find 'trial_data.csv'. Tried paths:\n",
+       paste("  -", data_paths, collapse = "\n"),
+       "\nCurrent working directory:", getwd(),
+       "\nPlease ensure the data pipeline has run and the file exists.")
+}
+
+# Normalize column names
+if ("participant_id" %in% names(df_raw) && !"pid" %in% names(df_raw)) {
+  df_raw <- df_raw %>% rename(pid = participant_id)
+}
+if ("movement_time_ms" %in% names(df_raw) && !"rt_ms" %in% names(df_raw)) {
+  df_raw <- df_raw %>% rename(rt_ms = movement_time_ms)
+}
+
+# --- PREPROCESSING ---
+# Create dataframe with ALL trials (correct + incorrect) for error rate calculations
+# This includes trials with valid RTs (even if incorrect) and excludes only practice trials
+df_all_trials <- df_raw %>%
+  filter(
+    practice == "false" | practice == FALSE | is.na(practice)
+  ) %>%
+  mutate(
+    rt_s = rt_ms / 1000,
+    log_rt = log(rt_ms),
+    # Create factor labels for better plots
+    Condition = paste(modality, ui_mode, sep = " - "),
+    PressureLabel = ifelse(pressure == 1, "Pressure: ON", "Pressure: OFF"),
+    ModalityLabel = str_to_title(modality),
+    UILabel = str_to_title(ui_mode),
+    # Ensure factors
+    modality = factor(modality, levels = c("hand", "gaze")),
+    ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+    pressure = factor(pressure),
+    pid = factor(pid),
+    # Mark correct/incorrect for error calculations
+    # Note: In the data, correct = TRUE for correct trials, and correct = NA for errors
+    is_correct = !is.na(correct) & (correct == "true" | correct == TRUE | correct == 1)
+  )
+
+# Filter valid experimental trials (non-practice, correct, valid RTs) for performance metrics
+df <- df_all_trials %>%
+  filter(
+    is_correct == TRUE,
+    rt_ms >= 150,  # Physiological minimum
+    rt_ms <= 6000  # Time-out threshold
+  )
+
+# --- CALCULATE ISO METRICS (Throughput) ---
+# ISO 9241-9: Calculate We (Effective Width) per condition per participant
+df_iso <- df %>%
+  group_by(pid, modality, ui_mode, pressure, A, W) %>%
+  summarise(
+    # We = 4.133 * SD of Projected Error
+    sd_x = sd(projected_error_px, na.rm = TRUE),
+    We = 4.133 * sd_x,
+    
+    # Effective ID
+    IDe = log2((mean(A) / We) + 1),
+    
+    # Mean Movement Time for this condition
+    MT_avg = mean(rt_s, na.rm = TRUE),
+    
+    # Throughput (Bits/s)
+    TP = IDe / MT_avg,
+    
+    # Gaze Specifics
+    reentries = mean(target_reentry_count, na.rm = TRUE),
+    verification = mean(verification_time_ms, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(TP), TP > 0, TP < 20) %>%  # Reasonable TP range
+  mutate(
+    # Recreate labels that were lost in summarise
+    PressureLabel = ifelse(pressure == 1, "Pressure: ON", "Pressure: OFF"),
+    Condition = paste(modality, ui_mode, sep = " - ")
+  )
+
+# --- STATISTICAL MODELS ---
+# Model 1: Throughput
+model_tp <- NULL
+emm_tp <- NULL
+pairs_tp <- NULL
+
+if (nrow(df_iso) > 0 && n_distinct(df_iso$pid) > 1) {
+  model_tp <- tryCatch({
+    lmer(TP ~ modality * ui_mode * pressure + (1 | pid), 
+         data = df_iso, REML = FALSE,
+         control = lmerControl(optimizer = "bobyqa"))
+  }, error = function(e) {
+    warning("Could not fit throughput model: ", e$message)
+    NULL
+  })
+  
+  if (!is.null(model_tp)) {
+    tryCatch({
+      emm_tp <- emmeans(model_tp, ~ modality * ui_mode * pressure)
+      pairs_tp <- pairs(emm_tp, adjust = "holm")
+    }, error = function(e) {
+      warning("Could not compute EMMs for throughput: ", e$message)
+    })
+  }
+}
+
+# Model 2: Movement Time
+model_rt <- NULL
+emm_rt <- NULL
+pairs_rt <- NULL
+
+if (nrow(df) > 0 && n_distinct(df$pid) > 1) {
+  model_rt <- tryCatch({
+    lmer(log_rt ~ modality * ui_mode * pressure + (1 | pid), 
+         data = df, REML = FALSE,
+         control = lmerControl(optimizer = "bobyqa"))
+  }, error = function(e) {
+    warning("Could not fit movement time model: ", e$message)
+    NULL
+  })
+  
+  if (!is.null(model_rt)) {
+    tryCatch({
+      emm_rt <- emmeans(model_rt, ~ modality * ui_mode * pressure, type = "response")
+      pairs_rt <- pairs(emm_rt, adjust = "holm")
+    }, error = function(e) {
+      warning("Could not compute EMMs for movement time: ", e$message)
+    })
+  }
+}
+
+# Model 3: Error Rate
+# Use df_all_trials which already has all trials (correct + incorrect)
+df_errors <- df_all_trials %>%
+  mutate(
+    error = ifelse(is_correct, 0, 1),
+    modality = factor(modality, levels = c("hand", "gaze")),
+    ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+    pressure = factor(pressure),
+    pid = factor(pid)
+  )
+
+model_err <- NULL
+emm_err <- NULL
+pairs_err <- NULL
+
+if (nrow(df_errors) > 0 && n_distinct(df_errors$pid) > 1) {
+  model_err <- tryCatch({
+    glmer(error ~ modality * ui_mode * pressure + (1 | pid),
+          data = df_errors, family = binomial(link = "logit"),
+          control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+  }, error = function(e) {
+    warning("Could not fit error rate model: ", e$message)
+    NULL
+  })
+  
+  if (!is.null(model_err)) {
+    tryCatch({
+      emm_err <- emmeans(model_err, ~ modality * ui_mode * pressure, type = "response")
+      pairs_err <- pairs(emm_err, adjust = "holm")
+    }, error = function(e) {
+      warning("Could not compute EMMs for error rate: ", e$message)
+    })
+  }
+}
+```
+
+# 1. Executive Summary
+
+This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' law pointing tasks across two input modalities (Hand, Gaze) and two UI modes (Static, Adaptive).
+
+## Key Findings
+
+  * **Total Trials Analyzed:** `r nrow(df)` valid trials (correct responses, RT 150-6000ms)
+  * **Total Trials Collected:** `r nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice)))`
+  * **Overall Error Rate:** `r percent(round(1 - (sum(df$correct == TRUE | df$correct == "true" | df$correct == 1)/nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice)))), 3))`
+  * **Mean Throughput:** `r round(mean(df_iso$TP, na.rm = TRUE), 2)` bits/s (SD = `r round(sd(df_iso$TP, na.rm = TRUE), 2)`)
+  * **Mean Movement Time:** `r round(mean(df$rt_s, na.rm = TRUE), 3)`s (SD = `r round(sd(df$rt_s, na.rm = TRUE), 3)`s)
+
+-----
+
+# 2. Demographics
+
+```{r demographics}
+# Ensure pid column exists
+demog_raw <- df_raw
+if ("participant_id" %in% names(demog_raw) && !"pid" %in% names(demog_raw)) {
+  demog_raw <- demog_raw %>% rename(pid = participant_id)
+}
+
+demog_summary <- demog_raw %>%
+  distinct(pid, .keep_all = TRUE) %>%
+  select(pid, age, gender, gaming_hours_per_week, input_device) %>%
+  filter(!is.na(pid))
+
+# Overall summary
+overall_stats <- demog_summary %>%
+  summarise(
+    `N` = n(),
+    `Mean Age` = round(mean(age, na.rm=TRUE), 1),
+    `SD Age` = round(sd(age, na.rm=TRUE), 1),
+    `Age Range` = paste(round(min(age, na.rm=TRUE), 0), "-", round(max(age, na.rm=TRUE), 0)),
+    `Mean Gaming (Hrs/Week)` = round(mean(gaming_hours_per_week, na.rm=TRUE), 1),
+    `SD Gaming` = round(sd(gaming_hours_per_week, na.rm=TRUE), 1)
+  )
+
+# By gender
+gender_stats <- demog_summary %>%
+  filter(!is.na(gender)) %>%
+  group_by(gender) %>%
+  summarise(
+    Count = n(),
+    `Avg Age` = round(mean(age, na.rm=TRUE), 1),
+    `SD Age` = round(sd(age, na.rm=TRUE), 1),
+    `Avg Gaming (Hrs)` = round(mean(gaming_hours_per_week, na.rm=TRUE), 1),
+    .groups = "drop"
+  )
+
+# Input device distribution
+device_stats <- demog_summary %>%
+  filter(!is.na(input_device)) %>%
+  count(input_device, name = "Count") %>%
+  mutate(Percentage = round(100 * Count / sum(Count), 1))
+
+
+```
+
+## Overall Demographics
+
+```{r}
+overall_stats %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+## By Gender
+
+```{r}
+gender_stats %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+## Input Device Distribution
+
+```{r}
+device_stats %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+-----
+
+# 3. Primary Analysis: Throughput
+
+**Research Question:** Does the Adaptive UI improve performance (Throughput) compared to Static, especially for Gaze?
+
+## Summary Statistics
+
+```{r tp-summary}
+tp_summary <- df_iso %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    N = n(),
+    Mean = round(mean(TP, na.rm = TRUE), 2),
+    SD = round(sd(TP, na.rm = TRUE), 2),
+    Median = round(median(TP, na.rm = TRUE), 2),
+    Q25 = round(quantile(TP, 0.25, na.rm = TRUE), 2),
+    Q75 = round(quantile(TP, 0.75, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  arrange(modality, ui_mode, pressure)
+
+tp_summary %>%
+  kable(caption = "Throughput (bits/s) by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+## Visualizations
+
+```{r plot-tp}
+# Main plot with all conditions - improved faceting and aesthetics
+p1 <- ggplot(df_iso, aes(x = ui_mode, y = TP, fill = ui_mode)) +
+  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+              show.legend = FALSE) +
+  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+  facet_grid(modality ~ pressure, 
+             labeller = labeller(
+               modality = function(x) paste("Modality:", str_to_title(x)),
+               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+             )) +
+  scale_fill_manual(values = custom_palette_2,
+                     labels = c("Static", "Adaptive")) +
+  scale_x_discrete(labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Throughput by Modality and UI Mode",
+    subtitle = "Higher is Better. White diamonds indicate means.",
+    x = "UI Mode",
+    y = "Throughput (bits/s)",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12),
+    strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+  )
+
+print(p1)
+
+# Interaction plot
+if (exists("emm_tp") && !is.null(emm_tp)) {
+  emm_tp_df <- as.data.frame(emm_tp) %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+    )
+  
+  p2 <- ggplot(emm_tp_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
+    geom_line(size = 1.2, position = position_dodge(0.2)) +
+    geom_point(size = 3, position = position_dodge(0.2)) +
+    geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
+                  width = 0.1, position = position_dodge(0.2)) +
+    facet_wrap(~pressure, labeller = labeller(pressure = function(x) paste("Pressure:", x))) +
+    scale_color_manual(values = custom_palette_2,
+                        labels = c("Static", "Adaptive")) +
+    labs(
+      title = "Estimated Marginal Means: Throughput",
+      subtitle = "Error bars show 95% confidence intervals",
+      x = "Input Modality",
+      y = "Throughput (bits/s)",
+      color = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "top")
+  
+  print(p2)
+}
+```
+
+## Statistical Model Results
+
+```{r tp-model}
+if (exists("model_tp") && !is.null(model_tp)) {
+  cat("### Model: TP ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  
+  # ANOVA table
+  cat("#### ANOVA Table\n")
+  anova_tp <- anova(model_tp, type = "III")
+  print(anova_tp)
+  
+  # Model summary
+  cat("\n#### Model Summary\n")
+  print(summary(model_tp))
+  
+  # Pairwise comparisons
+  if (exists("pairs_tp") && !is.null(pairs_tp)) {
+    cat("\n#### Pairwise Comparisons (Holm-adjusted)\n")
+    pairs_tp_df <- as.data.frame(pairs_tp)
+    print(pairs_tp_df %>% head(20))
+  }
+} else {
+  cat("⚠ Statistical model could not be fitted. Check data structure.\n")
+}
+```
+
+-----
+
+# 4. Movement Time Analysis
+
+**Research Question:** How does movement time vary across conditions?
+
+## Summary Statistics
+
+```{r rt-summary}
+rt_summary <- df %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    N = n(),
+    Mean = round(mean(rt_s, na.rm = TRUE), 3),
+    SD = round(sd(rt_s, na.rm = TRUE), 3),
+    Median = round(median(rt_s, na.rm = TRUE), 3),
+    .groups = "drop"
+  ) %>%
+  arrange(modality, ui_mode, pressure)
+
+rt_summary %>%
+  kable(caption = "Movement Time (s) by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+## Visualizations
+
+```{r plot-rt}
+# Movement time distribution - improved faceting and aesthetics
+p1 <- ggplot(df, aes(x = ui_mode, y = rt_s, fill = ui_mode)) +
+  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+              show.legend = FALSE) +
+  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+  facet_grid(modality ~ pressure,
+             labeller = labeller(
+               modality = function(x) paste("Modality:", str_to_title(x)),
+               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+             )) +
+  scale_fill_manual(values = custom_palette_2,
+                     labels = c("Static", "Adaptive")) +
+  scale_x_discrete(labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Movement Time by Modality and UI Mode",
+    subtitle = "Lower is Better. White diamonds indicate means.",
+    x = "UI Mode",
+    y = "Movement Time (s)",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12),
+    strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+  )
+
+print(p1)
+
+# Estimated marginal means
+if (exists("emm_rt") && !is.null(emm_rt)) {
+  emm_rt_df <- as.data.frame(emm_rt) %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+    )
+  
+  p2 <- ggplot(emm_rt_df, aes(x = modality, y = response, color = ui_mode, group = ui_mode)) +
+    geom_line(size = 1.2, position = position_dodge(0.2)) +
+    geom_point(size = 3, position = position_dodge(0.2)) +
+    geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
+                  width = 0.1, position = position_dodge(0.2)) +
+    facet_wrap(~pressure, labeller = labeller(pressure = function(x) paste("Pressure:", x))) +
+    scale_color_manual(values = custom_palette_2,
+                        labels = c("Static", "Adaptive")) +
+    labs(
+      title = "Estimated Marginal Means: Movement Time",
+      subtitle = "Error bars show 95% confidence intervals",
+      x = "Input Modality",
+      y = "Movement Time (s)",
+      color = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "top")
+  
+  print(p2)
+}
+```
+
+## Statistical Model Results
+
+```{r rt-model}
+if (exists("model_rt") && !is.null(model_rt)) {
+  cat("### Model: log(Movement Time) ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  
+  # ANOVA table
+  cat("#### ANOVA Table\n")
+  anova_rt <- anova(model_rt, type = "III")
+  print(anova_rt)
+  
+  # Pairwise comparisons
+  if (exists("pairs_rt") && !is.null(pairs_rt)) {
+    cat("\n#### Pairwise Comparisons (Holm-adjusted)\n")
+    pairs_rt_df <- as.data.frame(pairs_rt)
+    print(pairs_rt_df %>% head(20))
+  }
+} else {
+  cat("⚠ Statistical model could not be fitted. Check data structure.\n")
+}
+```
+
+-----
+
+# 5. Fitts' Law Modelling
+
+**Research Question:** How well does the data fit Fitts' Law? (Linearity check).
+*Flatter slopes indicate less sensitivity to difficulty (ballistic movement).*
+
+```{r plot-fitts}
+# Aggregate for regression plot
+fitts_model <- df_iso %>%
+  group_by(modality, ui_mode, IDe) %>%
+  summarise(
+    MT = mean(MT_avg, na.rm = TRUE),
+    MT_se = sd(MT_avg, na.rm = TRUE) / sqrt(n()),
+    N = n(),
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(IDe), !is.na(MT))
+
+# Fit linear models for each condition
+fitts_fits <- fitts_model %>%
+  group_by(modality, ui_mode) %>%
+  do(model = tryCatch(lm(MT ~ IDe, data = .), error = function(e) NULL)) %>%
+  filter(!is.null(model)) %>%
+  mutate(
+    r_squared = round(summary(model)$r.squared, 3),
+    slope = round(coef(model)[2], 3),
+    intercept = round(coef(model)[1], 3)
+  )
+
+ggplot(fitts_model, aes(x = IDe, y = MT, color = ui_mode)) +
+  geom_point(size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
+  facet_grid(. ~ modality) +
+    scale_color_manual(values = custom_palette_2,
+                        labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Fitts' Law Regression (MT vs IDe)",
+    subtitle = "Effective Index of Difficulty (IDe) used. Shaded regions show 95% CI.",
+    x = "Index of Difficulty (bits)",
+    y = "Movement Time (s)",
+    color = "UI Mode"
+  ) +
+  theme_light(base_size = 14) +
+  theme(legend.position = "top")
+
+# Display R² values
+if (nrow(fitts_fits) > 0) {
+  cat("\n### Model Fit Statistics\n")
+  fitts_fits %>%
+    select(modality, ui_mode, r_squared, slope, intercept) %>%
+    kable(caption = "Linear Regression: MT ~ IDe") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+}
+```
+
+-----
+
+# 6. Error Rate Analysis
+
+**Research Question:** How do error rates differ across conditions?
+
+```{r error-analysis}
+# Calculate error rates
+error_summary <- df_errors %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    Total = n(),
+    Errors = sum(error, na.rm = TRUE),
+    Error_Rate = round(100 * mean(error, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  arrange(modality, ui_mode, pressure)
+
+error_summary %>%
+  kable(caption = "Error Rates by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+# Visualization - improved faceting and aesthetics
+p_err <- df_errors %>%
+  group_by(modality, ui_mode, pressure, pid) %>%
+  summarise(Error_Rate = 100 * mean(error, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = ui_mode, y = Error_Rate, fill = ui_mode)) +
+  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+              show.legend = FALSE) +
+  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+  facet_grid(modality ~ pressure,
+             labeller = labeller(
+               modality = function(x) paste("Modality:", str_to_title(x)),
+               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+             )) +
+  scale_fill_manual(values = custom_palette_2,
+                     labels = c("Static", "Adaptive")) +
+  scale_x_discrete(labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Error Rate by Modality and UI Mode",
+    subtitle = "Lower is Better. White diamonds indicate means.",
+    x = "UI Mode",
+    y = "Error Rate (%)",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12),
+    strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+  )
+
+print(p_err)
+
+# Statistical model
+if (exists("model_err") && !is.null(model_err)) {
+  cat("\n### Statistical Model Results\n")
+  cat("#### Model: Error ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  
+  # ANOVA table
+  if (requireNamespace("car", quietly = TRUE)) {
+    library(car)
+    cat("#### ANOVA Table\n")
+    print(Anova(model_err, type = "III"))
+  }
+  
+  # Pairwise comparisons
+  if (exists("pairs_err") && !is.null(pairs_err)) {
+    cat("\n#### Pairwise Comparisons (Holm-adjusted)\n")
+    pairs_err_df <- as.data.frame(pairs_err)
+    print(pairs_err_df %>% head(20))
+  }
+}
+```
+
+-----
+
+# 7. Accuracy & Gaze Dynamics
+
+## Effective Width ($W_e$)
+
+*Lower $W_e$ indicates tighter shot grouping (higher precision).*
+
+```{r plot-we}
+we_summary <- df_iso %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    Mean_We = round(mean(We, na.rm = TRUE), 2),
+    SD_We = round(sd(We, na.rm = TRUE), 2),
+    .groups = "drop"
+  )
+
+we_summary %>%
+  kable(caption = "Effective Width (px) by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+ggplot(df_iso, aes(x = ui_mode, y = We, fill = ui_mode)) +
+  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+              show.legend = FALSE) +
+  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+  facet_grid(modality ~ pressure,
+             labeller = labeller(
+               modality = function(x) paste("Modality:", str_to_title(x)),
+               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+             )) +
+  scale_fill_manual(values = custom_palette_2,
+                     labels = c("Static", "Adaptive")) +
+  scale_x_discrete(labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Effective Target Width (Accuracy)",
+    subtitle = "Lower is Better. White diamonds indicate means.",
+    y = "Effective Width (px)",
+    x = "UI Mode",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12),
+    strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+  )
+```
+
+## Endpoint Accuracy Scatter Plot
+
+*Visualization of endpoint errors relative to target center. Each point represents one trial's endpoint position.*
+
+```{r plot-accuracy-scatter, fig.width=12, fig.height=8}
+# Calculate endpoint errors relative to target center
+df_accuracy <- df %>%
+  filter(
+    !is.na(endpoint_x), !is.na(endpoint_y),
+    !is.na(target_center_x), !is.na(target_center_y),
+    correct == TRUE | correct == "true" | correct == 1
+  ) %>%
+  mutate(
+    err_x = endpoint_x - target_center_x,
+    err_y = endpoint_y - target_center_y,
+    err_distance = sqrt(err_x^2 + err_y^2),
+    Modality = str_to_title(modality),
+    UI = str_to_title(ui_mode)
+  )
+
+# Focus on Gaze modality (most interesting for accuracy)
+gaze_accuracy <- df_accuracy %>%
+  filter(str_to_lower(modality) == "gaze")
+
+if (nrow(gaze_accuracy) > 0) {
+  # Calculate target radius (approximate from W, assuming circular targets)
+  target_radius <- ifelse("W" %in% names(gaze_accuracy), 
+                          mean(gaze_accuracy$W, na.rm = TRUE) / 2, 
+                          20)
+  
+  # Create circle data for target visualization
+  circle_data <- data.frame(
+    x = target_radius * cos(seq(0, 2*pi, length.out = 100)),
+    y = target_radius * sin(seq(0, 2*pi, length.out = 100))
+  )
+  
+  p_accuracy <- ggplot(gaze_accuracy, aes(x = err_x, y = err_y, color = UI)) +
+    # Draw target circle (centered at 0,0)
+    geom_path(data = circle_data, aes(x = x, y = y), 
+              inherit.aes = FALSE, color = "red", linetype = "dashed", linewidth = 1) +
+    # Scatter points
+    geom_point(alpha = 0.5, size = 2) +
+    # Reference lines
+    geom_vline(xintercept = 0, color = "grey70", linetype = "dotted") +
+    geom_hline(yintercept = 0, color = "grey70", linetype = "dotted") +
+    # Facet by pressure
+    facet_wrap(~PressureLabel) +
+    scale_color_manual(values = custom_palette_2,
+                        labels = c("Static", "Adaptive")) +
+    coord_fixed(ratio = 1, xlim = c(-50, 50), ylim = c(-50, 50)) +
+    labs(
+      title = "Endpoint Accuracy: Gaze Modality",
+      subtitle = paste("Red circle shows approximate target size (radius ≈", 
+                      round(target_radius, 1), "px). Points closer to center indicate better accuracy."),
+      x = "Error X (px)",
+      y = "Error Y (px)",
+      color = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "top")
+  
+  print(p_accuracy)
+  
+  # Summary statistics
+  accuracy_summary <- gaze_accuracy %>%
+    group_by(ui_mode, pressure) %>%
+    summarise(
+      N = n(),
+      Mean_Error = round(mean(err_distance, na.rm = TRUE), 2),
+      SD_Error = round(sd(err_distance, na.rm = TRUE), 2),
+      Median_Error = round(median(err_distance, na.rm = TRUE), 2),
+      .groups = "drop"
+    )
+  
+  accuracy_summary %>%
+    kable(caption = "Endpoint Error Distance (px) for Gaze Modality") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+} else {
+  cat("⚠ No gaze accuracy data available for scatter plot.\n")
+}
+```
+
+## The "Midas Touch" Struggle
+
+*Target Re-entries measure how often the cursor drifted out of the target before selection.*
+
+```{r plot-reentry}
+# Only meaningful for Gaze really, but plotting both for control
+reentry_summary <- df_iso %>%
+  filter(!is.na(reentries)) %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    Mean_Reentries = round(mean(reentries, na.rm = TRUE), 2),
+    SD_Reentries = round(sd(reentries, na.rm = TRUE), 2),
+    .groups = "drop"
+  )
+
+reentry_summary %>%
+  kable(caption = "Target Re-entries by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+ggplot(df_iso %>% filter(!is.na(reentries)), 
+       aes(x = ui_mode, y = reentries, fill = ui_mode)) +
+  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+              show.legend = FALSE) +
+  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+  facet_grid(modality ~ pressure,
+             labeller = labeller(
+               modality = function(x) paste("Modality:", str_to_title(x)),
+               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+             )) +
+  scale_fill_manual(values = custom_palette_2,
+                     labels = c("Static", "Adaptive")) +
+  scale_x_discrete(labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Target Re-entries (Control Stability)",
+    subtitle = "Counts > 1 indicate slipping out of target. Lower is better. White diamonds indicate means.",
+    y = "Avg Re-entries per Trial",
+    x = "UI Mode",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12),
+    strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+  )
+```
+
+-----
+
+# 8. Workload (NASA-TLX)
+
+*Subjective workload scores (lower is better).*
+
+```{r plot-tlx}
+# Check if TLX columns exist
+tlx_cols <- c("tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration")
+
+if(all(tlx_cols %in% names(df_raw))) {
+  df_tlx <- df_raw %>%
+    filter(!is.na(pid)) %>%
+    group_by(pid, modality, ui_mode) %>%
+    summarise(across(starts_with("tlx_"), mean, na.rm = TRUE), .groups = "drop") %>%
+    pivot_longer(cols = starts_with("tlx_"), names_to = "Scale", values_to = "Score") %>%
+    mutate(
+      Scale = str_remove(Scale, "tlx_"),
+      Scale = str_to_title(Scale),
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+    )
+  
+  # Summary table
+  tlx_summary <- df_tlx %>%
+    group_by(modality, ui_mode, Scale) %>%
+    summarise(
+      Mean = round(mean(Score, na.rm = TRUE), 1),
+      SD = round(sd(Score, na.rm = TRUE), 1),
+      .groups = "drop"
+    )
+  
+  tlx_summary %>%
+    kable(caption = "NASA-TLX Scores by Condition") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  
+  # Visualization - improved faceting and aesthetics
+  p1 <- ggplot(df_tlx, aes(x = ui_mode, y = Score, fill = ui_mode)) +
+    geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                show.legend = FALSE) +
+    geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                 outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+    stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                 position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+    facet_grid(modality ~ Scale,
+               labeller = labeller(
+                 modality = function(x) paste("Modality:", str_to_title(x)),
+                 Scale = function(x) x
+               )) +
+    scale_fill_manual(values = custom_palette_2,
+                       labels = c("Static", "Adaptive")) +
+    scale_x_discrete(labels = c("Static", "Adaptive")) +
+    labs(
+      title = "NASA-TLX Workload Scores",
+      subtitle = "Lower is Better. White diamonds indicate means.",
+      y = "Score (0-100)",
+      x = "UI Mode",
+      fill = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      legend.position = "top",
+      strip.text = element_text(face = "bold", size = 11),
+      strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
+    )
+  
+  print(p1)
+  
+  # Overall workload score - improved faceting
+  df_tlx_overall <- df_tlx %>%
+    group_by(pid, modality, ui_mode) %>%
+    summarise(Overall_TLX = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+    )
+  
+  p2 <- ggplot(df_tlx_overall, aes(x = ui_mode, y = Overall_TLX, fill = ui_mode)) +
+    geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                show.legend = FALSE) +
+    geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                 outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+    stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                 position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+    facet_wrap(~modality,
+               labeller = labeller(
+                 modality = function(x) paste("Modality:", str_to_title(x))
+               )) +
+    scale_fill_manual(values = custom_palette_2,
+                       labels = c("Static", "Adaptive")) +
+    scale_x_discrete(labels = c("Static", "Adaptive")) +
+    labs(
+      title = "Overall NASA-TLX Workload Score",
+      subtitle = "Average across all 6 scales. Lower is better. White diamonds indicate means.",
+      y = "Overall TLX Score (0-100)",
+      x = "UI Mode",
+      fill = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      legend.position = "top",
+      strip.text = element_text(face = "bold", size = 12),
+      strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+    )
+  
+  print(p2)
+  
+  # Stacked bar chart (inspired by Python script)
+  df_tlx_stacked <- df_tlx %>%
+    group_by(modality, ui_mode, Scale) %>%
+    summarise(Mean_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+    mutate(
+      Modality = str_to_title(modality),
+      UI = str_to_title(ui_mode),
+      Condition = paste(Modality, UI, sep = "\n")
+    )
+  
+  # Create stacked bar
+  p3 <- ggplot(df_tlx_stacked, aes(x = Condition, y = Mean_Score, fill = Scale)) +
+    geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
+    scale_fill_manual(values = custom_palette_multi) +
+    labs(
+      title = "NASA-TLX Workload Components (Stacked)",
+      subtitle = "Total height represents overall workload. Lower is better.",
+      y = "TLX Score (0-100)",
+      x = "Condition",
+      fill = "TLX Scale"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      legend.position = "right",
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
+    ) +
+    guides(fill = guide_legend(ncol = 1))
+  
+  print(p3)
+  
+} else {
+  cat("⚠ TLX Data not found in trial_data.csv\n")
+  cat("Expected columns:", paste(tlx_cols, collapse = ", "), "\n")
+  cat("Available columns with 'tlx':", 
+      paste(grep("tlx", names(df_raw), value = TRUE, ignore.case = TRUE), collapse = ", "), "\n")
+}
+```
+
+-----
+
+# 9. Learning Curves & Practice Effects
+
+**Research Question:** How does performance change within each condition? Do learning rates differ by condition?
+
+*This section shows learning curves aligned by condition start (accounting for Williams counterbalancing). For block-level trends, see Section 12.*
+
+```{r learning-curves}
+# Calculate learning curves aligned by condition (not absolute trial number)
+# With Williams counterbalancing, different participants experience conditions at different times
+# So we align by "trial within condition" rather than absolute trial number
+
+# For error rates, we need ALL trials (correct + incorrect)
+# For movement time, we use only correct trials with valid RTs
+
+# Option 1: Use trial_in_block if available (cleanest approach)
+if ("trial_in_block" %in% names(df_all_trials)) {
+  # Error rates from all trials
+  df_learning_errors <- df_all_trials %>%
+    filter(!is.na(trial_in_block), !is.na(block_number)) %>%
+    group_by(trial_in_block, modality, ui_mode, pressure, pid, block_number) %>%
+    summarise(
+      error_rate = 1 - mean(is_correct, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    group_by(trial_in_block, modality, ui_mode, pressure) %>%
+    summarise(
+      error_mean = mean(error_rate, na.rm = TRUE),
+      error_se = sd(error_rate, na.rm = TRUE) / sqrt(n()),
+      n_participants = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_participants >= 2)
+  
+  # Movement time from correct trials only
+  df_learning_rt <- df %>%
+    filter(!is.na(trial_in_block), !is.na(block_number)) %>%
+    group_by(trial_in_block, modality, ui_mode, pressure, pid, block_number) %>%
+    summarise(
+      rt_avg = mean(rt_s, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    group_by(trial_in_block, modality, ui_mode, pressure) %>%
+    summarise(
+      rt_mean = mean(rt_avg, na.rm = TRUE),
+      rt_se = sd(rt_avg, na.rm = TRUE) / sqrt(n()),
+      n_participants = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_participants >= 2)
+  
+  # Combine
+  df_learning_aligned <- df_learning_rt %>%
+    left_join(df_learning_errors, by = c("trial_in_block", "modality", "ui_mode", "pressure")) %>%
+    mutate(n_participants = pmax(n_participants.x, n_participants.y, na.rm = TRUE)) %>%
+    select(-n_participants.x, -n_participants.y)
+  
+  x_var <- "trial_in_block"
+  x_label <- "Trial Position in Block"
+} else {
+  # Option 2: Calculate position within condition by grouping consecutive trials
+  # Error rates from all trials
+  df_learning_errors <- df_all_trials %>%
+    filter(!is.na(trial_number)) %>%
+    arrange(pid, trial_number) %>%
+    group_by(pid, modality, ui_mode, pressure) %>%
+    mutate(
+      trial_in_condition = row_number()
+    ) %>%
+    ungroup() %>%
+    group_by(trial_in_condition, modality, ui_mode, pressure) %>%
+    summarise(
+      error_mean = 1 - mean(is_correct, na.rm = TRUE),
+      error_se = sd(1 - is_correct, na.rm = TRUE) / sqrt(n()),
+      n_participants = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_participants >= 2, trial_in_condition <= 50)
+  
+  # Movement time from correct trials only
+  df_learning_rt <- df %>%
+    filter(!is.na(trial_number)) %>%
+    arrange(pid, trial_number) %>%
+    group_by(pid, modality, ui_mode, pressure) %>%
+    mutate(
+      trial_in_condition = row_number()
+    ) %>%
+    ungroup() %>%
+    group_by(trial_in_condition, modality, ui_mode, pressure) %>%
+    summarise(
+      rt_mean = mean(rt_s, na.rm = TRUE),
+      rt_se = sd(rt_s, na.rm = TRUE) / sqrt(n()),
+      n_participants = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_participants >= 2, trial_in_condition <= 50)
+  
+  # Combine
+  df_learning_aligned <- df_learning_rt %>%
+    left_join(df_learning_errors, by = c("trial_in_condition", "modality", "ui_mode", "pressure")) %>%
+    mutate(n_participants = pmax(n_participants.x, n_participants.y, na.rm = TRUE)) %>%
+    select(-n_participants.x, -n_participants.y)
+  
+  x_var <- "trial_in_condition"
+  x_label <- "Trial Position in Condition"
+}
+
+# For throughput, we need to work with df_iso and join trial information
+# Create approximate throughput learning by joining trial numbers
+if ("trial_number" %in% names(df_raw)) {
+  # Join df_iso with trial numbers from original data
+  # Ensure pressure types match (df_iso has factor, df_raw has numeric)
+  df_raw_for_join <- df_raw %>%
+    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+    select(pid, modality, ui_mode, pressure, trial_number, A, W) %>%
+    mutate(
+      pressure = as.character(pressure),  # Convert to character for joining
+      modality = as.character(modality),
+      ui_mode = as.character(ui_mode),
+      pid = as.character(pid)
+    ) %>%
+    distinct()
+  
+  df_iso_for_join <- df_iso %>%
+    mutate(
+      pressure = as.character(pressure),
+      modality = as.character(modality),
+      ui_mode = as.character(ui_mode),
+      pid = as.character(pid)
+    )
+  
+  df_iso_with_trials <- df_raw_for_join %>%
+    left_join(df_iso_for_join, by = c("pid", "modality", "ui_mode", "pressure", "A", "W")) %>%
+    filter(!is.na(TP), !is.na(trial_number))
+  
+  if (nrow(df_iso_with_trials) > 0) {
+    df_learning_tp <- df_iso_with_trials %>%
+      mutate(
+        trial_bin = cut(trial_number, breaks = seq(0, max(trial_number, na.rm = TRUE) + 1, 
+                                                   length.out = 11), include.lowest = TRUE),
+        trial_bin_num = as.numeric(trial_bin)
+      ) %>%
+      group_by(trial_bin_num, modality, ui_mode, pressure, pid) %>%
+      summarise(TP_avg = mean(TP, na.rm = TRUE), .groups = "drop") %>%
+      group_by(trial_bin_num, modality, ui_mode, pressure) %>%
+      summarise(
+        TP_mean = mean(TP_avg, na.rm = TRUE),
+        TP_se = sd(TP_avg, na.rm = TRUE) / sqrt(n()),
+        .groups = "drop"
+      )
+  } else {
+    df_learning_tp <- data.frame()
+  }
+} else {
+  df_learning_tp <- data.frame()
+}
+
+# Movement time learning curve (aligned by condition position)
+if (nrow(df_learning_aligned) > 0) {
+  # Check what conditions we have
+  learning_summary_table <- df_learning_aligned %>%
+    group_by(modality, ui_mode, pressure) %>%
+    summarise(
+      `N Positions` = n(),
+      `Mean RT (s)` = round(mean(rt_mean, na.rm = TRUE), 3),
+      `Mean Error Rate` = round(mean(error_mean, na.rm = TRUE), 4),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      Modality = str_to_title(modality),
+      `UI Mode` = str_to_title(ui_mode),
+      Pressure = ifelse(pressure == "1" | pressure == 1, "ON", "OFF")
+    ) %>%
+    select(Modality, `UI Mode`, Pressure, `N Positions`, `Mean RT (s)`, `Mean Error Rate`)
+  
+  learning_summary_table %>%
+    kable(caption = "Learning Curve Data Summary by Condition") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  
+  # Create plot with dynamic x variable
+  p1 <- ggplot(df_learning_aligned, aes(x = .data[[x_var]], y = rt_mean, color = ui_mode, fill = ui_mode)) +
+    # Individual position means (light points)
+    geom_point(alpha = 0.4, size = 1.5) +
+    # Smoothed trend line
+    geom_smooth(method = "loess", span = 0.4, se = TRUE, alpha = 0.2, linewidth = 1.2) +
+    facet_grid(modality ~ pressure, labeller = labeller(
+      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF"),
+      modality = function(x) str_to_title(x)
+    )) +
+    scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+    scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+    labs(
+      title = "Learning Curves: Movement Time Within Condition",
+      subtitle = paste("Learning aligned by position within condition (accounting for counterbalancing).",
+                      "LOESS smoothing. Lower is better. Shaded regions show 95% CI."),
+      x = x_label,
+      y = "Movement Time (s)",
+      color = "UI Mode",
+      fill = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "top", strip.text = element_text(face = "bold"))
+  
+  print(p1)
+  
+  # Error rate learning curve (aligned by condition position)
+  # Check error rate data availability
+  error_summary <- df_learning_aligned %>%
+    group_by(modality, ui_mode, pressure) %>%
+    summarise(
+      n = n(),
+      mean_error = round(mean(error_mean, na.rm = TRUE), 4),
+      min_error = round(min(error_mean, na.rm = TRUE), 4),
+      max_error = round(max(error_mean, na.rm = TRUE), 4),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      Modality = str_to_title(modality),
+      `UI Mode` = str_to_title(ui_mode),
+      Pressure = ifelse(pressure == "1" | pressure == 1, "ON", "OFF"),
+      `N Positions` = n,
+      `Mean Error Rate` = scales::percent(mean_error, accuracy = 0.01),
+      `Min Error Rate` = scales::percent(min_error, accuracy = 0.01),
+      `Max Error Rate` = scales::percent(max_error, accuracy = 0.01)
+    ) %>%
+    select(Modality, `UI Mode`, Pressure, `N Positions`, `Mean Error Rate`, `Min Error Rate`, `Max Error Rate`)
+  
+  error_summary %>%
+    kable(caption = "Error Rate Summary by Condition") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  
+  # Ensure we have data for both UI modes in each condition
+  # If error rates are very low, use a different scale or show raw values
+  p2 <- ggplot(df_learning_aligned, aes(x = .data[[x_var]], y = error_mean, color = ui_mode, fill = ui_mode)) +
+    # Individual position means (light points) - make more visible
+    geom_point(alpha = 0.6, size = 2, shape = 16) +
+    # Smoothed trend line - only if we have enough data points
+    geom_smooth(method = "loess", span = 0.4, se = TRUE, alpha = 0.2, linewidth = 1.2) +
+    facet_grid(modality ~ pressure, labeller = labeller(
+      pressure = function(x) {
+        x_char <- as.character(x)
+        ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
+      },
+      modality = function(x) str_to_title(x)
+    )) +
+    scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
+    scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
+    scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
+    labs(
+      title = "Learning Curves: Error Rate Within Condition",
+      subtitle = paste("Learning aligned by position within condition (accounting for counterbalancing).",
+                      "LOESS smoothing. Lower is better. Shaded regions show 95% CI."),
+      x = x_label,
+      y = "Error Rate",
+      color = "UI Mode",
+      fill = "UI Mode"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "top", strip.text = element_text(face = "bold"))
+  
+  print(p2)
+} else {
+  cat("⚠ Insufficient data for learning curve visualization.\n")
+}
+```
+
+*Note: Data aligned by position within condition to account for Williams counterbalancing. For block-level trends, see Section 12: Block Order & Temporal Effects.*
+
+-----
+
+# 10. Movement Quality Metrics
+
+## Submovement Analysis
+
+**Research Question:** Does adaptive UI reduce movement corrections? How do submovements relate to performance?
+
+*Submovements indicate intermittent control - fewer submovements suggest smoother, more ballistic movements.*
+
+```{r submovement-analysis}
+if ("submovement_count" %in% names(df)) {
+  df_submov <- df %>%
+    filter(!is.na(submovement_count), submovement_count >= 0)
+  
+  if (nrow(df_submov) > 0) {
+    # Summary statistics
+    submov_summary <- df_submov %>%
+      group_by(modality, ui_mode, pressure) %>%
+      summarise(
+        N = n(),
+        Mean = round(mean(submovement_count, na.rm = TRUE), 2),
+        SD = round(sd(submovement_count, na.rm = TRUE), 2),
+        Median = round(median(submovement_count, na.rm = TRUE), 2),
+        .groups = "drop"
+      )
+    
+    submov_summary %>%
+      kable(caption = "Submovement Count by Condition") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Visualization
+    # Visualization - improved faceting and aesthetics
+    p1 <- ggplot(df_submov, aes(x = ui_mode, y = submovement_count, fill = ui_mode)) +
+      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                  show.legend = FALSE) +
+      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+      facet_grid(modality ~ pressure,
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_fill_manual(values = custom_palette_2,
+                         labels = c("Static", "Adaptive")) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      labs(
+        title = "Submovement Count (Movement Quality)",
+        subtitle = "Lower indicates smoother, more ballistic movements. White diamonds indicate means.",
+        x = "UI Mode",
+        y = "Submovement Count",
+        fill = "UI Mode"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+      )
+    
+    print(p1)
+    
+    # Submovements vs. Difficulty
+    # Check if IDe exists, otherwise use ID
+    if ("IDe" %in% names(df_submov)) {
+      df_submov_id <- df_submov %>%
+        filter(!is.na(IDe)) %>%
+        mutate(difficulty = IDe)
+    } else if ("ID" %in% names(df_submov)) {
+      df_submov_id <- df_submov %>%
+        filter(!is.na(ID)) %>%
+        mutate(difficulty = ID)
+    } else {
+      df_submov_id <- data.frame()
+    }
+    
+    if (nrow(df_submov_id) > 0) {
+      p2 <- ggplot(df_submov_id, aes(x = difficulty, y = submovement_count, color = ui_mode)) +
+        geom_point(alpha = 0.3, size = 1) +
+        geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
+        facet_grid(modality ~ pressure, labeller = labeller(
+          pressure = function(x) paste("Pressure:", x),
+          modality = function(x) str_to_title(x)
+        )) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        labs(
+          title = "Submovements vs. Index of Difficulty",
+          subtitle = "How movement corrections scale with task difficulty",
+          x = "Index of Difficulty (bits)",
+          y = "Submovement Count",
+          color = "UI Mode"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(legend.position = "top", strip.text = element_text(face = "bold"))
+      
+      print(p2)
+    }
+  } else {
+    cat("⚠ No valid submovement data available.\n")
+  }
+} else {
+  cat("⚠ submovement_count column not found in dataset.\n")
+}
+```
+
+## Verification Time Analysis
+
+**Research Question:** How much time is spent "stopping" vs. "moving"? Does adaptive UI reduce verification time?
+
+*Verification time represents the "precise stopping" phase, separate from the ballistic movement phase.*
+
+```{r verification-time}
+if ("verification_time_ms" %in% names(df)) {
+  df_verify <- df %>%
+    filter(!is.na(verification_time_ms), verification_time_ms > 0, verification_time_ms <= 6000)
+  
+  if (nrow(df_verify) > 0) {
+    df_verify <- df_verify %>%
+      mutate(
+        verification_s = verification_time_ms / 1000,
+        movement_s = rt_s - verification_s,
+        verify_ratio = verification_time_ms / rt_ms,
+        # Ensure PressureLabel exists
+        PressureLabel = ifelse(pressure == 1, "Pressure: ON", "Pressure: OFF")
+      )
+    
+    # Summary statistics
+    verify_summary <- df_verify %>%
+      group_by(modality, ui_mode, pressure) %>%
+      summarise(
+        N = n(),
+        Mean_Verify = round(mean(verification_s, na.rm = TRUE), 3),
+        Mean_MT = round(mean(rt_s, na.rm = TRUE), 3),
+        Mean_Ratio = round(mean(verify_ratio, na.rm = TRUE), 3),
+        .groups = "drop"
+      )
+    
+    verify_summary %>%
+      kable(caption = "Verification Time by Condition") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Visualization - improved faceting and aesthetics
+    p1 <- ggplot(df_verify, aes(x = ui_mode, y = verification_s, fill = ui_mode)) +
+      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                  show.legend = FALSE) +
+      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+      facet_grid(modality ~ pressure,
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_fill_manual(values = custom_palette_2,
+                         labels = c("Static", "Adaptive")) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      labs(
+        title = "Verification Time (Stopping Phase)",
+        subtitle = "Time spent precisely stopping at target. Lower is better. White diamonds indicate means.",
+        x = "UI Mode",
+        y = "Verification Time (s)",
+        fill = "UI Mode"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+      )
+    
+    print(p1)
+    
+    # Verification ratio (what proportion of total time is verification) - improved faceting
+    p2 <- ggplot(df_verify, aes(x = ui_mode, y = verify_ratio, fill = ui_mode)) +
+      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                  show.legend = FALSE) +
+      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+      facet_grid(modality ~ pressure,
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_fill_manual(values = custom_palette_2,
+                         labels = c("Static", "Adaptive")) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      scale_y_continuous(labels = scales::percent) +
+      labs(
+        title = "Verification Time as Proportion of Total Movement Time",
+        subtitle = "What fraction of time is spent in the stopping phase? White diamonds indicate means.",
+        x = "UI Mode",
+        y = "Verification Ratio",
+        fill = "UI Mode"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+      )
+    
+    print(p2)
+  } else {
+    cat("⚠ No valid verification time data available.\n")
+  }
+} else {
+  cat("⚠ verification_time_ms column not found in dataset.\n")
+}
+```
+
+-----
+
+# 11. Error Patterns & Types
+
+**Research Question:** What types of errors occur? Do error patterns differ by condition?
+
+```{r error-types}
+if ("err_type" %in% names(df_raw)) {
+  df_error_types <- df_raw %>%
+    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+    filter(!is.na(err_type), err_type != "") %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      err_type = factor(err_type, levels = c("miss", "timeout", "slip"))
+    )
+  
+  if (nrow(df_error_types) > 0) {
+    # Summary table
+    error_type_summary <- df_error_types %>%
+      group_by(modality, ui_mode, pressure, err_type) %>%
+      summarise(Count = n(), .groups = "drop") %>%
+      group_by(modality, ui_mode, pressure) %>%
+      mutate(
+        Total = sum(Count),
+        Percentage = round(100 * Count / Total, 1)
+      ) %>%
+      ungroup()
+    
+    error_type_summary %>%
+      kable(caption = "Error Type Distribution by Condition") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Stacked bar chart
+    p1 <- ggplot(error_type_summary, aes(x = interaction(modality, ui_mode), y = Count, fill = err_type)) +
+      geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
+      facet_wrap(~pressure, labeller = labeller(
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+      scale_fill_manual(values = custom_palette_multi[1:3],
+                         labels = c("Miss", "Timeout", "Slip")) +
+      labs(
+        title = "Error Type Distribution",
+        subtitle = "Breakdown of error types by condition",
+        x = "Condition (Modality - UI Mode)",
+        y = "Error Count",
+        fill = "Error Type"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold")
+      )
+    
+    print(p1)
+    
+    # Proportional stacked bar
+    p2 <- ggplot(error_type_summary, aes(x = interaction(modality, ui_mode), y = Percentage, fill = err_type)) +
+      geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
+      facet_wrap(~pressure, labeller = labeller(
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+      scale_fill_manual(values = custom_palette_multi[1:3],
+                         labels = c("Miss", "Timeout", "Slip")) +
+      scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+      labs(
+        title = "Error Type Proportions",
+        subtitle = "Relative distribution of error types",
+        x = "Condition (Modality - UI Mode)",
+        y = "Percentage of Errors",
+        fill = "Error Type"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold")
+      )
+    
+    print(p2)
+  } else {
+    cat("⚠ No error type data available.\n")
+  }
+} else {
+  cat("⚠ err_type column not found in dataset.\n")
+}
+```
+
+-----
+
+# 12. Block Order & Temporal Effects
+
+**Research Question:** Are there order effects? Does performance improve or degrade over blocks?
+
+```{r block-effects}
+# Performance by block number
+# Note: TP is only in df_iso, so we'll use movement time and error rate
+# Error rates need ALL trials, movement time uses only correct trials
+
+# Error rates from all trials
+df_blocks_errors <- df_all_trials %>%
+  filter(!is.na(block_number)) %>%
+  group_by(block_number, modality, ui_mode, pressure, pid) %>%
+  summarise(
+    error_rate = 1 - mean(is_correct, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(block_number, modality, ui_mode, pressure) %>%
+  summarise(
+    error_mean = mean(error_rate, na.rm = TRUE),
+    error_se = sd(error_rate, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Movement time from correct trials only
+df_blocks_rt <- df %>%
+  filter(!is.na(block_number)) %>%
+  group_by(block_number, modality, ui_mode, pressure, pid) %>%
+  summarise(
+    rt_avg = mean(rt_s, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(block_number, modality, ui_mode, pressure) %>%
+  summarise(
+    rt_mean = mean(rt_avg, na.rm = TRUE),
+    rt_se = sd(rt_avg, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Combine for convenience
+df_blocks <- df_blocks_rt %>%
+  left_join(df_blocks_errors, by = c("block_number", "modality", "ui_mode", "pressure"))
+
+# Try to get throughput by block from df_iso
+# Join df_iso with block information
+if ("block_number" %in% names(df_raw)) {
+  df_blocks_tp <- df_raw %>%
+    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+    select(pid, modality, ui_mode, pressure, block_number, A, W) %>%
+    mutate(
+      pressure = as.character(pressure),
+      modality = as.character(modality),
+      ui_mode = as.character(ui_mode),
+      pid = as.character(pid)
+    ) %>%
+    distinct() %>%
+    left_join(
+      df_iso %>% mutate(
+        pressure = as.character(pressure),
+        modality = as.character(modality),
+        ui_mode = as.character(ui_mode),
+        pid = as.character(pid)
+      ),
+      by = c("pid", "modality", "ui_mode", "pressure", "A", "W")
+    ) %>%
+    filter(!is.na(TP), !is.na(block_number)) %>%
+    group_by(block_number, modality, ui_mode, pressure, pid) %>%
+    summarise(TP_avg = mean(TP, na.rm = TRUE), .groups = "drop") %>%
+    group_by(block_number, modality, ui_mode, pressure) %>%
+    summarise(
+      TP_mean = mean(TP_avg, na.rm = TRUE),
+      TP_se = sd(TP_avg, na.rm = TRUE) / sqrt(n()),
+      .groups = "drop"
+    )
+} else {
+  df_blocks_tp <- data.frame()
+}
+
+# Throughput by block (if data available)
+if (nrow(df_blocks_tp) > 0) {
+  p1 <- ggplot(df_blocks_tp, aes(x = block_number, y = TP_mean, color = ui_mode, fill = ui_mode)) +
+  geom_ribbon(aes(ymin = TP_mean - TP_se, ymax = TP_mean + TP_se), 
+              alpha = 0.2, color = NA) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  facet_grid(modality ~ pressure, labeller = labeller(
+    pressure = function(x) {
+      x_char <- as.character(x)
+      ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
+    },
+    modality = function(x) str_to_title(x)
+  )) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
+  labs(
+    title = "Performance Across Blocks",
+    subtitle = "Throughput by block number. Shaded regions show ±1 SE.",
+    x = "Block Number",
+    y = "Throughput (bits/s)",
+    color = "UI Mode",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top", strip.text = element_text(face = "bold"))
+  
+  print(p1)
+} else {
+  cat("⚠ Throughput by block data not available (requires block-level aggregation).\n")
+}
+
+# Movement time by block
+p2 <- ggplot(df_blocks, aes(x = block_number, y = rt_mean, color = ui_mode, fill = ui_mode)) +
+  geom_ribbon(aes(ymin = rt_mean - rt_se, ymax = rt_mean + rt_se), 
+              alpha = 0.2, color = NA) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  facet_grid(modality ~ pressure, labeller = labeller(
+    pressure = function(x) {
+      x_char <- as.character(x)
+      ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
+    },
+    modality = function(x) str_to_title(x)
+  )) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  labs(
+    title = "Performance Across Blocks: Movement Time",
+    subtitle = "Movement time by block number. Lower is better. Shaded regions show ±1 SE.",
+    x = "Block Number",
+    y = "Movement Time (s)",
+    color = "UI Mode",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top", strip.text = element_text(face = "bold"))
+
+print(p2)
+
+# Error rate by block
+# Check what conditions we have for blocks
+block_summary_table <- df_blocks %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    n_blocks = n(),
+    mean_error = round(mean(error_mean, na.rm = TRUE), 4),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Modality = str_to_title(modality),
+    `UI Mode` = str_to_title(ui_mode),
+    Pressure = ifelse(pressure == "1" | pressure == 1, "ON", "OFF"),
+    `N Blocks` = n_blocks,
+    `Mean Error Rate` = scales::percent(mean_error, accuracy = 0.01)
+  ) %>%
+  select(Modality, `UI Mode`, Pressure, `N Blocks`, `Mean Error Rate`)
+
+block_summary_table %>%
+  kable(caption = "Block-Level Data Summary by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+p3 <- ggplot(df_blocks, aes(x = block_number, y = error_mean, color = ui_mode, fill = ui_mode)) +
+  geom_ribbon(aes(ymin = error_mean - error_se, ymax = error_mean + error_se), 
+              alpha = 0.2, color = NA) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  facet_grid(modality ~ pressure, labeller = labeller(
+    pressure = function(x) {
+      x_char <- as.character(x)
+      ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
+    },
+    modality = function(x) str_to_title(x)
+  )) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
+  labs(
+    title = "Performance Across Blocks: Error Rate",
+    subtitle = "Error rate by block number. Lower is better. Shaded regions show ±1 SE.",
+    x = "Block Number",
+    y = "Error Rate",
+    color = "UI Mode",
+    fill = "UI Mode"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top", strip.text = element_text(face = "bold"))
+
+print(p3)
+```
+
+-----
+
+# 13. Spatial Patterns & Heatmaps
+
+**Research Question:** Are there spatial biases in performance? Do some screen regions show better/worse performance?
+
+## Performance by Target Position
+
+```{r spatial-heatmap}
+# Create spatial performance heatmap
+# Error rates need ALL trials, movement time uses only correct trials
+if ("target_center_x" %in% names(df_all_trials) && "target_center_y" %in% names(df_all_trials)) {
+  # Error rates from all trials
+  df_spatial_errors <- df_all_trials %>%
+    filter(!is.na(target_center_x), !is.na(target_center_y)) %>%
+    mutate(
+      x_bin = cut(target_center_x, breaks = seq(0, max(target_center_x, na.rm = TRUE) + 100, 
+                                                length.out = 9), include.lowest = TRUE),
+      y_bin = cut(target_center_y, breaks = seq(0, max(target_center_y, na.rm = TRUE) + 100, 
+                                                length.out = 9), include.lowest = TRUE),
+      x_bin_num = as.numeric(x_bin),
+      y_bin_num = as.numeric(y_bin)
+    ) %>%
+    group_by(x_bin_num, y_bin_num, modality, ui_mode) %>%
+    summarise(
+      mean_error = 1 - mean(is_correct, na.rm = TRUE),
+      n_trials = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_trials >= 3)
+  
+  # Movement time from correct trials only
+  df_spatial_rt <- df %>%
+    filter(!is.na(target_center_x), !is.na(target_center_y)) %>%
+    mutate(
+      x_bin = cut(target_center_x, breaks = seq(0, max(target_center_x, na.rm = TRUE) + 100, 
+                                                length.out = 9), include.lowest = TRUE),
+      y_bin = cut(target_center_y, breaks = seq(0, max(target_center_y, na.rm = TRUE) + 100, 
+                                                length.out = 9), include.lowest = TRUE),
+      x_bin_num = as.numeric(x_bin),
+      y_bin_num = as.numeric(y_bin)
+    ) %>%
+    group_by(x_bin_num, y_bin_num, modality, ui_mode) %>%
+    summarise(
+      mean_rt = mean(rt_s, na.rm = TRUE),
+      n_trials = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_trials >= 3)
+  
+  # Combine
+  df_spatial <- df_spatial_rt %>%
+    left_join(df_spatial_errors, by = c("x_bin_num", "y_bin_num", "modality", "ui_mode")) %>%
+    mutate(n_trials = pmax(n_trials.x, n_trials.y, na.rm = TRUE)) %>%
+    select(-n_trials.x, -n_trials.y)
+  
+  if (nrow(df_spatial) > 0) {
+    # Movement time heatmap
+    p1 <- ggplot(df_spatial, aes(x = x_bin_num, y = y_bin_num, fill = mean_rt)) +
+      geom_tile(alpha = 0.8) +
+      facet_grid(modality ~ ui_mode, labeller = labeller(
+        modality = function(x) str_to_title(x),
+        ui_mode = function(x) str_to_title(x)
+      )) +
+      scale_fill_viridis_c(name = "MT (s)", option = "plasma", direction = -1) +
+      labs(
+        title = "Spatial Performance Heatmap: Movement Time",
+        subtitle = "Darker colors indicate faster movement times. Grid shows target positions.",
+        x = "Target X Position (binned)",
+        y = "Target Y Position (binned)"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "right",
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+    
+    print(p1)
+    
+    # Error rate heatmap
+    p2 <- ggplot(df_spatial, aes(x = x_bin_num, y = y_bin_num, fill = mean_error)) +
+      geom_tile(alpha = 0.8) +
+      facet_grid(modality ~ ui_mode, labeller = labeller(
+        modality = function(x) str_to_title(x),
+        ui_mode = function(x) str_to_title(x)
+      )) +
+      scale_fill_viridis_c(name = "Error\nRate", option = "inferno", direction = 1) +
+      labs(
+        title = "Spatial Performance Heatmap: Error Rate",
+        subtitle = "Darker colors indicate higher error rates. Grid shows target positions.",
+        x = "Target X Position (binned)",
+        y = "Target Y Position (binned)"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "right",
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+    
+    print(p2)
+  } else {
+    cat("⚠ Insufficient spatial data for heatmap visualization.\n")
+  }
+} else {
+  cat("⚠ Target position columns (target_center_x, target_center_y) not found.\n")
+}
+```
+
+## Error Density Heatmap
+
+*Where do endpoint errors occur? Are there systematic spatial biases?*
+
+```{r error-density-heatmap}
+# Error density heatmap for gaze modality
+# Recalculate error data to ensure we have it
+if ("endpoint_x" %in% names(df) && "target_center_x" %in% names(df)) {
+  df_error_spatial <- df %>%
+    filter(
+      !is.na(endpoint_x), !is.na(endpoint_y),
+      !is.na(target_center_x), !is.na(target_center_y),
+      correct == TRUE | correct == "true" | correct == 1
+    ) %>%
+    mutate(
+      err_x = as.numeric(endpoint_x) - as.numeric(target_center_x),
+      err_y = as.numeric(endpoint_y) - as.numeric(target_center_y)
+    )
+  
+  # Focus on gaze modality
+  df_error_gaze <- df_error_spatial %>%
+    filter(str_to_lower(modality) == "gaze") %>%
+    filter(!is.na(err_x), !is.na(err_y), is.finite(err_x), is.finite(err_y))
+} else {
+  df_error_gaze <- data.frame()
+}
+
+if (nrow(df_error_gaze) > 0) {
+  # Check actual data range
+  err_x_range <- range(df_error_gaze$err_x, na.rm = TRUE)
+  err_y_range <- range(df_error_gaze$err_y, na.rm = TRUE)
+  
+  # Use actual data range, but cap extreme outliers
+  x_limit <- min(100, max(abs(err_x_range), na.rm = TRUE) * 1.2)
+  y_limit <- min(100, max(abs(err_y_range), na.rm = TRUE) * 1.2)
+  
+  # Filter to reasonable range
+  df_error_gaze <- df_error_gaze %>%
+    filter(
+      abs(err_x) <= x_limit,
+      abs(err_y) <= y_limit
+    )
+  
+  if (nrow(df_error_gaze) > 0) {
+    # 2D density heatmap
+    p1 <- ggplot(df_error_gaze, aes(x = err_x, y = err_y)) +
+      stat_density_2d(aes(fill = after_stat(density)), geom = "raster", contour = FALSE) +
+      geom_vline(xintercept = 0, color = "white", linetype = "dashed", linewidth = 0.5) +
+      geom_hline(yintercept = 0, color = "white", linetype = "dashed", linewidth = 0.5) +
+      facet_wrap(~ui_mode, labeller = labeller(ui_mode = function(x) str_to_title(x))) +
+      scale_fill_viridis_c(name = "Density", option = "plasma") +
+      coord_fixed(ratio = 1) +
+      labs(
+        title = "Endpoint Error Density: Gaze Modality",
+        subtitle = paste("Heatmap shows where endpoints cluster relative to target center (0,0).",
+                        "N =", nrow(df_error_gaze), "trials."),
+        x = "Error X (px)",
+        y = "Error Y (px)"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "right",
+        strip.text = element_text(face = "bold")
+      )
+    
+    print(p1)
+    
+    # Hexbin plot - COMMENTED OUT due to scaling issues
+    # # Hexbin plot - use actual data range for limits
+    # # Calculate number of bins based on data
+    # n_bins <- min(20, max(5, round(sqrt(nrow(df_error_gaze)) / 2)))
+    # 
+    # # Get actual data limits for setting axis ranges
+    # x_min <- min(df_error_gaze$err_x, na.rm = TRUE)
+    # x_max <- max(df_error_gaze$err_x, na.rm = TRUE)
+    # y_min <- min(df_error_gaze$err_y, na.rm = TRUE)
+    # y_max <- max(df_error_gaze$err_y, na.rm = TRUE)
+    # 
+    # # Add some padding
+    # x_pad <- (x_max - x_min) * 0.1
+    # y_pad <- (y_max - y_min) * 0.1
+    # 
+    # p2 <- ggplot(df_error_gaze, aes(x = err_x, y = err_y)) +
+    #   geom_hex(bins = n_bins, alpha = 0.8) +
+    #   geom_vline(xintercept = 0, color = "red", linetype = "dashed", linewidth = 0.5) +
+    #   geom_hline(yintercept = 0, color = "red", linetype = "dashed", linewidth = 0.5) +
+    #   facet_wrap(~ui_mode, labeller = labeller(ui_mode = function(x) str_to_title(x))) +
+    #   scale_fill_viridis_c(name = "Count", option = "plasma", na.value = "white") +
+    #   coord_fixed(ratio = 1, xlim = c(x_min - x_pad, x_max + x_pad), 
+    #               ylim = c(y_min - y_pad, y_max + y_pad)) +
+    #   labs(
+    #     title = "Endpoint Error Distribution: Gaze Modality (Hexbin)",
+    #     subtitle = paste("Hexagonal binning shows error density. Red lines indicate target center.",
+    #                     "N =", nrow(df_error_gaze), "trials. Data range: X [", 
+    #                     round(x_min, 1), ",", round(x_max, 1), "], Y [",
+    #                     round(y_min, 1), ",", round(y_max, 1), "] px."),
+    #     x = "Error X (px)",
+    #     y = "Error Y (px)"
+    #   ) +
+    #   theme_minimal(base_size = 14) +
+    #   theme(
+    #     legend.position = "right",
+    #     strip.text = element_text(face = "bold")
+    #   )
+    # 
+    # print(p2)
+    
+    # Always show scatter plot as well for comparison
+    p3 <- ggplot(df_error_gaze, aes(x = err_x, y = err_y, color = ui_mode)) +
+      geom_point(alpha = 0.5, size = 1.5) +
+      geom_vline(xintercept = 0, color = "grey70", linetype = "dashed", linewidth = 0.5) +
+      geom_hline(yintercept = 0, color = "grey70", linetype = "dashed", linewidth = 0.5) +
+      facet_wrap(~ui_mode, labeller = labeller(ui_mode = function(x) str_to_title(x))) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      coord_fixed(ratio = 1, xlim = c(-x_limit, x_limit), ylim = c(-y_limit, y_limit)) +
+      labs(
+        title = "Endpoint Error Scatter: Gaze Modality",
+        subtitle = paste("Individual trial endpoints. Red lines indicate target center.",
+                        "N =", nrow(df_error_gaze), "trials."),
+        x = "Error X (px)",
+        y = "Error Y (px)",
+        color = "UI Mode"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "right",
+        strip.text = element_text(face = "bold")
+      )
+    
+    print(p3)
+  } else {
+    cat("⚠ No error data available after filtering.\n")
+  }
+} else {
+  cat("⚠ Insufficient error spatial data for heatmap visualization.\n")
+}
+```
+
+-----
+
+# 14. Gaze-Specific Analysis
+
+## Hover Time (Dwell Duration)
+
+**Research Question:** How long do people hover before confirming? Does adaptive UI change dwell behavior?
+
+*For gaze modality, hover time represents the dwell duration before confirmation.*
+
+```{r hover-time}
+if ("hover_ms" %in% names(df_raw)) {
+  df_hover <- df_raw %>%
+    filter(
+      practice == "false" | practice == FALSE | is.na(practice),
+      str_to_lower(modality) == "gaze",
+      !is.na(hover_ms), hover_ms > 0
+    ) %>%
+    mutate(
+      hover_s = hover_ms / 1000,
+      hover_ratio = hover_ms / rt_ms,
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      pressure = factor(pressure)
+    )
+  
+  if (nrow(df_hover) > 0) {
+    # Summary statistics
+    hover_summary <- df_hover %>%
+      group_by(ui_mode, pressure) %>%
+      summarise(
+        N = n(),
+        Mean_Hover = round(mean(hover_s, na.rm = TRUE), 3),
+        SD_Hover = round(sd(hover_s, na.rm = TRUE), 3),
+        Mean_Ratio = round(mean(hover_ratio, na.rm = TRUE), 3),
+        .groups = "drop"
+      )
+    
+    hover_summary %>%
+      kable(caption = "Hover Time for Gaze Modality") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Visualization - improved faceting and aesthetics
+    p1 <- ggplot(df_hover, aes(x = ui_mode, y = hover_s, fill = ui_mode)) +
+      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                  show.legend = FALSE) +
+      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+      facet_wrap(~pressure,
+                 labeller = labeller(
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      labs(
+        title = "Hover Duration (Gaze Modality)",
+        subtitle = "Dwell time before confirmation. White diamonds indicate means.",
+        x = "UI Mode",
+        y = "Hover Time (s)",
+        fill = "UI Mode"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+      )
+    
+    print(p1)
+    
+    # Hover vs. Total RT
+    # Check if IDe exists, otherwise use ID
+    if ("IDe" %in% names(df_hover)) {
+      df_hover_id <- df_hover %>%
+        filter(!is.na(IDe)) %>%
+        mutate(difficulty = IDe)
+    } else if ("ID" %in% names(df_hover)) {
+      df_hover_id <- df_hover %>%
+        filter(!is.na(ID)) %>%
+        mutate(difficulty = ID)
+    } else {
+      df_hover_id <- data.frame()
+    }
+    
+    if (nrow(df_hover_id) > 0) {
+      p2 <- ggplot(df_hover_id, aes(x = difficulty, y = hover_s, color = ui_mode)) +
+        geom_point(alpha = 0.3, size = 1) +
+        geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
+        facet_wrap(~pressure, labeller = labeller(
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        labs(
+          title = "Hover Time vs. Task Difficulty",
+          subtitle = "How dwell duration scales with index of difficulty",
+          x = "Index of Difficulty (bits)",
+          y = "Hover Time (s)",
+          color = "UI Mode"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(legend.position = "top", strip.text = element_text(face = "bold"))
+      
+      print(p2)
+    }
+  } else {
+    cat("⚠ No valid hover time data available for gaze modality.\n")
+  }
+} else {
+  cat("⚠ hover_ms column not found in dataset.\n")
+}
+```
+
+-----
+
+# 15. Summary & Conclusions
+
+## Key Findings Summary
+
+```{r summary-table}
+# Create a comprehensive summary table
+summary_table <- bind_rows(
+  # Throughput
+  df_iso %>%
+    group_by(modality, ui_mode) %>%
+    summarise(
+      Metric = "Throughput (bits/s)",
+      Mean = round(mean(TP, na.rm = TRUE), 2),
+      SD = round(sd(TP, na.rm = TRUE), 2),
+      .groups = "drop"
+    ),
+  # Movement Time
+  df %>%
+    group_by(modality, ui_mode) %>%
+    summarise(
+      Metric = "Movement Time (s)",
+      Mean = round(mean(rt_s, na.rm = TRUE), 3),
+      SD = round(sd(rt_s, na.rm = TRUE), 3),
+      .groups = "drop"
+    ),
+  # Error Rate
+  df_errors %>%
+    group_by(modality, ui_mode) %>%
+    summarise(
+      Metric = "Error Rate (%)",
+      Mean = round(100 * mean(error, na.rm = TRUE), 2),
+      SD = round(100 * sd(error, na.rm = TRUE), 2),
+      .groups = "drop"
+    ),
+  # Effective Width
+  df_iso %>%
+    group_by(modality, ui_mode) %>%
+    summarise(
+      Metric = "Effective Width (px)",
+      Mean = round(mean(We, na.rm = TRUE), 2),
+      SD = round(sd(We, na.rm = TRUE), 2),
+      .groups = "drop"
+    )
+) %>%
+  arrange(Metric, modality, ui_mode)
+
+summary_table %>%
+  kable(caption = "Summary of Key Metrics by Condition") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
+  column_spec(1, bold = TRUE)
+```
+
+## Data Quality Notes
+
+- **Participants:** `r n_distinct(df$pid)`
+- **Valid Trials:** `r nrow(df)` (out of `r nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice)))` total experimental trials)
+- **Exclusion Rate:** `r percent(round(1 - nrow(df) / nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice))), 3))` (due to errors, timeouts, or invalid RTs)
+- **Trials per Participant:** Mean = `r round(mean(table(df$pid)), 1)`, Range = `r paste(round(min(table(df$pid)), 0), "-", round(max(table(df$pid)), 0))`
+
