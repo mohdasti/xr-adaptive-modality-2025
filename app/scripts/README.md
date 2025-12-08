@@ -1,6 +1,41 @@
 # Scripts
 
-## validate_trials_schema.ts
+## Data Processing Scripts
+
+### merge_raw_data.py
+
+Merges all raw participant CSV files from `data/raw/` into a single cleaned dataset.
+
+**Location:** `/scripts/merge_raw_data.py` (project root)
+
+**Dependencies:** `pandas` (install with `pip install pandas`)
+
+**Usage:**
+```bash
+# Basic merge (keeps original participant IDs)
+python scripts/merge_raw_data.py
+
+# Merge with anonymization (hashes participant IDs)
+python scripts/merge_raw_data.py --anonymize
+
+# Custom paths
+python scripts/merge_raw_data.py --input data/raw --output data/clean/trial_data.csv
+```
+
+**What it does:**
+- Reads all CSV files from `data/raw/`
+- Normalizes column names (handles variations)
+- Combines into single dataset
+- Optionally anonymizes participant IDs
+- Writes to `data/clean/trial_data.csv`
+
+**📖 See [docs/guides/DATA_PROCESSING.md](../../docs/guides/DATA_PROCESSING.md) for detailed guide**
+
+---
+
+## App Scripts
+
+### validate_trials_schema.ts
 
 Validates trial CSV files against the schema defined in `/data/dict/trials.md`.
 

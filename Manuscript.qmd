@@ -1,7 +1,13 @@
 ---
-I'm ---
 title: "Adaptive Modality Systems in Extended Reality: Optimizing Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching"
-author: "Mohammad Dastgheib and Fatemeh Pourmahdian"
+author: 
+  - name: "Mohammad Dastgheib"
+    affiliation: "University of California, Riverside"
+    email: "mohammad.dastgheib@email.ucr.edu"
+    orcid: "0000-0001-7684-3731"
+  - name: "Fatemeh Pourmahdian"
+    email: "fatemepourmahd@gmail.com"
+    orcid: "0009-0007-5473-2070"
 date: last-modified
 abstract: |
   Extended Reality (XR) systems require users to engage their entire body for interaction, imposing significant ergonomic and cognitive demands. Current XR interfaces force a binary choice between controller-based interaction (suffering from "Gorilla Arm" fatigue) and gaze-based interaction (plagued by the "Midas Touch" problem and precision limitations). This manuscript introduces the theoretical foundation and methodological implementation of an Adaptive Modality System that dynamically switches between manual (hand-pointing) and ocular (gaze-based) input modalities based on real-time assessments of task difficulty and user cognitive state. The system aims to optimize the "Input-Output Bandwidth" of the human-computer loop by leveraging Fitts's Law predictions and adaptive UI interventions. Through a rigorous within-subjects experimental design utilizing the ISO 9241-9 multi-directional tapping task with physiologically-accurate gaze simulation, we investigate whether context-aware adaptive systems yield higher throughput than static unimodal systems and reduce workload on the NASA-TLX.

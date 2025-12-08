@@ -1,0 +1,12 @@
+# Python dependencies for data processing scripts
+# Install with: pip install -r requirements.txt
+
+# Data processing
+pandas>=2.0.0
+
+# Analysis (optional - for LBA analysis)
+# pymc>=5.0.0
+# arviz>=0.15.0
+
+
+

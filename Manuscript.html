@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.33">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>manuscript</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="Manuscript_files/libs/clipboard/clipboard.min.js"></script>
+<script src="Manuscript_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="Manuscript_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="Manuscript_files/libs/quarto-html/popper.min.js"></script>
+<script src="Manuscript_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="Manuscript_files/libs/quarto-html/anchor.min.js"></script>
+<link href="Manuscript_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="Manuscript_files/libs/quarto-html/quarto-syntax-highlighting-ea385d0e468b0dd5ea5bf0780b1290d9.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="Manuscript_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="Manuscript_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="Manuscript_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+
+
+<p>title: “Adaptive Modality Systems in Extended Reality: Optimizing Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching” author: “Mohammad Dastgheib and Fatemeh Pourmahdian” date: last-modified abstract: | Extended Reality (XR) systems require users to engage their entire body for interaction, imposing significant ergonomic and cognitive demands. Current XR interfaces force a binary choice between controller-based interaction (suffering from “Gorilla Arm” fatigue) and gaze-based interaction (plagued by the “Midas Touch” problem and precision limitations). This manuscript introduces the theoretical foundation and methodological implementation of an Adaptive Modality System that dynamically switches between manual (hand-pointing) and ocular (gaze-based) input modalities based on real-time assessments of task difficulty and user cognitive state. The system aims to optimize the “Input-Output Bandwidth” of the human-computer loop by leveraging Fitts’s Law predictions and adaptive UI interventions. Through a rigorous within-subjects experimental design utilizing the ISO 9241-9 multi-directional tapping task with physiologically-accurate gaze simulation, we investigate whether context-aware adaptive systems yield higher throughput than static unimodal systems and reduce workload on the NASA-TLX. bibliography: references.bib csl: apa-7th-edition.csl format: pdf: documentclass: article classoption: [11pt, letterpaper] geometry: - margin=1in - top=1.25in - bottom=1.25in fontsize: 11pt linestretch: 1.5 number-sections: true colorlinks: true linkcolor: blue citecolor: blue urlcolor: blue keep-tex: true include-in-header: preamble.tex —</p>
+<p><strong>Keywords:</strong> Extended Reality, Virtual Reality, Adaptive Interfaces, Gaze Interaction, Fitts’s Law, Human-Computer Interaction, Multimodal Interaction, Gaze Simulation</p>
+<section id="introduction" class="level1">
+<h1>Introduction</h1>
+<p>The transition from two-dimensional graphical user interfaces (GUIs) to three-dimensional spatial computing represents one of the most profound shifts in the history of human-computer interaction (HCI). Extended Reality (XR)—an umbrella term encompassing Virtual Reality (VR), Augmented Reality (AR), and Mixed Reality (MR)—promises to liberate digital information from the confines of flat screens, embedding it directly into the user’s physical environment. However, this liberation imposes new and significant demands on the human sensorimotor system. Unlike the desktop metaphor, where interaction is mediated by low-effort devices like the mouse and keyboard, XR requires the user to engage their entire body. The “input space” is no longer a mousepad but the physical volume surrounding the user, and the primary pointing devices are the user’s own hands and eyes.</p>
+<p>While this embodied interaction offers unprecedented intuitive potential, it is fraught with ergonomic and cognitive challenges. The “Gorilla Arm” syndrome, a phenomenon where prolonged mid-air arm extension leads to rapid musculoskeletal fatigue and pain, remains a critical barrier to the long-term adoption of gestural interfaces. Conversely, gaze-based interaction, which leverages the speed of the human oculomotor system, suffers from the “Midas Touch” problem—the inherent ambiguity between looking for perception and looking for action—and lacks the fine motor precision required for granular manipulation tasks <span class="citation" data-cites="jacob1990eye">[@jacob1990eye]</span>.</p>
+<p>Current XR systems typically force a binary choice: the user must either commit to a controller-based paradigm, accepting the physical fatigue, or a gaze-based paradigm, accepting the lack of precision and the potential for inadvertent triggers. This rigid dichotomy ignores the dynamic nature of human attention and the varying demands of different tasks. A high-precision manipulation task may require the stability of a hand controller, while a rapid visual search task is best served by the saccadic speed of the eye.</p>
+<p>This manuscript introduces the theoretical foundation and methodological implementation of the xr-adaptive-modality-2025 platform, a novel research framework designed to investigate Adaptive Modality Systems in XR. Extended Reality (XR) interfaces increasingly integrate multiple input modalities (e.g., eye-gaze and hand pointing) to enhance usability, but optimizing performance across modalities remains challenging. Human perceptual-motor limitations—from sensor noise to cognitive fatigue—can hinder precise and rapid interactions in XR. For example, gaze-based pointing is fast but prone to jitter and Midas touch issues, while hand controllers offer precision at the cost of speed.</p>
+<p>To address these issues, we explore adaptive UI interventions that dynamically adjust to the user’s state and input modality: specifically, a <strong>declutter mechanism</strong> for gaze-based selection and a <strong>width inflation</strong> (target expansion) mechanism for hand-based selection. These adaptations aim to mitigate modality-specific weaknesses (gaze distraction and hand targeting difficulty) under varying cognitive load. By dynamically switching between manual (hand-pointing) and ocular (gaze-based) input modalities based on real-time assessments of task difficulty and user cognitive state, this system aims to optimize the “Input-Output Bandwidth” of the human-computer loop. The research leverages the ISO 9241-9 standard for evaluating non-keyboard input devices to rigorously quantify performance <span class="citation" data-cites="soukoreff2004towards">[@soukoreff2004towards]</span>.</p>
+</section>
+<section id="background-and-related-work" class="level1">
+<h1>Background and Related Work</h1>
+<section id="the-sensorimotor-implications-of-spatial-input" class="level2">
+<h2 class="anchored" data-anchor-id="the-sensorimotor-implications-of-spatial-input">The Sensorimotor Implications of Spatial Input</h2>
+<p>To design an effective adaptive system, one must first deconstruct the physiological mechanisms of the component modalities. The human motor system and the visual system evolved for distinct evolutionary purposes: the hand for manipulation and the eye for information acquisition. Forcing either organ to perform the function of the other introduces friction.</p>
+<p><strong>Manual Pointing in XR:</strong> Manual input in XR, whether through held controllers or optical hand tracking, mimics the act of physical pointing. This interaction style benefits from proprioception—the body’s innate sense of limb position—which allows for high-precision corrections without visual attention. However, the biomechanical cost is substantial. In a 1:1 mapped XR environment, reaching a virtual object requires a corresponding physical motion. Frequent large-amplitude movements lead to fatigue in the deltoids and trapezius muscles. As fatigue sets in, the signal-to-noise ratio of the motor system degrades; the hand begins to tremor, increasing the effective target width required for accurate selection and reducing the overall throughput of the interaction.</p>
+<p><strong>Gaze Interaction:</strong> The eye is the fastest motor organ in the human body. Saccades—rapid, ballistic movements of the eye—can reach velocities exceeding 900 degrees per second <span class="citation" data-cites="bahill1979">[@bahill1979]</span>, making gaze an incredibly efficient modality for target acquisition. However, the eye is fundamentally an input organ, not an output device. Using gaze for selection introduces several critical issues: (1) <strong>The Midas Touch</strong>—in the physical world, we can look at an object without interacting with it, but in a gaze-controlled interface, looking becomes equivalent to touching, requiring “dwell time” mechanisms that slow interaction <span class="citation" data-cites="jacob1990eye">[@jacob1990eye]</span>; (2) <strong>Microsaccades and Jitter</strong>—even when “fixated,” the eye performs microsaccades to refresh the retinal image <span class="citation" data-cites="martinezconde2004">[@martinezconde2004]</span>, meaning a gaze cursor is inherently noisy, making selection of small targets frustrating without smoothing algorithms; (3) <strong>Saccadic Suppression</strong>—during rapid eye movements, the visual system suppresses input to prevent motion blur <span class="citation" data-cites="bridgeman1975">[@bridgeman1975]</span>, creating a “blind” phase that makes the initial phase of gaze targeting effectively open-loop.</p>
+</section>
+<section id="signal-processing-and-cognitive-load-theory" class="level2">
+<h2 class="anchored" data-anchor-id="signal-processing-and-cognitive-load-theory">Signal Processing and Cognitive Load Theory</h2>
+<p>To study these dynamics controllably, our platform employs a generative simulation rather than raw sensor input. This simulation introduces three key constraints derived from oculomotor physiology: (1) <strong>Sensor Lag</strong>—a first-order lag (linear interpolation) mimics the processing latency (30–70 ms) typical of video-based eye trackers <span class="citation" data-cites="saunders2014">[@saunders2014]</span>; (2) <strong>Saccadic Blindness</strong>—the cursor is frozen during high-velocity movements (&gt;120 deg/s), simulating the lack of visual feedback during a saccade <span class="citation" data-cites="bridgeman1975">[@bridgeman1975]</span>; (3) <strong>Fixation Jitter</strong>—Gaussian noise is injected at low velocities to mimic fixational drift and tremor <span class="citation" data-cites="martinezconde2004">[@martinezconde2004]</span>, ensuring that the “cost” of gaze interaction is accurately represented even when using a mouse proxy.</p>
+<p>The efficiency of an interface is not measured solely by speed or accuracy, but by the cognitive resources consumed. Cognitive Load Theory (CLT) distinguishes between intrinsic load (task difficulty) and extraneous load (interface difficulty). The proposed Adaptive Modality System posits that the optimal input modality minimizes extraneous load: for distant, large targets, the motor cost of reaching is high (extraneous physical load), making gaze interaction superior; for close, small targets, the precision requirement is high, and gaze interaction imposes high extraneous load due to jitter, making manual interaction superior. Quantifying cognitive load in real-time is challenging, and subjective measures like the NASA-TLX are retrospective <span class="citation" data-cites="hart2006nasa">[@hart2006nasa]</span>. For this study, we rely primarily on subjective workload measures (NASA-TLX) and performance metrics to assess the efficacy of adaptive interventions.</p>
+</section>
+<section id="adaptive-intervention-mechanisms" class="level2">
+<h2 class="anchored" data-anchor-id="adaptive-intervention-mechanisms">Adaptive Intervention Mechanisms</h2>
+<p>We implemented two modality-specific adaptive interventions. <strong>For gaze interaction</strong>, a declutter mechanism draws on visual attention guiding techniques in XR, related to diminished reality (DR) <span class="citation" data-cites="herling2010">[@herling2010]</span>. When the user operates in gaze mode, the interface fades out non-target objects, mitigating peripheral distraction. This aligns with foveated rendering principles, where systems leverage the human visual system’s foveal focus to prioritize content at the gaze point <span class="citation" data-cites="patney2016">[@patney2016]</span>. By decluttering the periphery, we hypothesize that gaze-based targeting becomes faster and less cognitively demanding.</p>
+<p><strong>For hand-based interactions</strong>, our adaptive strategy is width inflation—dynamically expanding the effective size of targets when the cursor approaches. This concept is inspired by “expanding targets” research <span class="citation" data-cites="mcguffin2005">[@mcguffin2005]</span> and the “Bubble Cursor” <span class="citation" data-cites="grossman2005bubble">[@grossman2005bubble]</span>, which demonstrate that even slight, transient enlargement significantly improves pointing performance. Our implementation uses a hysteresis threshold to prevent flicker, acting as a “safety net” that compensates for motor tremor under fatigue. The expansion occurs only when the system detects the user is aiming at the target (cursor nearing the target center), to prevent overlapping targets in the dense circle layout.</p>
+</section>
+</section>
+<section id="research-objectives" class="level1">
+<h1>Research Objectives</h1>
+<p>The primary objective of this research is to validate the efficacy of the <code>xr-adaptive-modality-2025</code> platform. The study is guided by three core research questions:</p>
+<p><strong>RQ1 (Performance):</strong> Does a context-aware adaptive system yield higher Throughput (<span class="math inline">\(TP\)</span>) than static unimodal systems?</p>
+<p><strong>RQ2 (Workload):</strong> Can adaptive modality switching significantly reduce “Physical Demand” and “Frustration” (NASA-TLX) compared to traditional interaction?</p>
+<p><strong>RQ3 (Adaptation):</strong> Do adaptive interventions (declutter, width inflation) significantly improve performance and reduce workload compared to non-adaptive conditions?</p>
+</section>
+<section id="theoretical-framework" class="level1">
+<h1>Theoretical Framework</h1>
+<p>This section establishes the mathematical and psychological models that underpin the system’s logic, specifically focusing on Information Theory as applied to human movement and the neuroergonomics of attention.</p>
+<section id="fittss-law-the-information-capacity-of-the-human-motor-system" class="level2">
+<h2 class="anchored" data-anchor-id="fittss-law-the-information-capacity-of-the-human-motor-system">Fitts’s Law: The Information Capacity of the Human Motor System</h2>
+<p>Fitts’s Law (1954) is robustly established as the governing dynamic of pointing tasks. It frames movement not as a physical event, but as an information transmission task. The “difficulty” of a target is measured in bits, representing the amount of information the motor system must process to resolve the movement successfully. We adopt the <strong>Shannon Formulation</strong>, the standard for ISO 9241-9 compliance, as it better models the information entropy of the task and avoids negative ID values for very close targets:</p>
+<p><span class="math display">\[ID = \log_2 \left( \frac{D}{W} + 1 \right)\]</span></p>
+<p>Movement Time (<span class="math inline">\(MT\)</span>) is then modeled as a linear function of this difficulty:</p>
+<p><span class="math display">\[MT = a + b \cdot ID\]</span></p>
+<p>Where the intercept <span class="math inline">\(a\)</span> represents non-informational additive components (e.g., reaction time, system latency) and the slope <span class="math inline">\(b\)</span> represents the rate of information processing. The reciprocal of the slope, <span class="math inline">\(1/b\)</span>, is often referred to as the <strong>Index of Performance (</strong><span class="math inline">\(IP\)</span>), or bandwidth, measured in bits per second.</p>
+</section>
+<section id="the-speed-accuracy-tradeoff-in-3d" class="level2">
+<h2 class="anchored" data-anchor-id="the-speed-accuracy-tradeoff-in-3d">The Speed-Accuracy Tradeoff in 3D</h2>
+<p>In XR, the “Width” (<span class="math inline">\(W\)</span>) of a target is ambiguous. To standardize performance across users with varying error rates, the <code>xr-adaptive-modality-2025</code> platform utilizes the <strong>Effective Width (</strong><span class="math inline">\(W_e\)</span>). Unlike nominal width, <span class="math inline">\(W_e\)</span> is derived from the spatial distribution of selection endpoints.</p>
+<p>Consistent with ISO 9241-9, we calculate <span class="math inline">\(W_e\)</span> using the standard deviation of selection coordinates projected onto the task axis. For a target at position <span class="math inline">\(P_{target}\)</span> and a starting position <span class="math inline">\(P_{start}\)</span>, the task axis vector is <span class="math inline">\(\vec{v} = P_{target} - P_{start}\)</span>. The projected error <span class="math inline">\(x_i\)</span> for a trial <span class="math inline">\(i\)</span> with endpoint <span class="math inline">\(P_{hit}\)</span> is computed as the scalar projection:</p>
+<p><span class="math display">\[x_i = \frac{(P_{hit} - P_{target}) \cdot \vec{v}}{\| \vec{v} \|}\]</span></p>
+<p>The effective width is then calculated as <span class="math inline">\(W_e = 4.133 \times \sigma_x\)</span>, where <span class="math inline">\(\sigma_x\)</span> is the standard deviation of these projected errors. This effectively normalizes the error rate to 4%, allowing us to calculate <strong>Throughput (</strong><span class="math inline">\(TP\)</span>), a unified metric of speed and accuracy:</p>
+<p><span class="math display">\[TP = \frac{ID_e}{MT} = \frac{\log_2(D/W_e + 1)}{MT}\]</span></p>
+<p>This metric is critical for comparing Modality A (Gaze) vs.&nbsp;Modality B (Hand). Gaze might have a lower <span class="math inline">\(MT\)</span> due to saccadic speed, but if its jitter results in a massive <span class="math inline">\(W_e\)</span> (low accuracy), the overall Throughput will be lower.</p>
+</section>
+<section id="modeling-movement-and-decision-processes" class="level2">
+<h2 class="anchored" data-anchor-id="modeling-movement-and-decision-processes">Modeling Movement and Decision Processes</h2>
+<p>To decompose the underlying processes of movement execution and decision verification, we employ a <strong>Hybrid Analysis Framework</strong> that separates the ballistic trajectory from the final selection decision.</p>
+<section id="control-theory-and-submovement-models" class="level3">
+<h3 class="anchored" data-anchor-id="control-theory-and-submovement-models">Control Theory and Submovement Models</h3>
+<p>The <strong>Optimized Submovement Model</strong> <span class="citation" data-cites="meyer1988">[@meyer1988]</span> posits that pointing movements are composed of a primary ballistic impulse followed by <span class="math inline">\(n\)</span> corrective submovements. The total movement time is the sum of the primary movement duration and the duration of subsequent corrections required to bring the endpoint error within the target bounds.</p>
+<p>We quantify the “cost of control” by analyzing the velocity profile <span class="math inline">\(v(t)\)</span> of the cursor. A submovement is mathematically identified as a zero-crossing in the acceleration profile (or a local maximum in velocity) after the initial ballistic phase. The <strong>Submovement Count (</strong><span class="math inline">\(N_{sub}\)</span>) serves as a proxy for the efficiency of the control loop:</p>
+<p><span class="math display">\[N_{sub} = \sum_{t=0}^{T} \mathbb{1}(\text{is\_velocity\_peak}(t)) - 1\]</span></p>
+<p>In gaze-based interaction, simulated lag and saccadic blindness force users into an intermittent control regime, theoretically increasing <span class="math inline">\(N_{sub}\)</span>.</p>
+</section>
+<section id="the-linear-ballistic-accumulator-lba-model" class="level3">
+<h3 class="anchored" data-anchor-id="the-linear-ballistic-accumulator-lba-model">The Linear Ballistic Accumulator (LBA) Model</h3>
+<p>Once the cursor enters the target, users face a decision verification problem: “Is the cursor stable enough to click?” We model this using the <strong>Linear Ballistic Accumulator (LBA)</strong> <span class="citation" data-cites="brown2008">[@brown2008]</span>. LBA treats the decision as a race between independent accumulators (e.g., “Select” vs.&nbsp;“Wait/Drift”).</p>
+<p>For the <span class="math inline">\(i\)</span>-th accumulator, evidence <span class="math inline">\(x_i(t)\)</span> accumulates linearly over time <span class="math inline">\(t\)</span> from a starting point <span class="math inline">\(A\)</span> with a drift rate <span class="math inline">\(d_i\)</span>:</p>
+<p><span class="math display">\[x_i(t) = A + d_i \cdot t\]</span></p>
+<p>The starting point <span class="math inline">\(A\)</span> is drawn from a uniform distribution <span class="math inline">\(U[0, A_{max}]\)</span>, and the drift rate <span class="math inline">\(d_i\)</span> is drawn from a normal distribution <span class="math inline">\(N(v_i, s)\)</span>. A decision is made when the evidence reaches a threshold <span class="math inline">\(b\)</span>.</p>
+<p>Unlike Drift Diffusion Models (DDM) which require substantial error rates to constrain the boundary separation <span class="citation" data-cites="lerche2017">[@lerche2017]</span>, LBA is robust to the low-error scenarios typical of Fitts’ tasks. It allows us to explicitly estimate the <strong>Caution Threshold (</strong><span class="math inline">\(b - A\)</span>)—the amount of evidence users require before committing to selection. We hypothesize that adaptive interventions (e.g., snapping) reduce the cognitive need for caution, mathematically reflecting a lower estimated threshold <span class="math inline">\(b\)</span>.</p>
+</section>
+</section>
+</section>
+<section id="methods" class="level1">
+<h1>Methods</h1>
+<p>The methodology described herein is designed to be exhaustive and reproducible, adhering to the highest standards of empirical HCI research. The platform <code>xr-adaptive-modality-2025</code> serves as the technical apparatus for the study.</p>
+<section id="apparatus-and-participants" class="level2">
+<h2 class="anchored" data-anchor-id="apparatus-and-participants">Apparatus and Participants</h2>
+<p>We developed a custom pointing testbed as a web-based application (React 18, TypeScript), allowing broad hardware compatibility for remote participants. The study was conducted on participants’ own computers using a standard mouse or trackpad.</p>
+<section id="display-calibration-and-reliability-measures" class="level3">
+<h3 class="anchored" data-anchor-id="display-calibration-and-reliability-measures">Display Calibration and Reliability Measures</h3>
+<p>To ensure measurement validity across heterogeneous display configurations, we implemented a multi-layered approach addressing display variability. Before commencing experimental trials, participants completed a <strong>Credit Card Calibration</strong> procedure: participants placed a standard credit card (85.60 mm × 53.98 mm) on their screen and adjusted an on-screen rectangle to match its physical dimensions. This calibration enabled computation of pixels per millimeter (px/mm) and pixels per degree of visual angle (PPD), normalizing gaze simulation jitter to screen-space pixels and ensuring consistent perceptual difficulty across different display sizes and resolutions <span class="citation" data-cites="mackenzie1992fitts">[@mackenzie1992fitts]</span>.</p>
+<p>To minimize measurement error, we enforced strict display requirements: fullscreen/maximized window (required before starting blocks), browser zoom locked to 100% (verified before each block using <code>window.visualViewport.scale</code>), and live monitoring during trials (trials automatically paused if settings changed). For every trial, we logged comprehensive display metadata: device pixel ratio (DPR), browser type, viewport dimensions, zoom level, fullscreen status, and tab visibility duration. Trials were excluded from analysis if zoom level ≠ 100%, fullscreen status = FALSE, DPR instability (change &gt; 0.1 between blocks), or tab hidden for &gt; 500ms. Participants with &gt;40% of trials excluded due to display violations were removed from the final analysis.</p>
+</section>
+<section id="gaze-simulation-the-ground-truth-signal" class="level3">
+<h3 class="anchored" data-anchor-id="gaze-simulation-the-ground-truth-signal">Gaze Simulation (The “Ground Truth” Signal)</h3>
+<p>To ensure rigorous internal validity and precise control over noise characteristics, we utilized a <strong>Physiologically-Accurate Gaze Simulation</strong>. This approach allowed us to model the specific constraints of eye-tracking interaction—latency and jitter—with precise control over noise characteristics. The simulation transformed raw mouse input into “gaze” coordinates via three mechanisms derived from oculomotor physiology:</p>
+<ol type="1">
+<li><p><strong>Saccadic Suppression &amp; Ballistic Movement:</strong> The cursor was “frozen” (blind) during high-velocity movements (&gt;120 deg/s) to simulate the brain’s suppression of visual input during saccades, a phenomenon known as saccadic suppression of image displacement <span class="citation" data-cites="bridgeman1975">[@bridgeman1975]</span>. This aligns with the ballistic nature of saccadic eye movements, where visual feedback is effectively open-loop until the eye settles.</p></li>
+<li><p><strong>Fixation Jitter &amp; Drift:</strong> When the cursor slowed (&lt;30 deg/s), Gaussian noise (SD ≈ 0.12° visual angle) was injected to simulate fixational eye movements <span class="citation" data-cites="martinezconde2004">[@martinezconde2004]</span>, specifically the random walk characteristics of ocular drift and tremor that occur even during attempted fixation. This angular noise was normalized to screen pixels using the pixels-per-degree (PPD) calibration value, ensuring consistent perceptual difficulty across different display sizes and viewing distances.</p></li>
+<li><p><strong>Sensor Lag:</strong> A first-order lag (linear interpolation, factor 0.15) was applied to mimic the processing latency (typically 30–70 ms) inherent in video-based eye trackers <span class="citation" data-cites="saunders2014">[@saunders2014]</span>.</p></li>
+</ol>
+</section>
+</section>
+<section id="input-modality-implementations" class="level2">
+<h2 class="anchored" data-anchor-id="input-modality-implementations">Input Modality Implementations</h2>
+<p>The system implemented two distinct input modalities, each with static and adaptive modes. <strong>For hand-based trials</strong>, participants controlled a cursor with their mouse to click the target. In static mode, this was standard 1:1 mouse pointing. In adaptive mode, the effective clickable area of the target was expanded (width scale &gt; 1.0) when the cursor approached the target—a “Gravity Well” effect that was invisible to the user but increased error tolerance for the final click. This implementation draws directly from the “expanding targets” technique validated by McGuffin and Balakrishnan <span class="citation" data-cites="mcguffin2005">[@mcguffin2005]</span>. Expansion occurred only when the system detected the user was aiming at the target (cursor nearing the target center), to prevent overlapping targets in the dense circle layout.</p>
+<p><strong>For gaze-based trials</strong>, participants controlled the cursor via the simulated gaze signal described above. In static mode, selection was triggered by a <strong>Dwell</strong> mechanism (typically 350-500ms) or a confirmation key (Spacebar) if dwell was disabled, following the standard “dwell-to-select” paradigm <span class="citation" data-cites="ware1987 majaranta2006">[@ware1987; @majaranta2006]</span>. In adaptive mode, adaptation focused on <strong>Goal-Aware Snapping</strong> or <strong>Dwell Time Adjustment</strong> to counteract the injected jitter during the verification phase. For gaze declutter, the trigger was immediate at trial start in adaptive blocks—the moment a new target appeared and the user began aiming, all non-targets dimmed.</p>
+<p>Both adaptive features (declutter and expansion) were driven by a simple rule-based policy with slight hysteresis to prevent flicker (e.g., once expanded, a target stayed expanded for the remainder of the trial). The application logged detailed event traces (gaze enter/exit target, click times, etc.), enabling us to later verify that the adaptive mechanisms functioned as intended.</p>
+</section>
+<section id="task-and-stimuli" class="level2">
+<h2 class="anchored" data-anchor-id="task-and-stimuli">Task and Stimuli</h2>
+<p>Participants performed a multi-directional pointing task conforming to the ISO 9241-9 standard for non-keyboard input device evaluation <span class="citation" data-cites="iso2000">[@iso2000]</span>. Targets were arranged in a circular layout with 8 positions (width <span class="math inline">\(W\)</span>, amplitude <span class="math inline">\(A\)</span>), with one target highlighted at a time. Targets were presented with IDs ranging from approximately 2 to 6 bits, calculated using the Shannon formulation of Fitts’ Law (target width ranged from 30 px to 80 px, with corresponding distances chosen to yield the desired ID values). In half of the blocks, a “Time Pressure” condition was enforced via a visible countdown timer; failure to select within the timeout (6s) resulted in a forced error, intended to induce stress and mental workload, simulating a high-demand scenario.</p>
+</section>
+<section id="experimental-design" class="level2">
+<h2 class="anchored" data-anchor-id="experimental-design">Experimental Design</h2>
+<p>We employed a repeated-measures factorial design: all participants experienced every combination of the two input modalities (Gaze vs.&nbsp;Hand) × two UI conditions (Adaptive vs.&nbsp;Non-adaptive) × two workload levels (Pressure vs.&nbsp;No Pressure). This creates a 2 × 2 × 2 within-subjects design.</p>
+<section id="counterbalancing-the-williams-design" class="level3">
+<h3 class="anchored" data-anchor-id="counterbalancing-the-williams-design">Counterbalancing: The Williams Design</h3>
+<p>The order of modality blocks was counterbalanced using a Williams Latin square arrangement to control for learning effects <span class="citation" data-cites="williams1949experimental">[@williams1949experimental]</span>. Within each modality block (lasting 10-15 minutes), adaptive and control trials were intermixed in random order or run as separate sub-blocks (counterbalanced) to avoid long streaks of one condition. Participants were not explicitly told when the system was adapting, aside from noticing the visual changes, to reduce expectancy biases.</p>
+</section>
+</section>
+<section id="participants" class="level2">
+<h2 class="anchored" data-anchor-id="participants">Participants</h2>
+<section id="sample-size-and-power-analysis" class="level3">
+<h3 class="anchored" data-anchor-id="sample-size-and-power-analysis">Sample Size and Power Analysis</h3>
+<p>Sample size was determined through a combination of power analysis and Williams design constraints. For a 2 × 2 × 2 within-subjects design with an expected medium-to-large effect size (Cohen’s <span class="math inline">\(d = 0.60\)</span>), power of 0.80, and <span class="math inline">\(\alpha = 0.05\)</span> (two-tailed), a minimum of <span class="math inline">\(N = 24\)</span> participants would be required for a simple repeated-measures design. However, to ensure proper counterbalancing with the Williams Latin square arrangement, the sample size must be a multiple of the number of treatment sequences. For our 2 × 2 × 2 factorial design, we require 8 distinct counterbalancing sequences. We selected <span class="math inline">\(N = 48\)</span> participants, which allows for 6 complete Williams blocks (8 participants per block), ensuring balanced representation across all treatment orders while providing increased statistical power (<span class="math inline">\(\approx 0.95\)</span> for <span class="math inline">\(d = 0.60\)</span> in a within-subjects design) and robustness to potential data exclusions.</p>
+</section>
+<section id="recruitment" class="level3">
+<h3 class="anchored" data-anchor-id="recruitment">Recruitment</h3>
+<p>We recruited <span class="math inline">\(N=48\)</span> participants (target: balanced gender distribution, age range 18-35) from the university community. All participants had normal or corrected-to-normal vision and no known motor impairments. The study was approved by the Institutional Review Board (IRB) and all participants provided informed consent.</p>
+</section>
+</section>
+<section id="procedure" class="level2">
+<h2 class="anchored" data-anchor-id="procedure">Procedure</h2>
+<p>Each participant completed a short training session to get familiar with gaze selection (including practice with the simulated gaze interface and dwell clicking) and hand selection. During the experiment, they performed multiple trials for each target difficulty and condition. In total, participants completed approximately 3 (IDs) × 8 (directions) × 2 (pressure levels) × 2 (adaptation conditions) ≈ 96 trials per modality, leading to ~192 trials per person overall.</p>
+<p>After each block, participants filled out a NASA-TLX workload survey (rating mental demand, physical demand, etc.) and took a short break to mitigate fatigue. We also collected qualitative feedback at the end about their preferences (gaze vs hand, adaptive vs not, perceived helpfulness of declutter/expansion). The entire session lasted about 1 hour per participant.</p>
+</section>
+<section id="measures-and-analysis-strategy" class="level2">
+<h2 class="anchored" data-anchor-id="measures-and-analysis-strategy">Measures and Analysis Strategy</h2>
+<p>The primary performance measures were Movement Time (MT) in milliseconds (from trial start to successful selection) and Selection Accuracy (hit vs.&nbsp;miss rate, including specific error types: misses, timeouts, false activations). From these, we computed Throughput (TP) in bits/second for each condition by combining each trial’s effective ID (<span class="math inline">\(ID_e\)</span>) and MT, following ISO 9241-9’s recommended calculation using the effective target width <span class="math inline">\(W_e\)</span> (computed from the spread of hit points) to incorporate accuracy into the difficulty measure.</p>
+<p>Given the specific nature of the simulated noise (generative Gaussian jitter) and the high accuracy of the task, standard Drift Diffusion Models (DDM) were ill-suited due to the scarcity of error trials (~3%). Previous methodological reviews indicate that diffusion models require a sufficient error density to reliably estimate boundary separation parameters <span class="citation" data-cites="lerche2017">[@lerche2017]</span>. We instead adopted a <strong>Hybrid Analysis</strong> framework to disentangle “motor” performance from “decision” caution: (1) <strong>Macro-Performance (Fitts’ Law)</strong>—we modeled the overall throughput (bits/s) and the regression slope (<span class="math inline">\(b\)</span>) to quantify the global cost of the gaze simulation lag, following standard ISO 9241-9 throughput calculations; (2) <strong>Path Quality (Control Theory)</strong>—we calculated submovement counts (velocity peaks) and target re-entries to quantify the “cost of control” (how often the user had to correct their trajectory due to the simulated lag and “saccadic blindness”), drawing on the Optimized Submovement Model <span class="citation" data-cites="meyer1988">[@meyer1988]</span>; (3) <strong>Decision Verification (LBA)</strong>—we used the Linear Ballistic Accumulator (LBA) model <span class="citation" data-cites="brown2008">[@brown2008]</span> to analyze the selection phase, which is robust to low error rates and allows accurate estimation of the “Caution Threshold” users adopted to overcome fixation jitter.</p>
+<p>Data were analyzed using repeated-measures ANOVAs and linear mixed models. We tested for main effects of Modality, Adaptation, and Pressure, as well as their interactions. Where appropriate, pairwise comparisons with Bonferroni correction were performed to probe simple effects. All statistical tests assumed <span class="math inline">\(\alpha = 0.05\)</span>.</p>
+</section>
+<section id="deployment-and-data-collection-infrastructure" class="level2">
+<h2 class="anchored" data-anchor-id="deployment-and-data-collection-infrastructure">Deployment and Data Collection Infrastructure</h2>
+<p>The experimental platform was deployed as a web application (React 18, TypeScript, Vite) hosted on Vercel (https://xr-adaptive-modality-2025.vercel.app) to enable remote, asynchronous data collection. Each participant received a unique URL containing embedded participant ID and session number parameters (e.g., <code>?pid=P001&amp;session=1</code>). The application automatically detected these parameters on load, initializing the session with the appropriate identifier. Session state was managed client-side using browser localStorage, enabling participants to pause and resume sessions while maintaining progress tracking.</p>
+<p>Data collection occurred entirely client-side to ensure participant privacy. The application implemented a structured CSV logging system that captured comprehensive trial-level data in real-time (23+ columns per trial), including participant metadata (ID, demographics), trial parameters (block, trial, modality, UI mode, pressure, ID, A, W), performance metrics (RT, accuracy, error type, hover duration), system metadata (browser type, DPR, timestamp), and workload measures (NASA-TLX subscales). At the completion of each session, participants exported their data via browser-based CSV download. Data export occurred entirely locally—no data was transmitted to servers during the experimental session, ensuring participant privacy. The application was built as a single-page application (SPA) with client-side routing, with the gaze simulation algorithm, adaptive policy engine, and data logging system all operating in real-time within the browser. Event-driven architecture (via an internal event bus) coordinated trial timing, data logging, and UI updates, ensuring precise temporal alignment between user actions and recorded data. All code is open-source and available for reproducibility.</p>
+</section>
+</section>
+<section id="results" class="level1">
+<h1>Results</h1>
+<p><em>[Results section to be completed after data collection and analysis. This section will include:</em></p>
+<ul>
+<li><em>Descriptive statistics for all dependent variables across conditions</em></li>
+<li><em>Mixed-effects model results for RQ1 (Performance)</em></li>
+<li><em>NASA-TLX analysis for RQ2 (Workload)</em></li>
+<li><em>Analysis of adaptive intervention effects for RQ3 (Adaptation)</em></li>
+<li><em>Figures showing throughput by condition and ID level</em></li>
+<li><em>Tables summarizing statistical tests]</em></li>
+</ul>
+</section>
+<section id="discussion" class="level1">
+<h1>Discussion</h1>
+<p><em>[Discussion section to be completed after results. This section will:</em></p>
+<ul>
+<li><em>Interpret findings in the context of the research questions</em></li>
+<li><em>Compare results to prior work on multimodal XR interaction</em></li>
+<li><em>Discuss implications for adaptive interface design</em></li>
+<li><em>Address limitations of the current study</em></li>
+<li><em>Propose future directions for adaptive modality research]</em></li>
+</ul>
+</section>
+<section id="conclusion" class="level1">
+<h1>Conclusion</h1>
+<p><em>[Conclusion section to be completed. This section will:</em></p>
+<ul>
+<li><em>Summarize key contributions</em></li>
+<li><em>Restate main findings</em></li>
+<li><em>Highlight practical implications for XR system designers</em></li>
+<li><em>Provide closing thoughts on the future of adaptive interfaces]</em></li>
+</ul>
+</section>
+<section id="acknowledgments" class="level1">
+<h1>Acknowledgments</h1>
+<p>This research was conducted as an independent project. The author thanks the participants for their time and the open-source community for the tools that made this work possible.</p>
+</section>
+<section id="references" class="level1">
+<h1>References</h1>
+<div id="refs" role="list">
+
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

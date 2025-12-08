@@ -28,7 +28,11 @@ syn <- expand.grid(
   timeout_flag = FALSE,
   adaptation_triggered = (ui_mode == "adaptive") & runif(n()) < 0.2,
   adaptation_type = ifelse(ui_mode == "adaptive", ifelse(modality == "hand", "width_inflate", "declutter"), NA),
-  target_center_x = 640, target_center_y = 360, endpoint_x = 645, endpoint_y = 362
+  target_center_x = 640, target_center_y = 360, endpoint_x = 645, endpoint_y = 362,
+  # Add pressure (vary by block: 1.0 = baseline, 1.5 = high pressure)
+  pressure = ifelse(block_number <= 2, 1.0, 1.5),
+  # Compute ID using Shannon formulation: ID = log2(A/W + 1)
+  ID = log2(target_amplitude_px / target_width_px + 1)
 )
 
 dir.create("data/clean", recursive = TRUE, showWarnings = FALSE)

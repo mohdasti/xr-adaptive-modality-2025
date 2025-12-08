@@ -359,10 +359,10 @@ export function FittsTask({
       // Calibration data (for post-hoc visual angle calculations)
       pixels_per_mm: calibrationData?.pixelsPerMM ?? null,
       pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
-          // Target re-entry tracking (proxy for frustration in gaze interactions)
-          target_reentry_count: targetReEntryCountRef.current,
-          // Verification time (time from first target entry to timeout)
-          verification_time_ms: verification_time_ms,
+      // Target re-entry tracking (proxy for frustration in gaze interactions)
+      target_reentry_count: targetReEntryCountRef.current,
+      // Verification time (time from first target entry to timeout)
+      verification_time_ms: verification_time_ms,
           // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
           submovement_count: submovementTrackingRef.current.submovementCount,
     })

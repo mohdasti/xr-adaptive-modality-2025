@@ -362,6 +362,32 @@ Tip: to test a different counterbalanced sequence locally, clear the stored part
 localStorage.removeItem('participantIndex'); location.reload();
 ```
 
+### Data Organization
+
+**Data Directory Structure:**
+- `data/raw/`: Individual participant CSV files (gitignored, private)
+  - Raw data files from participants (e.g., `P040_2025-12-05T07-57-03_merged.csv`)
+  - Keep all raw participant data here
+- `data/clean/trial_data.csv`: Aggregated cleaned dataset (for analysis)
+  - Merged dataset from all participants
+  - Used by all analysis scripts
+  - Currently contains synthetic data for testing (will be replaced with real data)
+
+**Merging Raw Data:**
+When you have participant data files, merge them into the cleaned dataset:
+```bash
+python scripts/merge_raw_data.py
+# Or with anonymization:
+python scripts/merge_raw_data.py --anonymize
+```
+
+This script:
+- Reads all CSV files from `data/raw/`
+- Combines them into a single dataset
+- Handles column mismatches and data cleaning
+- Writes to `data/clean/trial_data.csv`
+- Optionally anonymizes participant IDs
+
 ### Data Export & Submission
 
 **CSV Files:**
@@ -413,6 +439,18 @@ localStorage.removeItem('participantIndex'); location.reload();
 - TLX: **≥10–15%** lower
 
 ### Analysis Pipeline
+
+**⚠️ Important: Before running analysis, merge raw participant data:**
+```bash
+# Install dependencies (if needed)
+pip install pandas
+
+# Merge raw participant CSV files
+python scripts/merge_raw_data.py
+```
+See [docs/guides/DATA_PROCESSING.md](docs/guides/DATA_PROCESSING.md) for details.
+
+**Note:** `data/clean/trial_data.csv` should contain merged data from all participants in `data/raw/`. The merge script combines all raw files into this single dataset for analysis.
 
 The analysis pipeline follows the pre-registered plan:
 
@@ -506,6 +544,7 @@ Lightweight pub/sub system for inter-component communication:
 **Quick Start Guides:**
 - [docs/guides/SETUP.md](docs/guides/SETUP.md) - Setup instructions for developers
 - [docs/guides/DEPLOYMENT_GUIDE.md](docs/guides/DEPLOYMENT_GUIDE.md) - Deploy to Vercel/Netlify
+- [docs/guides/DATA_PROCESSING.md](docs/guides/DATA_PROCESSING.md) - **How to merge raw participant data** ⭐
 - [docs/README.md](docs/README.md) - Complete documentation index
 
 **Study Documentation:**
