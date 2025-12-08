@@ -223,36 +223,36 @@ if (nrow(df_iso) > 0) {
   } else if (diag_tp$empty_conditions > 0) {
     model_tp_error <- paste0("Empty conditions detected: ", diag_tp$empty_conditions, " condition(s) have no data.")
   } else {
-    model_tp <- tryCatch({
-      lmer(TP ~ modality * ui_mode * pressure + (1 | pid), 
-           data = df_iso, REML = FALSE,
-           control = lmerControl(optimizer = "bobyqa"))
-    }, error = function(e) {
+  model_tp <- tryCatch({
+    lmer(TP ~ modality * ui_mode * pressure + (1 | pid), 
+         data = df_iso, REML = FALSE,
+         control = lmerControl(optimizer = "bobyqa"))
+  }, error = function(e) {
       model_tp_error <<- paste0("Model fitting failed: ", e$message)
       NULL
     }, warning = function(w) {
       if (is.null(model_tp_error)) {
         model_tp_error <<- paste0("Model fitting warning: ", w$message)
       }
-      NULL
-    })
-    
-    if (!is.null(model_tp)) {
+    NULL
+  })
+  
+  if (!is.null(model_tp)) {
       # Check for convergence warnings
       conv_warnings <- warnings()
       if (length(conv_warnings) > 0) {
         model_tp_error <- paste0("Convergence warnings detected. Model may be unreliable.")
       }
       
-      tryCatch({
-        emm_tp <- emmeans(model_tp, ~ modality * ui_mode * pressure)
-        pairs_tp <- pairs(emm_tp, adjust = "holm")
-      }, error = function(e) {
+    tryCatch({
+      emm_tp <- emmeans(model_tp, ~ modality * ui_mode * pressure)
+      pairs_tp <- pairs(emm_tp, adjust = "holm")
+    }, error = function(e) {
         if (is.null(model_tp_error)) {
           model_tp_error <<- paste0("Could not compute estimated marginal means: ", e$message)
         }
-      })
-    }
+    })
+  }
   }
 } else {
   diag_tp <- list(n_participants = 0, n_trials = 0)
@@ -282,36 +282,36 @@ if (nrow(df) > 0) {
   } else if (diag_rt$empty_conditions > 0) {
     model_rt_error <- paste0("Empty conditions detected: ", diag_rt$empty_conditions, " condition(s) have no data.")
   } else {
-    model_rt <- tryCatch({
-      lmer(log_rt ~ modality * ui_mode * pressure + (1 | pid), 
-           data = df, REML = FALSE,
-           control = lmerControl(optimizer = "bobyqa"))
-    }, error = function(e) {
+  model_rt <- tryCatch({
+    lmer(log_rt ~ modality * ui_mode * pressure + (1 | pid), 
+         data = df, REML = FALSE,
+         control = lmerControl(optimizer = "bobyqa"))
+  }, error = function(e) {
       model_rt_error <<- paste0("Model fitting failed: ", e$message)
       NULL
     }, warning = function(w) {
       if (is.null(model_rt_error)) {
         model_rt_error <<- paste0("Model fitting warning: ", w$message)
       }
-      NULL
-    })
-    
-    if (!is.null(model_rt)) {
+    NULL
+  })
+  
+  if (!is.null(model_rt)) {
       # Check for convergence warnings
       conv_warnings <- warnings()
       if (length(conv_warnings) > 0) {
         model_rt_error <- paste0("Convergence warnings detected. Model may be unreliable.")
       }
       
-      tryCatch({
-        emm_rt <- emmeans(model_rt, ~ modality * ui_mode * pressure, type = "response")
-        pairs_rt <- pairs(emm_rt, adjust = "holm")
-      }, error = function(e) {
+    tryCatch({
+      emm_rt <- emmeans(model_rt, ~ modality * ui_mode * pressure, type = "response")
+      pairs_rt <- pairs(emm_rt, adjust = "holm")
+    }, error = function(e) {
         if (is.null(model_rt_error)) {
           model_rt_error <<- paste0("Could not compute estimated marginal means: ", e$message)
         }
-      })
-    }
+    })
+  }
   }
 } else {
   diag_rt <- list(n_participants = 0, n_trials = 0)
@@ -356,36 +356,36 @@ if (nrow(df_errors) > 0) {
     if (error_rate < 0.01 || error_rate > 0.99) {
       model_err_error <- paste0("Insufficient error variance: error rate = ", round(error_rate * 100, 1), "%. GLMM requires some variation in outcomes.")
     } else {
-      model_err <- tryCatch({
-        glmer(error ~ modality * ui_mode * pressure + (1 | pid),
-              data = df_errors, family = binomial(link = "logit"),
-              control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-      }, error = function(e) {
+  model_err <- tryCatch({
+    glmer(error ~ modality * ui_mode * pressure + (1 | pid),
+          data = df_errors, family = binomial(link = "logit"),
+          control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+  }, error = function(e) {
         model_err_error <<- paste0("Model fitting failed: ", e$message)
         NULL
       }, warning = function(w) {
         if (is.null(model_err_error)) {
           model_err_error <<- paste0("Model fitting warning: ", w$message)
         }
-        NULL
-      })
-      
-      if (!is.null(model_err)) {
+    NULL
+  })
+  
+  if (!is.null(model_err)) {
         # Check for convergence warnings
         conv_warnings <- warnings()
         if (length(conv_warnings) > 0) {
           model_err_error <- paste0("Convergence warnings detected. Model may be unreliable.")
         }
         
-        tryCatch({
-          emm_err <- emmeans(model_err, ~ modality * ui_mode * pressure, type = "response")
-          pairs_err <- pairs(emm_err, adjust = "holm")
-        }, error = function(e) {
+    tryCatch({
+      emm_err <- emmeans(model_err, ~ modality * ui_mode * pressure, type = "response")
+      pairs_err <- pairs(emm_err, adjust = "holm")
+    }, error = function(e) {
           if (is.null(model_err_error)) {
             model_err_error <<- paste0("Could not compute estimated marginal means: ", e$message)
           }
-        })
-      }
+    })
+  }
     }
   }
 } else {
@@ -397,6 +397,8 @@ if (nrow(df_errors) > 0) {
 # 1. Executive Summary
 
 This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' law pointing tasks across two input modalities (Hand, Gaze) and two UI modes (Static, Adaptive).
+
+**Note on Participant Exclusions:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the main 2×2×2 factorial analysis due to a data logging error that incorrectly recorded pressure conditions. The bug was fixed on December 8, 2025 (commit `04758db`), and seven replacement participants (P049-P055) were added. The final analysis sample consists of N=48 participants with complete data across all experimental conditions. See the Data Quality Notes section and `EXCLUSION_CRITERIA.md` for details.
 
 ## Key Findings
 
@@ -876,11 +878,11 @@ p_err <- df_errors %>%
   scale_fill_manual(values = custom_palette_2,
                      labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
-    labs(
-      x = "UI Mode",
-      y = "Error Rate (%)",
-      fill = "UI Mode"
-    ) +
+  labs(
+    x = "UI Mode",
+    y = "Error Rate (%)",
+    fill = "UI Mode"
+  ) +
   theme_minimal(base_size = 14) +
   theme(
     legend.position = "top",
@@ -1287,7 +1289,7 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
   print(p2)
 }
 ```
-
+  
 ```{r plot-tlx-stacked}
 #| fig-cap: "NASA-TLX Workload Components (Stacked Bar Chart). Total height represents overall workload, with each colored segment representing one of the six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Lower total height indicates lower overall subjective workload."
 if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
@@ -1502,7 +1504,7 @@ if (nrow(df_learning_aligned) > 0) {
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 }
 ```
-
+  
 ```{r plot-learning-rt}
 #| fig-cap: "Learning Curves: Movement Time Within Condition. Learning aligned by position within condition (accounting for counterbalancing). LOESS smoothing. Lower is better. Shaded regions show 95% CI."
 
@@ -1534,7 +1536,7 @@ if (nrow(df_learning_aligned) > 0) {
   print(p1)
 }
 ```
-
+  
 ```{r error-summary-learning}
 if (nrow(df_learning_aligned) > 0) {
   # Error rate learning curve (aligned by condition position)
@@ -1564,7 +1566,7 @@ if (nrow(df_learning_aligned) > 0) {
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 }
 ```
-
+  
 ```{r plot-learning-error}
 #| fig-cap: "Learning Curves: Error Rate Within Condition. Learning aligned by position within condition (accounting for counterbalancing). LOESS smoothing. Lower is better. Shaded regions show 95% CI."
 
@@ -3082,4 +3084,24 @@ summary_table %>%
 - **Valid Trials:** `r nrow(df)` (out of `r nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice)))` total experimental trials)
 - **Exclusion Rate:** `r percent(round(1 - nrow(df) / nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice))), 3))` (due to errors, timeouts, or invalid RTs)
 - **Trials per Participant:** Mean = `r round(mean(table(df$pid)), 1)`, Range = `r paste(round(min(table(df$pid)), 0), "-", round(max(table(df$pid)), 0))`
+
+### Participant Exclusions
+
+**Excluded Participants:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the main 2×2×2 factorial analysis due to a data logging error.
+
+**Reason:** A bug in the data logging code (fixed December 8, 2025, commit `04758db`) incorrectly recorded all trials as `pressure = 1` regardless of block condition. The bug was caused by passing the pressure value (always 1.0) instead of the pressure condition boolean (`pressureEnabled`) to the logging function in `TaskPane.tsx` line 1105.
+
+**Impact:** 
+- All 7 affected participants have only `pressure = 1` data
+- Modality and UI Mode were logged correctly (0 mismatches)
+- Without both pressure conditions (0 and 1), these participants cannot contribute to the full factorial model
+
+**Resolution:** 
+- Bug fixed and deployed (commit `04758db`)
+- Seven replacement participants (P049-P055) added to maintain N=48
+- Affected participants' data retained for exploratory analyses
+
+**Final Sample:** N=48 participants with complete data across all experimental conditions.
+
+For detailed exclusion criteria, see `EXCLUSION_CRITERIA.md`. For technical audit details, see `AUDIT_REPORT.md`.
 

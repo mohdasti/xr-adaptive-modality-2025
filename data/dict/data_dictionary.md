@@ -4,215 +4,255 @@ Complete specification of all CSV columns in the experiment data.
 
 ## Overview
 
-The experiment data is exported as CSV files with 23 columns. Each row represents a single trial.
+The experiment data is exported as CSV files with **77 columns**. Each row represents a single trial.
 
 **File Format**: CSV (UTF-8 encoding)  
-**Column Order**: Fixed (as defined below)  
+**Column Order**: Fixed (as defined in `app/src/lib/csv.ts`)  
 **Headers**: Present in first row
+
+**Last Updated**: December 8, 2025  
+**Schema Version**: 2.0
+
+---
 
 ## Column Specifications
 
-### 1. `pid` (Participant ID)
+### Participant & Session Metadata (13 columns)
 
-- **Type**: String (hashed)
-- **Format**: SHA256 hex digest
-- **Example**: `a3f5b8c2d1e4f6a7b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2`
-- **Units**: N/A
+#### 1. `pid` (Participant ID)
+- **Type**: String
+- **Format**: Participant identifier (e.g., `P001`, `P002`)
+- **Example**: `P001`
 - **Required**: Yes
-- **Anonymization**: Hashed with salt before storage
-- **Description**: Unique identifier for each participant (anonymized)
+- **Description**: Unique identifier for each participant
+
+#### 2. `session_number`
+- **Type**: Integer
+- **Format**: Session number (typically 1)
+- **Example**: `1`
+- **Required**: Yes
+- **Description**: Session identifier (for multi-session studies)
+
+#### 3-13. Demographics
+- `age`: Integer (years)
+- `gender`: String (e.g., `male`, `female`, `other`)
+- `gaming_hours_per_week`: Number (hours)
+- `input_device`: String (e.g., `mouse`, `trackpad`)
+- `vision_correction`: String (e.g., `none`, `glasses`, `contacts`)
+- `wearing_correction_now`: Boolean
+- `dominant_hand`: String (e.g., `left`, `right`)
+- `operating_hand`: String (e.g., `left`, `right`)
+- `using_dominant_hand`: Boolean
+- `motor_impairment`: Boolean
+- `fatigue_level`: Integer (1-10 scale)
 
 ---
 
-### 2. `ts` (Timestamp)
+### Trial Structure & Timing (7 columns)
 
-- **Type**: Integer (milliseconds since epoch)
+#### 14. `ts` (Timestamp)
+- **Type**: Number (milliseconds since epoch)
 - **Format**: Unix timestamp in milliseconds
 - **Example**: `1698765432100`
-- **Units**: Milliseconds (ms)
 - **Required**: Yes
 - **Description**: When the trial started (trial:start event timestamp)
-- **Range**: Typically 1970 to current year
 
----
-
-### 3. `block` (Block Number)
-
+#### 15. `trial_number`
 - **Type**: Integer
-- **Format**: Sequential block number
-- **Example**: `1`, `2`, `3`
-- **Units**: Block index (1-indexed)
-- **Required**: No (default: 1)
-- **Description**: Which block of trials this trial belongs to
-- **Range**: Typically 1-10 (varies by study length)
-
----
-
-### 4. `trial` (Trial Number)
-
-- **Type**: Integer
-- **Format**: Sequential trial number within block
-- **Example**: `1`, `2`, `15`
-- **Units**: Trial index (1-indexed)
+- **Format**: Global trial number across all blocks
+- **Example**: `1`, `50`, `192`
 - **Required**: Yes
-- **Description**: Trial number within the current block
-- **Range**: Typically 1-30 (varies by block configuration)
+- **Description**: Sequential trial number across entire session
+
+#### 16. `trial_in_block`
+- **Type**: Integer
+- **Format**: Trial number within current block
+- **Example**: `1`, `2`, `10`
+- **Required**: Yes
+- **Description**: Trial position within the current block
+
+#### 17. `block_number`
+- **Type**: Integer
+- **Format**: Block number (1-8)
+- **Example**: `1`, `2`, `8`
+- **Required**: Yes
+- **Description**: Which block of trials this trial belongs to
+
+#### 18. `block_order`
+- **Type**: String
+- **Format**: Condition code (e.g., `HaS_P0`, `GaA_P1`)
+- **Example**: `HaS_P0`, `GaA_P1`
+- **Required**: Yes
+- **Description**: Williams design condition code for this block
+- **Encoding**: `{Modality}{UI_Mode}_{Pressure}`
+  - Modality: `H`=Hand, `G`=Gaze
+  - UI Mode: `S`=Static, `A`=Adaptive
+  - Pressure: `P0`=OFF, `P1`=ON
+
+#### 19. `block_trial_count`
+- **Type**: Integer
+- **Format**: Number of trials in this block
+- **Example**: `10`
+- **Required**: Yes
+- **Description**: Total trials in the current block
+
+#### 20-21. `block`, `trial`
+- **Type**: Integer
+- **Format**: Duplicate of `block_number` and `trial_in_block` (legacy)
+- **Note**: Redundant with `block_number` and `trial_in_block`
 
 ---
 
-### 5. `modality` (Input Modality)
+### Experimental Conditions (4 columns)
 
+#### 22. `modality` (Input Modality)
 - **Type**: String (categorical)
 - **Values**: `'hand'` or `'gaze'`
 - **Example**: `'hand'`, `'gaze'`
-- **Units**: N/A
-- **Required**: No
+- **Required**: Yes
 - **Description**: Which input modality was used for this trial
 - **Encoding**:
   - `'hand'`: Direct pointing (move cursor + click)
   - `'gaze'`: Gaze-based (hover + dwell/Space confirmation)
 
----
-
-### 6. `ui_mode` (UI Mode/Condition)
-
+#### 23. `ui_mode` (UI Mode/Condition)
 - **Type**: String (categorical)
-- **Values**: `'standard'`, `'minimal'`, `'enhanced'`
-- **Example**: `'standard'`
-- **Units**: N/A
-- **Required**: No
+- **Values**: `'static'` or `'adaptive'`
+- **Example**: `'static'`, `'adaptive'`
+- **Required**: Yes
 - **Description**: UI mode or experimental condition
 - **Encoding**:
-  - `'standard'`: Default UI
-  - `'minimal'`: Reduced UI elements
-  - `'enhanced'`: Additional UI feedback
+  - `'static'`: Non-adaptive UI (baseline)
+  - `'adaptive'`: Adaptive UI with modality-specific interventions
 
----
+#### 24. `pressure` (Pressure Condition)
+- **Type**: Integer (0 or 1)
+- **Format**: Binary indicator
+- **Example**: `0`, `1`
+- **Required**: Yes
+- **Description**: Time pressure condition
+- **Encoding**:
+  - `0`: Pressure OFF (no time constraint)
+  - `1`: Pressure ON (visible countdown timer, 6s timeout)
+- **Note**: Fixed bug on 2025-12-08 (commit `04758db`). Prior to fix, all trials logged as `1`.
 
-### 7. `pressure` (Pressure Level)
-
-- **Type**: Number (float)
-- **Format**: 0.0 to 2.0
-- **Example**: `1.0`, `1.5`, `2.0`
-- **Units**: Pressure multiplier (dimensionless)
-- **Required**: No (default: 1.0)
-- **Description**: Time pressure level (1.0 = normal, >1.0 = high pressure)
-- **Range**: 0.0 (no pressure) to 2.0 (maximum pressure)
-
----
-
-### 8. `aging` (Aging Proxy)
-
+#### 25. `aging` (Aging Proxy)
 - **Type**: Boolean
-- **Format**: `true` / `false` (string)
-- **Example**: `true`, `false`
-- **Units**: N/A
+- **Format**: `true` / `false`
+- **Example**: `false`
 - **Required**: No (default: false)
 - **Description**: Whether aging proxy (reduced contrast/blur) was enabled
-- **Encoding**: `true` = aging effects ON, `false` = aging effects OFF
+- **Note**: This factor was dropped from the experimental design. Always `false` in current data.
 
 ---
 
-### 9. `ID` (Index of Difficulty)
+### Fitts' Law Parameters (5 columns)
 
+#### 26. `ID` (Index of Difficulty)
 - **Type**: Number (float)
 - **Format**: Shannon formulation
 - **Example**: `1.7`, `3.3`, `5.0`
 - **Units**: Bits
-- **Required**: No
+- **Required**: Yes
 - **Description**: Fitts's Law Index of Difficulty (ID = log₂(A/W + 1))
-- **Range**: Typically 1.0 to 7.0 bits
 - **Formula**: ID = log₂(A/W + 1)
-  - Where A = amplitude (distance to target)
-  - Where W = width (target size)
 
----
+#### 27. `index_of_difficulty_nominal`
+- **Type**: Number (float)
+- **Format**: Same as `ID`
+- **Note**: Duplicate of `ID` (nominal difficulty before adaptation)
 
-### 10. `A` (Amplitude)
-
+#### 28. `A` (Amplitude)
 - **Type**: Number (integer)
 - **Format**: Distance in pixels
 - **Example**: `200`, `400`, `600`
 - **Units**: Pixels (px)
-- **Required**: No
+- **Required**: Yes
 - **Description**: Distance from start position to target center
-- **Range**: Typically 50 to 800 pixels
 
----
+#### 29. `target_distance_A`
+- **Type**: Number (integer)
+- **Format**: Same as `A`
+- **Note**: Duplicate of `A`
 
-### 11. `W` (Width)
-
+#### 30. `W` (Width)
 - **Type**: Number (integer)
 - **Format**: Size in pixels
 - **Example**: `30`, `50`, `100`
 - **Units**: Pixels (px)
-- **Required**: No
-- **Description**: Target width (diameter for circular targets)
-- **Range**: Typically 20 to 200 pixels
-- **Note**: May be modified by adaptive policy (inflate_width action)
+- **Required**: Yes
+- **Description**: Nominal target width (diameter for circular targets)
+- **Note**: May be modified by adaptive policy (width inflation)
 
 ---
 
-### 12. `target_x` (Target X Position)
+### Target & Endpoint Positions (7 columns)
 
+#### 31-32. `target_x`, `target_y`
 - **Type**: Number (integer)
-- **Format**: X coordinate in pixels
-- **Example**: `300`, `400`, `500`
+- **Format**: X/Y coordinates in pixels
+- **Example**: `300`, `200`
 - **Units**: Pixels (px)
-- **Required**: No
-- **Description**: X coordinate of target center on canvas
-- **Range**: 0 to canvas width (typically 800)
+- **Description**: Target position on canvas (legacy, use `target_center_x/y`)
+
+#### 33-34. `target_center_x`, `target_center_y`
+- **Type**: Number (float)
+- **Format**: X/Y coordinates in pixels
+- **Example**: `300.5`, `200.3`
+- **Units**: Pixels (px)
+- **Required**: Yes
+- **Description**: Precise target center coordinates
+
+#### 35-36. `endpoint_x`, `endpoint_y`
+- **Type**: Number (float)
+- **Format**: X/Y coordinates in pixels
+- **Example**: `302.1`, `198.7`
+- **Units**: Pixels (px)
+- **Description**: Actual click/confirmation position
+
+#### 37. `endpoint_error_px`
+- **Type**: Number (float)
+- **Format**: Euclidean distance in pixels
+- **Example**: `5.2`
+- **Units**: Pixels (px)
+- **Description**: Euclidean distance from endpoint to target center
 
 ---
 
-### 13. `target_y` (Target Y Position)
+### Performance Metrics (4 columns)
 
-- **Type**: Number (integer)
-- **Format**: Y coordinate in pixels
-- **Example**: `200`, `300`, `400`
+#### 38. `projected_error_px`
+- **Type**: Number (float)
+- **Format**: Scalar projection along task axis
+- **Example**: `3.1`
 - **Units**: Pixels (px)
-- **Required**: No
-- **Description**: Y coordinate of target center on canvas
-- **Range**: 0 to canvas height (typically 600)
+- **Required**: Yes (for ISO 9241-9 calculations)
+- **Description**: Error projected onto task axis (for We calculation)
+- **Formula**: `(endpoint - target_center) · task_axis_vector / ||task_axis_vector||`
 
----
-
-### 14. `rt_ms` (Reaction Time)
-
+#### 39. `rt_ms` (Reaction Time / Movement Time)
 - **Type**: Number (integer)
 - **Format**: Milliseconds
 - **Example**: `450`, `650`, `1200`
 - **Units**: Milliseconds (ms)
-- **Required**: No
-- **Description**: Reaction time from target appearance to click/confirmation
-- **Range**: Typically 100 to 5000 ms
-  - **Min**: 100 ms (anticipation threshold)
-  - **Max**: 10000 ms (timeout limit)
-- **Computation**: RT = trial_end.timestamp - trial_start.timestamp
+- **Required**: Yes
+- **Description**: Time from target appearance to click/confirmation
+- **Range**: Typically 150 to 6000 ms (exclusions: < 150ms or > 6000ms)
 
----
-
-### 15. `correct` (Trial Success)
-
+#### 40. `correct` (Trial Success)
 - **Type**: Boolean
 - **Format**: `true` / `false` (string or boolean)
 - **Example**: `true`, `false`
-- **Units**: N/A
-- **Required**: No
+- **Required**: Yes
 - **Description**: Whether the trial was completed successfully
 - **Encoding**:
   - `true`: Target hit successfully
   - `false`: Target missed or timeout occurred
 
----
-
-### 16. `err_type` (Error Type)
-
+#### 41. `err_type` (Error Type)
 - **Type**: String (categorical)
 - **Values**: `'miss'`, `'timeout'`, `'slip'`
 - **Example**: `'miss'`, `'timeout'`
-- **Units**: N/A
-- **Required**: No
 - **Description**: Type of error (only present when correct=false)
 - **Encoding**:
   - `'miss'`: Click/confirm outside target bounds
@@ -221,152 +261,324 @@ The experiment data is exported as CSV files with 23 columns. Each row represent
 
 ---
 
-### 17. `hover_ms` (Hover Duration)
+### Gaze-Specific Metrics (3 columns)
 
+#### 42. `hover_ms` (Hover Duration)
 - **Type**: Number (integer)
 - **Format**: Milliseconds
 - **Example**: `350`, `500`, `750`
 - **Units**: Milliseconds (ms)
-- **Required**: No
 - **Description**: Hover duration before confirmation (gaze modality only)
 - **Range**: 0 to rt_ms
 - **Note**: Only logged for gaze trials with dwell > 0ms
 
----
-
-### 18. `confirm_type` (Confirmation Method)
-
+#### 43. `confirm_type` (Confirmation Method)
 - **Type**: String (categorical)
 - **Values**: `'click'`, `'space'`, `'dwell'`
 - **Example**: `'click'`, `'space'`
-- **Units**: N/A
-- **Required**: No
 - **Description**: How the target was confirmed
 - **Encoding**:
   - `'click'`: Direct mouse/touch click (hand modality)
   - `'space'`: Space key confirmation (gaze modality)
   - `'dwell'`: Auto-confirm via dwell time (gaze modality, dwell > 0ms)
 
----
-
-### 19. `pupil_z_med` (Pupil Diameter Z-Score)
-
+#### 44. `pupil_z_med` (Pupil Diameter Z-Score)
 - **Type**: Number (float)
 - **Format**: Standardized z-score
 - **Example**: `0.5`, `-0.3`, `1.2`
 - **Units**: Z-score (standard deviations from mean)
-- **Required**: No (default: null)
-- **Description**: Median z-score of pupil diameter proxy over last 1-2 seconds
-- **Range**: Typically -3.0 to +3.0 (mean = 0, std = 1)
-- **Note**: Only logged if camera permission granted and enabled
-- **Computation**: z = (luminance - mean) / std (rolling median)
-- **Privacy**: Scalar value only - no video frames stored
+- **Description**: Median z-score of pupil diameter proxy
+- **Note**: This feature was dropped from the experimental design. Always `null` in current data.
 
 ---
 
-### 20. `tlx_global` (NASA-TLX Global Workload)
+### Adaptive System Metrics (5 columns)
 
+#### 45. `adaptation_triggered`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether adaptive intervention was triggered in this trial
+
+#### 46. `target_reentry_count`
+- **Type**: Integer
+- **Format**: Count
+- **Example**: `0`, `1`, `2`
+- **Description**: Number of times cursor exited and re-entered target before selection
+- **Note**: Proxy for control stability (gaze modality)
+
+#### 47. `submovement_count`
+- **Type**: Integer
+- **Format**: Count
+- **Example**: `0`, `1`, `2`
+- **Description**: Number of velocity peaks (submovements) in cursor trajectory
+- **Note**: Quantifies intermittent control strategy
+
+#### 48. `verification_time_ms`
 - **Type**: Number (integer)
-- **Format**: 0 to 100
-- **Example**: `50`, `75`, `90`
-- **Units**: Workload score (0-100 scale)
-- **Required**: No (default: null)
-- **Description**: NASA-TLX global workload rating for the block
-- **Range**: 0 (low) to 100 (high)
-- **Note**: Same value repeated for all trials within a block
-- **Source**: TLX form submitted after block completion
+- **Format**: Milliseconds
+- **Example**: `150`, `300`, `500`
+- **Units**: Milliseconds (ms)
+- **Description**: Time from first target entry to final selection
+- **Note**: Separates "ballistic movement" from "precise stopping" phases
 
 ---
 
-### 21. `tlx_mental` (NASA-TLX Mental Demand)
+### Width Scaling Metrics (3 columns)
 
+#### 49. `nominal_width_px`
 - **Type**: Number (integer)
-- **Format**: 0 to 100
-- **Example**: `60`, `80`, `95`
-- **Units**: Workload score (0-100 scale)
-- **Required**: No (default: null)
-- **Description**: NASA-TLX mental demand rating for the block
-- **Range**: 0 (low) to 100 (high)
-- **Note**: Same value repeated for all trials within a block
-- **Source**: TLX form submitted after block completion
+- **Format**: Pixels
+- **Example**: `40`, `50`, `80`
+- **Units**: Pixels (px)
+- **Description**: Original target width (design specification)
 
----
-
-### 22. `browser` (Browser Name)
-
-- **Type**: String
-- **Format**: Browser name
-- **Example**: `'Chrome'`, `'Firefox'`, `'Safari'`
-- **Units**: N/A
-- **Required**: Yes
-- **Description**: Browser used for the experiment
-- **Detection**: From navigator.userAgent
-- **Values**: Chrome, Firefox, Safari, Edge, Unknown
-
----
-
-### 23. `dpi` (Device Pixel Ratio)
-
+#### 50. `displayed_width_px`
 - **Type**: Number (float)
-- **Format**: Device-specific ratio
+- **Format**: Pixels
+- **Example**: `40.0`, `60.0`, `80.0`
+- **Units**: Pixels (px)
+- **Description**: Actual rendered target width (after adaptive scaling)
+
+#### 51. `width_scale_factor`
+- **Type**: Number (float)
+- **Format**: Multiplier
+- **Example**: `1.0`, `1.5`, `2.0`
+- **Description**: Scale factor applied to target width
+- **Formula**: `displayed_width_px / nominal_width_px`
+- **Note**: `1.0` = no scaling, `>1.0` = enlarged, `<1.0` = reduced
+
+---
+
+### Alignment Gate Metrics (4 columns)
+
+#### 52. `alignment_gate_enabled`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether alignment gate was active for this trial
+
+#### 53. `alignment_gate_false_triggers`
+- **Type**: Integer
+- **Format**: Count
+- **Example**: `0`, `1`, `2`
+- **Description**: Number of false triggers (misalignment detected incorrectly)
+
+#### 54. `alignment_gate_recovery_time_ms`
+- **Type**: Number (integer)
+- **Format**: Milliseconds
+- **Description**: Time spent recovering from false triggers
+
+#### 55. `alignment_gate_mean_recovery_time_ms`
+- **Type**: Number (float)
+- **Format**: Milliseconds
+- **Description**: Mean recovery time across all false triggers in trial
+
+---
+
+### Task Configuration (2 columns)
+
+#### 56. `task_type`
+- **Type**: String (categorical)
+- **Values**: `'point'`, `'drag'` (if implemented)
+- **Example**: `'point'`
+- **Description**: Type of task (currently all trials are `'point'`)
+
+#### 57. `drag_distance`
+- **Type**: Number (float)
+- **Format**: Pixels
+- **Description**: Distance dragged (for drag tasks, if implemented)
+- **Note**: Currently always `null` (point tasks only)
+
+---
+
+### Display & System Metadata (13 columns)
+
+#### 58-59. `pixels_per_mm`, `pixels_per_degree`
+- **Type**: Number (float)
+- **Format**: Calibration values
+- **Description**: Display calibration from credit card calibration procedure
+
+#### 60-61. `screen_width`, `screen_height`
+- **Type**: Integer
+- **Format**: Pixels
+- **Description**: Physical screen resolution
+
+#### 62-63. `window_width`, `window_height`
+- **Type**: Integer
+- **Format**: Pixels
+- **Description**: Browser window dimensions
+
+#### 64. `device_pixel_ratio`
+- **Type**: Number (float)
+- **Format**: Ratio
 - **Example**: `1.0`, `2.0`, `1.5`
-- **Units**: Ratio (dimensionless)
+- **Description**: Device pixel ratio (DPR) for HiDPI displays
+
+#### 65-66. `zoom_level`, `zoom_pct`
+- **Type**: Number
+- **Format**: Zoom factor
+- **Description**: Browser zoom level (should be 100% for valid trials)
+
+#### 67-68. `is_fullscreen`, `fullscreen`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether window was in fullscreen mode (required for valid trials)
+
+#### 69-70. `viewport_w`, `viewport_h`
+- **Type**: Integer
+- **Format**: Pixels
+- **Description**: Viewport dimensions
+
+#### 71-72. `focus_blur_count`, `tab_hidden_ms`
+- **Type**: Integer
+- **Format**: Count / Milliseconds
+- **Description**: Window focus/blur events and tab visibility duration
+- **Note**: Trials with `tab_hidden_ms > 500ms` should be excluded
+
+#### 73-74. `user_agent`, `browser`
+- **Type**: String
+- **Format**: Browser identification
+- **Example**: `'Chrome'`, `'Firefox'`, `'Safari'`
+- **Description**: Browser type and user agent string
+
+#### 75. `dpi`
+- **Type**: Number (float)
+- **Format**: Device pixel ratio (duplicate of `device_pixel_ratio`)
+- **Note**: Legacy field, use `device_pixel_ratio`
+
+---
+
+### Practice & Performance Tracking (2 columns)
+
+#### 76. `practice`
+- **Type**: Boolean
+- **Format**: `true` / `false`
 - **Required**: Yes
-- **Description**: Device pixel ratio for screen scaling
-- **Detection**: From window.devicePixelRatio
-- **Range**: Typically 1.0 (standard) to 4.0 (HiDPI/Retina)
-- **Common Values**:
-  - `1.0`: Standard displays
-  - `2.0`: Retina/HiDPI displays
-  - `1.25`, `1.5`: Mid-range HiDPI
+- **Description**: Whether this is a practice trial
+- **Note**: Practice trials should be excluded from analysis
+
+#### 77. `avg_fps`
+- **Type**: Number (float)
+- **Format**: Frames per second
+- **Example**: `60.0`, `59.8`
+- **Description**: Average frame rate during trial
+
+---
+
+### Workload Measures (6 columns)
+
+#### 78-83. NASA-TLX Subscales
+- `tlx_mental`: Integer (0-100) - Mental Demand
+- `tlx_physical`: Integer (0-100) - Physical Demand
+- `tlx_temporal`: Integer (0-100) - Temporal Demand
+- `tlx_performance`: Integer (0-100) - Performance (inverted: higher = worse)
+- `tlx_effort`: Integer (0-100) - Effort
+- `tlx_frustration`: Integer (0-100) - Frustration
+
+**Note**: These values are block-level (same for all trials within a block). Collected after each block via TLX form.
+
+---
+
+### Debrief Responses (3 columns)
+
+#### 84. `debrief_q1_adaptation_noticed`
+- **Type**: String (text)
+- **Description**: Response to "Did you notice the interface adapting?"
+
+#### 85. `debrief_q2_strategy_changed`
+- **Type**: String (text)
+- **Description**: Response to "Did you change your strategy?"
+
+#### 86. `debrief_timestamp`
+- **Type**: String (ISO timestamp)
+- **Description**: When debrief form was submitted
 
 ---
 
 ## Data Types Summary
 
-| Type | Count | Columns |
-|------|-------|---------|
-| String (categorical) | 5 | modality, ui_mode, err_type, confirm_type, browser |
-| Number (integer) | 6 | trial, block, A, W, target_x, target_y, rt_ms, hover_ms, tlx_global, tlx_mental |
-| Number (float) | 4 | pressure, ID, pupil_z_med, dpi |
-| Boolean | 2 | aging, correct |
-| Timestamp | 1 | ts |
-| Hashed ID | 1 | pid |
+| Type | Count | Example Columns |
+|------|-------|-----------------|
+| String (categorical) | 15 | modality, ui_mode, err_type, confirm_type, browser, block_order |
+| Number (integer) | 25 | trial_number, block_number, rt_ms, A, W, age, gaming_hours_per_week |
+| Number (float) | 20 | ID, pressure, width_scale_factor, pixels_per_mm, device_pixel_ratio |
+| Boolean | 8 | correct, practice, pressure, aging, adaptation_triggered, alignment_gate_enabled |
+| Timestamp | 2 | ts, debrief_timestamp |
+| Text | 2 | debrief_q1_adaptation_noticed, debrief_q2_strategy_changed |
 
-**Total**: 23 columns
+**Total**: 77 columns
+
+---
 
 ## Required vs Optional
 
-**Required (6 columns):**
-- `pid`, `ts`, `trial`, `browser`, `dpi` (always present)
-- `correct` (present for all trial results)
+**Required (Always Present):**
+- Participant: `pid`, `session_number`
+- Trial structure: `ts`, `trial_number`, `trial_in_block`, `block_number`, `block_order`
+- Conditions: `modality`, `ui_mode`, `pressure`
+- Performance: `rt_ms`, `correct`, `practice`
+- Fitts parameters: `A`, `W`, `ID`
 
-**Optional (17 columns):**
-- Modality-specific: `hover_ms`, `confirm_type` (gaze only)
-- Context factors: `pressure`, `aging`, `pupil_z_med` (if enabled)
-- TLX: `tlx_global`, `tlx_mental` (after block completion)
-- Fitts parameters: `ID`, `A`, `W`, `target_x`, `target_y`
-- Error details: `err_type` (only if correct=false)
+**Conditional (Present When Applicable):**
+- Gaze-specific: `hover_ms`, `confirm_type` (gaze trials only)
+- Error details: `err_type` (only when correct=false)
+- TLX: All `tlx_*` columns (after block completion)
+- Debrief: All `debrief_*` columns (after session completion)
+- Adaptive metrics: `width_scale_factor`, `submovement_count` (when adaptive UI active)
+
+**Dropped Features (Always Null):**
+- `aging`: Always `false` (factor dropped from design)
+- `pupil_z_med`: Always `null` (webcam pupillometry dropped)
+
+---
 
 ## Data Quality Checks
 
 ### Validation Rules
 
-1. **RT Range**: 100 ≤ rt_ms ≤ 10000
+1. **RT Range**: 150 ≤ rt_ms ≤ 6000 (exclude outliers)
 2. **ID Formula**: ID = log₂(A/W + 1) (±0.1 tolerance)
-3. **TLX Range**: 0 ≤ tlx_global ≤ 100, 0 ≤ tlx_mental ≤ 100
-4. **Coordinates**: 0 ≤ target_x ≤ 800, 0 ≤ target_y ≤ 600
+3. **TLX Range**: 0 ≤ tlx_* ≤ 100 for all TLX subscales
+4. **Coordinates**: 0 ≤ target_center_x ≤ screen_width, 0 ≤ target_center_y ≤ screen_height
 5. **Boolean Consistency**: If correct=true, err_type should be empty/null
-6. **Modality Match**: confirm_type matches modality
+6. **Modality Match**: confirm_type matches modality (click for hand, space/dwell for gaze)
 7. **Timestamp Order**: ts increases monotonically within participant
+8. **Display Requirements**: zoom_level = 100%, is_fullscreen = true, tab_hidden_ms ≤ 500ms
+9. **Pressure Values**: Must be 0 or 1 (not continuous)
 
 ### Exclusions
 
-Rows should be excluded if:
-- rt_ms < 100ms (anticipation)
-- rt_ms > 10000ms (timeout error)
+**Trial-level exclusions:**
+- rt_ms < 150ms (anticipation)
+- rt_ms > 6000ms (timeout error)
 - correct is null
+- practice = true
+- zoom_level ≠ 100%
+- is_fullscreen = false
+- tab_hidden_ms > 500ms
 - Missing required columns
+
+**Participant-level exclusions:**
+- >40% of trials excluded due to display violations
+- Incomplete data collection (see `EXCLUSION_CRITERIA.md`)
+
+---
+
+## Known Issues & Fixes
+
+### Pressure Condition Logging Bug (Fixed 2025-12-08)
+
+**Issue**: Prior to commit `04758db`, all trials were logged with `pressure = 1` regardless of block condition.
+
+**Root Cause**: In `TaskPane.tsx` line 1105, the code passed `pressure={pressure}` (always 1.0) instead of `pressure={pressureEnabled ? 1 : 0}`.
+
+**Impact**: 
+- 7 participants (P002, P003, P007, P008, P015, P039, P040) have only `pressure = 1` data
+- These participants must be excluded from the main 2×2×2 factorial analysis
+- See `EXCLUSION_CRITERIA.md` for details
+
+**Fix Status**: ✅ Fixed and deployed (commit `04758db`)
+
+---
 
 ## CSV Format
 
@@ -377,12 +589,16 @@ Rows should be excluded if:
 
 **Example Row:**
 ```csv
-pid,ts,block,trial,modality,ui_mode,pressure,aging,ID,A,W,target_x,target_y,rt_ms,correct,err_type,hover_ms,confirm_type,pupil_z_med,tlx_global,tlx_mental,browser,dpi
-a3f5b8c2...,1698765432100,1,1,hand,standard,1.0,false,3.17,200,50,300,200,450,true,,,click,,75,60,Chrome,2.0
+pid,session_number,age,gender,...,modality,ui_mode,pressure,...,rt_ms,correct,...
+P001,1,25,male,...,hand,static,1,...,450,true,...
 ```
+
+---
 
 ## Version History
 
-- **v1.0** (2025-01-15): Initial schema definition
-- Future versions may add columns as features are developed
-
+- **v1.0** (2025-01-15): Initial schema definition (23 columns)
+- **v2.0** (2025-12-08): Updated to reflect actual schema (77 columns)
+  - Added all new fields (submovement_count, width scaling, alignment gates, etc.)
+  - Documented pressure logging bug and fix
+  - Removed references to dropped features (aging, pupillometry)
