@@ -1,4 +1,5 @@
 ---
+I'm ---
 title: "Adaptive Modality Systems in Extended Reality: Optimizing Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching"
 author: "Mohammad Dastgheib and Fatemeh Pourmahdian"
 date: last-modified
@@ -55,7 +56,7 @@ To design an effective adaptive system, one must first deconstruct the physiolog
 
 ## Signal Processing and Cognitive Load Theory
 
-To study these dynamics controllably, our platform employs a generative simulation rather than raw sensor input. This simulation introduces three key constraints derived from oculomotor physiology: (1) **Sensor Lag**—a first-order lag (linear interpolation) mimics the processing latency (30–70 ms) typical of video-based eye trackers [@saunders2014]; (2) **Saccadic Blindness**—the cursor is frozen during high-velocity movements (>120 deg/s), simulating the lack of visual feedback during a saccade [@bridgeman1975]; (3) **Fixation Jitter**—Gaussian noise is injected at low velocities to mimic fixational drift and tremor [@martinezconde2004], ensuring that the "cost" of gaze interaction is accurately represented even when using a mouse proxy.
+To study these dynamics controllably, our platform employs a generative simulation rather than raw sensor input. This simulation introduces three key constraints derived from oculomotor physiology: (1) **Sensor Lag**—a first-order lag (linear interpolation) mimics the processing latency (30–70 ms) typical of video-based eye trackers [@saunders2014]; (2) **Saccadic Blindness**—the cursor is frozen during high-velocity movements (\>120 deg/s), simulating the lack of visual feedback during a saccade [@bridgeman1975]; (3) **Fixation Jitter**—Gaussian noise is injected at low velocities to mimic fixational drift and tremor [@martinezconde2004], ensuring that the "cost" of gaze interaction is accurately represented even when using a mouse proxy.
 
 The efficiency of an interface is not measured solely by speed or accuracy, but by the cognitive resources consumed. Cognitive Load Theory (CLT) distinguishes between intrinsic load (task difficulty) and extraneous load (interface difficulty). The proposed Adaptive Modality System posits that the optimal input modality minimizes extraneous load: for distant, large targets, the motor cost of reaching is high (extraneous physical load), making gaze interaction superior; for close, small targets, the precision requirement is high, and gaze interaction imposes high extraneous load due to jitter, making manual interaction superior. Quantifying cognitive load in real-time is challenging, and subjective measures like the NASA-TLX are retrospective [@hart2006nasa]. For this study, we rely primarily on subjective workload measures (NASA-TLX) and performance metrics to assess the efficacy of adaptive interventions.
 
@@ -89,17 +90,17 @@ Movement Time ($MT$) is then modeled as a linear function of this difficulty:
 
 $$MT = a + b \cdot ID$$
 
-Where the intercept $a$ represents non-informational additive components (e.g., reaction time, system latency) and the slope $b$ represents the rate of information processing. The reciprocal of the slope, $1/b$, is often referred to as the **Index of Performance ($IP$)**, or bandwidth, measured in bits per second.
+Where the intercept $a$ represents non-informational additive components (e.g., reaction time, system latency) and the slope $b$ represents the rate of information processing. The reciprocal of the slope, $1/b$, is often referred to as the **Index of Performance (**$IP$), or bandwidth, measured in bits per second.
 
 ## The Speed-Accuracy Tradeoff in 3D
 
-In XR, the "Width" ($W$) of a target is ambiguous. To standardize performance across users with varying error rates, the `xr-adaptive-modality-2025` platform utilizes the **Effective Width ($W_e$)**. Unlike nominal width, $W_e$ is derived from the spatial distribution of selection endpoints.
+In XR, the "Width" ($W$) of a target is ambiguous. To standardize performance across users with varying error rates, the `xr-adaptive-modality-2025` platform utilizes the **Effective Width (**$W_e$). Unlike nominal width, $W_e$ is derived from the spatial distribution of selection endpoints.
 
 Consistent with ISO 9241-9, we calculate $W_e$ using the standard deviation of selection coordinates projected onto the task axis. For a target at position $P_{target}$ and a starting position $P_{start}$, the task axis vector is $\vec{v} = P_{target} - P_{start}$. The projected error $x_i$ for a trial $i$ with endpoint $P_{hit}$ is computed as the scalar projection:
 
 $$x_i = \frac{(P_{hit} - P_{target}) \cdot \vec{v}}{\| \vec{v} \|}$$
 
-The effective width is then calculated as $W_e = 4.133 \times \sigma_x$, where $\sigma_x$ is the standard deviation of these projected errors. This effectively normalizes the error rate to 4%, allowing us to calculate **Throughput ($TP$)**, a unified metric of speed and accuracy:
+The effective width is then calculated as $W_e = 4.133 \times \sigma_x$, where $\sigma_x$ is the standard deviation of these projected errors. This effectively normalizes the error rate to 4%, allowing us to calculate **Throughput (**$TP$), a unified metric of speed and accuracy:
 
 $$TP = \frac{ID_e}{MT} = \frac{\log_2(D/W_e + 1)}{MT}$$
 
@@ -113,7 +114,7 @@ To decompose the underlying processes of movement execution and decision verific
 
 The **Optimized Submovement Model** [@meyer1988] posits that pointing movements are composed of a primary ballistic impulse followed by $n$ corrective submovements. The total movement time is the sum of the primary movement duration and the duration of subsequent corrections required to bring the endpoint error within the target bounds.
 
-We quantify the "cost of control" by analyzing the velocity profile $v(t)$ of the cursor. A submovement is mathematically identified as a zero-crossing in the acceleration profile (or a local maximum in velocity) after the initial ballistic phase. The **Submovement Count ($N_{sub}$)** serves as a proxy for the efficiency of the control loop:
+We quantify the "cost of control" by analyzing the velocity profile $v(t)$ of the cursor. A submovement is mathematically identified as a zero-crossing in the acceleration profile (or a local maximum in velocity) after the initial ballistic phase. The **Submovement Count (**$N_{sub}$) serves as a proxy for the efficiency of the control loop:
 
 $$N_{sub} = \sum_{t=0}^{T} \mathbb{1}(\text{is\_velocity\_peak}(t)) - 1$$
 
@@ -129,7 +130,7 @@ $$x_i(t) = A + d_i \cdot t$$
 
 The starting point $A$ is drawn from a uniform distribution $U[0, A_{max}]$, and the drift rate $d_i$ is drawn from a normal distribution $N(v_i, s)$. A decision is made when the evidence reaches a threshold $b$.
 
-Unlike Drift Diffusion Models (DDM) which require substantial error rates to constrain the boundary separation [@lerche2017], LBA is robust to the low-error scenarios typical of Fitts' tasks. It allows us to explicitly estimate the **Caution Threshold ($b - A$)**—the amount of evidence users require before committing to selection. We hypothesize that adaptive interventions (e.g., snapping) reduce the cognitive need for caution, mathematically reflecting a lower estimated threshold $b$.
+Unlike Drift Diffusion Models (DDM) which require substantial error rates to constrain the boundary separation [@lerche2017], LBA is robust to the low-error scenarios typical of Fitts' tasks. It allows us to explicitly estimate the **Caution Threshold (**$b - A$)—the amount of evidence users require before committing to selection. We hypothesize that adaptive interventions (e.g., snapping) reduce the cognitive need for caution, mathematically reflecting a lower estimated threshold $b$.
 
 # Methods
 
@@ -143,7 +144,7 @@ We developed a custom pointing testbed as a web-based application (React 18, Typ
 
 To ensure measurement validity across heterogeneous display configurations, we implemented a multi-layered approach addressing display variability. Before commencing experimental trials, participants completed a **Credit Card Calibration** procedure: participants placed a standard credit card (85.60 mm × 53.98 mm) on their screen and adjusted an on-screen rectangle to match its physical dimensions. This calibration enabled computation of pixels per millimeter (px/mm) and pixels per degree of visual angle (PPD), normalizing gaze simulation jitter to screen-space pixels and ensuring consistent perceptual difficulty across different display sizes and resolutions [@mackenzie1992fitts].
 
-To minimize measurement error, we enforced strict display requirements: fullscreen/maximized window (required before starting blocks), browser zoom locked to 100% (verified before each block using `window.visualViewport.scale`), and live monitoring during trials (trials automatically paused if settings changed). For every trial, we logged comprehensive display metadata: device pixel ratio (DPR), browser type, viewport dimensions, zoom level, fullscreen status, and tab visibility duration. Trials were excluded from analysis if zoom level ≠ 100%, fullscreen status = FALSE, DPR instability (change > 0.1 between blocks), or tab hidden for > 500ms. Participants with >40% of trials excluded due to display violations were removed from the final analysis.
+To minimize measurement error, we enforced strict display requirements: fullscreen/maximized window (required before starting blocks), browser zoom locked to 100% (verified before each block using `window.visualViewport.scale`), and live monitoring during trials (trials automatically paused if settings changed). For every trial, we logged comprehensive display metadata: device pixel ratio (DPR), browser type, viewport dimensions, zoom level, fullscreen status, and tab visibility duration. Trials were excluded from analysis if zoom level ≠ 100%, fullscreen status = FALSE, DPR instability (change \> 0.1 between blocks), or tab hidden for \> 500ms. Participants with \>40% of trials excluded due to display violations were removed from the final analysis.
 
 ### Gaze Simulation (The "Ground Truth" Signal)
 
@@ -157,7 +158,7 @@ To ensure rigorous internal validity and precise control over noise characterist
 
 ## Input Modality Implementations
 
-The system implemented two distinct input modalities, each with static and adaptive modes. **For hand-based trials**, participants controlled a cursor with their mouse to click the target. In static mode, this was standard 1:1 mouse pointing. In adaptive mode, the effective clickable area of the target was expanded (width scale > 1.0) when the cursor approached the target—a "Gravity Well" effect that was invisible to the user but increased error tolerance for the final click. This implementation draws directly from the "expanding targets" technique validated by McGuffin and Balakrishnan [@mcguffin2005]. Expansion occurred only when the system detected the user was aiming at the target (cursor nearing the target center), to prevent overlapping targets in the dense circle layout.
+The system implemented two distinct input modalities, each with static and adaptive modes. **For hand-based trials**, participants controlled a cursor with their mouse to click the target. In static mode, this was standard 1:1 mouse pointing. In adaptive mode, the effective clickable area of the target was expanded (width scale \> 1.0) when the cursor approached the target—a "Gravity Well" effect that was invisible to the user but increased error tolerance for the final click. This implementation draws directly from the "expanding targets" technique validated by McGuffin and Balakrishnan [@mcguffin2005]. Expansion occurred only when the system detected the user was aiming at the target (cursor nearing the target center), to prevent overlapping targets in the dense circle layout.
 
 **For gaze-based trials**, participants controlled the cursor via the simulated gaze signal described above. In static mode, selection was triggered by a **Dwell** mechanism (typically 350-500ms) or a confirmation key (Spacebar) if dwell was disabled, following the standard "dwell-to-select" paradigm [@ware1987; @majaranta2006]. In adaptive mode, adaptation focused on **Goal-Aware Snapping** or **Dwell Time Adjustment** to counteract the injected jitter during the verification phase. For gaze declutter, the trigger was immediate at trial start in adaptive blocks—the moment a new target appeared and the user began aiming, all non-targets dimmed.
 
@@ -177,7 +178,13 @@ The order of modality blocks was counterbalanced using a Williams Latin square a
 
 ## Participants
 
-We recruited $N=32$ participants (target: 12 male, 12 female, age range 18-35) from the university community. All participants had normal or corrected-to-normal vision and no known motor impairments. The study was approved by the Institutional Review Board (IRB) and all participants provided informed consent.
+### Sample Size and Power Analysis
+
+Sample size was determined through a combination of power analysis and Williams design constraints. For a 2 × 2 × 2 within-subjects design with an expected medium-to-large effect size (Cohen's $d = 0.60$), power of 0.80, and $\alpha = 0.05$ (two-tailed), a minimum of $N = 24$ participants would be required for a simple repeated-measures design. However, to ensure proper counterbalancing with the Williams Latin square arrangement, the sample size must be a multiple of the number of treatment sequences. For our 2 × 2 × 2 factorial design, we require 8 distinct counterbalancing sequences. We selected $N = 48$ participants, which allows for 6 complete Williams blocks (8 participants per block), ensuring balanced representation across all treatment orders while providing increased statistical power ($\approx 0.95$ for $d = 0.60$ in a within-subjects design) and robustness to potential data exclusions.
+
+### Recruitment
+
+We recruited $N=48$ participants (target: balanced gender distribution, age range 18-35) from the university community. All participants had normal or corrected-to-normal vision and no known motor impairments. The study was approved by the Institutional Review Board (IRB) and all participants provided informed consent.
 
 ## Procedure
 
@@ -189,7 +196,7 @@ After each block, participants filled out a NASA-TLX workload survey (rating men
 
 The primary performance measures were Movement Time (MT) in milliseconds (from trial start to successful selection) and Selection Accuracy (hit vs. miss rate, including specific error types: misses, timeouts, false activations). From these, we computed Throughput (TP) in bits/second for each condition by combining each trial's effective ID ($ID_e$) and MT, following ISO 9241-9's recommended calculation using the effective target width $W_e$ (computed from the spread of hit points) to incorporate accuracy into the difficulty measure.
 
-Given the specific nature of the simulated noise (generative Gaussian jitter) and the high accuracy of the task, standard Drift Diffusion Models (DDM) were ill-suited due to the scarcity of error trials (~3%). Previous methodological reviews indicate that diffusion models require a sufficient error density to reliably estimate boundary separation parameters [@lerche2017]. We instead adopted a **Hybrid Analysis** framework to disentangle "motor" performance from "decision" caution: (1) **Macro-Performance (Fitts' Law)**—we modeled the overall throughput (bits/s) and the regression slope ($b$) to quantify the global cost of the gaze simulation lag, following standard ISO 9241-9 throughput calculations; (2) **Path Quality (Control Theory)**—we calculated submovement counts (velocity peaks) and target re-entries to quantify the "cost of control" (how often the user had to correct their trajectory due to the simulated lag and "saccadic blindness"), drawing on the Optimized Submovement Model [@meyer1988]; (3) **Decision Verification (LBA)**—we used the Linear Ballistic Accumulator (LBA) model [@brown2008] to analyze the selection phase, which is robust to low error rates and allows accurate estimation of the "Caution Threshold" users adopted to overcome fixation jitter.
+Given the specific nature of the simulated noise (generative Gaussian jitter) and the high accuracy of the task, standard Drift Diffusion Models (DDM) were ill-suited due to the scarcity of error trials (\~3%). Previous methodological reviews indicate that diffusion models require a sufficient error density to reliably estimate boundary separation parameters [@lerche2017]. We instead adopted a **Hybrid Analysis** framework to disentangle "motor" performance from "decision" caution: (1) **Macro-Performance (Fitts' Law)**—we modeled the overall throughput (bits/s) and the regression slope ($b$) to quantify the global cost of the gaze simulation lag, following standard ISO 9241-9 throughput calculations; (2) **Path Quality (Control Theory)**—we calculated submovement counts (velocity peaks) and target re-entries to quantify the "cost of control" (how often the user had to correct their trajectory due to the simulated lag and "saccadic blindness"), drawing on the Optimized Submovement Model [@meyer1988]; (3) **Decision Verification (LBA)**—we used the Linear Ballistic Accumulator (LBA) model [@brown2008] to analyze the selection phase, which is robust to low error rates and allows accurate estimation of the "Caution Threshold" users adopted to overcome fixation jitter.
 
 Data were analyzed using repeated-measures ANOVAs and linear mixed models. We tested for main effects of Modality, Adaptation, and Pressure, as well as their interactions. Where appropriate, pairwise comparisons with Bonferroni correction were performed to probe simple effects. All statistical tests assumed $\alpha = 0.05$.
 
