@@ -53,7 +53,20 @@ export const CSV_HEADERS = [
   'pupil_z_med',
   'adaptation_triggered',
   'target_reentry_count',
+  'submovement_count',
   'verification_time_ms',
+  // Width metrics (nominal vs displayed)
+  'nominal_width_px',
+  'displayed_width_px',
+  'width_scale_factor',
+  // Alignment gate metrics
+  'alignment_gate_enabled',
+  'alignment_gate_false_triggers',
+  'alignment_gate_recovery_time_ms',
+  'alignment_gate_mean_recovery_time_ms',
+  // Task configuration
+  'task_type',
+  'drag_distance',
   'pixels_per_mm',
   'pixels_per_degree',
   'screen_width',
@@ -631,7 +644,20 @@ export function createRowFromTrial(
     pupil_z_med: payload.pupil_z_med || null,
     adaptation_triggered: payload.adaptation_triggered ?? adaptationTriggered,
     target_reentry_count: payload.target_reentry_count ?? null,
+    submovement_count: payload.submovement_count ?? null,
     verification_time_ms: payload.verification_time_ms ?? null,
+    // Width metrics (nominal vs displayed)
+    nominal_width_px: payload.nominal_width_px ?? payload.W ?? null,
+    displayed_width_px: payload.displayed_width_px ?? null,
+    width_scale_factor: payload.width_scale_factor ?? null,
+    // Alignment gate metrics
+    alignment_gate_enabled: payload.alignment_gate_enabled ?? false,
+    alignment_gate_false_triggers: payload.alignment_gate_false_triggers ?? null,
+    alignment_gate_recovery_time_ms: payload.alignment_gate_recovery_time_ms ?? null,
+    alignment_gate_mean_recovery_time_ms: payload.alignment_gate_mean_recovery_time_ms ?? null,
+    // Task configuration
+    task_type: payload.taskType ?? payload.task_type ?? null,
+    drag_distance: payload.dragDistance ?? payload.drag_distance ?? null,
     pixels_per_mm: payload.pixels_per_mm ?? null,
     pixels_per_degree: payload.pixels_per_degree ?? null,
     // Display metadata captured at trial time
