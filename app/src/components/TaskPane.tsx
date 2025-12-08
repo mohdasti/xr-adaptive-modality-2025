@@ -1102,7 +1102,7 @@ export function TaskPane() {
             config={trialSequence[currentTrialIndex]}
             modalityConfig={modalityConfig}
             ui_mode={uiMode}
-            pressure={pressure}
+            pressure={pressureEnabled ? 1 : 0}
             trialContext={{
               globalTrialNumber,
               trialInBlock,
