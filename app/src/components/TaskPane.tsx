@@ -260,6 +260,39 @@ export function TaskPane() {
     }
   }, [participantId, blockSequence.length]) // Only run when participant or sequence changes
 
+  // Sync pressureEnabled state whenever blockOrderCode changes
+  // This ensures pressure is correct even when blocks are resumed or state is initialized
+  useEffect(() => {
+    if (blockOrderCode) {
+      const { pressure: targetPressure, aging: targetAging } = parseConditionCode(blockOrderCode)
+      
+      // Update pressure if it doesn't match
+      if (pressureEnabled !== targetPressure) {
+        console.log('[TaskPane] Syncing pressure from blockOrderCode:', {
+          blockOrderCode,
+          currentPressure: pressureEnabled,
+          targetPressure,
+        })
+        setPressureEnabled(targetPressure)
+        bus.emit('context:change', {
+          pressure: targetPressure,
+          aging: targetAging,
+          timestamp: Date.now(),
+        })
+      }
+      
+      // Update aging if it doesn't match
+      if (agingEnabled !== targetAging) {
+        setAgingEnabled(targetAging)
+        bus.emit('context:change', {
+          pressure: targetPressure,
+          aging: targetAging,
+          timestamp: Date.now(),
+        })
+      }
+    }
+  }, [blockOrderCode]) // Run whenever blockOrderCode changes
+
   // Manual mode handlers
   const handleStartTrial = () => {
     const id = `trial-${Date.now()}`
