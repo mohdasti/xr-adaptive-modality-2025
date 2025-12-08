@@ -12,6 +12,7 @@ format:
     self-contained: true
     fig-width: 10
     fig-height: 6
+    html-math-method: mathjax
 ---
 
 ```{r setup, include=FALSE}
@@ -19,6 +20,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(tidyverse)
 library(knitr)
 library(kableExtra)
+library(htmltools)
 library(scales)
 library(ggsci)  # For pal_npg() function
 library(lme4)
@@ -136,54 +138,162 @@ df_iso <- df %>%
   )
 
 # --- STATISTICAL MODELS ---
+# Helper function for diagnostics
+diagnose_model_data <- function(data, model_name) {
+  diag <- list()
+  
+  if (nrow(data) == 0) {
+    diag$n_participants <- 0
+    diag$n_trials <- 0
+    diag$n_conditions <- 0
+    diag$min_trials_per_condition <- 0
+    diag$empty_conditions <- 0
+    diag$condition_counts <- data.frame()
+    return(diag)
+  }
+  
+  diag$n_participants <- n_distinct(data$pid)
+  diag$n_trials <- nrow(data)
+  
+  # Check if required columns exist
+  has_modality <- "modality" %in% names(data)
+  has_ui_mode <- "ui_mode" %in% names(data)
+  has_pressure <- "pressure" %in% names(data)
+  
+  if (has_modality && has_ui_mode && has_pressure) {
+    diag$n_conditions <- length(unique(interaction(data$modality, data$ui_mode, data$pressure, drop = TRUE)))
+    
+    # Check trials per condition
+    condition_counts <- data %>%
+      group_by(modality, ui_mode, pressure) %>%
+      summarise(n = n(), .groups = "drop")
+    diag$condition_counts <- condition_counts
+    diag$min_trials_per_condition <- if(nrow(condition_counts) > 0) min(condition_counts$n, na.rm = TRUE) else 0
+    diag$empty_conditions <- sum(condition_counts$n == 0, na.rm = TRUE)
+  } else {
+    diag$n_conditions <- 0
+    diag$condition_counts <- data.frame()
+    diag$min_trials_per_condition <- 0
+    diag$empty_conditions <- 0
+  }
+  
+  # Check for missing values in key variables
+  diag$missing_tp <- if("TP" %in% names(data)) sum(is.na(data$TP)) else 0
+  diag$missing_modality <- if(has_modality) sum(is.na(data$modality)) else 0
+  diag$missing_ui_mode <- if(has_ui_mode) sum(is.na(data$ui_mode)) else 0
+  diag$missing_pressure <- if(has_pressure) sum(is.na(data$pressure)) else 0
+  
+  return(diag)
+}
+
 # Model 1: Throughput
 model_tp <- NULL
 emm_tp <- NULL
 pairs_tp <- NULL
+diag_tp <- NULL
+model_tp_error <- NULL
 
-if (nrow(df_iso) > 0 && n_distinct(df_iso$pid) > 1) {
-  model_tp <- tryCatch({
-    lmer(TP ~ modality * ui_mode * pressure + (1 | pid), 
-         data = df_iso, REML = FALSE,
-         control = lmerControl(optimizer = "bobyqa"))
-  }, error = function(e) {
-    warning("Could not fit throughput model: ", e$message)
-    NULL
-  })
+if (nrow(df_iso) > 0) {
+  diag_tp <- diagnose_model_data(df_iso, "Throughput")
   
-  if (!is.null(model_tp)) {
-    tryCatch({
-      emm_tp <- emmeans(model_tp, ~ modality * ui_mode * pressure)
-      pairs_tp <- pairs(emm_tp, adjust = "holm")
+  if (diag_tp$n_participants <= 1) {
+    model_tp_error <- paste0("Insufficient participants: N = ", diag_tp$n_participants, ". Need at least 2 participants for mixed-effects models.")
+  } else if (diag_tp$n_trials == 0) {
+    model_tp_error <- "No valid trials in dataset."
+  } else if (diag_tp$min_trials_per_condition < 3) {
+    model_tp_error <- paste0("Insufficient data per condition: minimum ", diag_tp$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
+  } else if (diag_tp$empty_conditions > 0) {
+    model_tp_error <- paste0("Empty conditions detected: ", diag_tp$empty_conditions, " condition(s) have no data.")
+  } else {
+    model_tp <- tryCatch({
+      lmer(TP ~ modality * ui_mode * pressure + (1 | pid), 
+           data = df_iso, REML = FALSE,
+           control = lmerControl(optimizer = "bobyqa"))
     }, error = function(e) {
-      warning("Could not compute EMMs for throughput: ", e$message)
+      model_tp_error <<- paste0("Model fitting failed: ", e$message)
+      NULL
+    }, warning = function(w) {
+      if (is.null(model_tp_error)) {
+        model_tp_error <<- paste0("Model fitting warning: ", w$message)
+      }
+      NULL
     })
+    
+    if (!is.null(model_tp)) {
+      # Check for convergence warnings
+      conv_warnings <- warnings()
+      if (length(conv_warnings) > 0) {
+        model_tp_error <- paste0("Convergence warnings detected. Model may be unreliable.")
+      }
+      
+      tryCatch({
+        emm_tp <- emmeans(model_tp, ~ modality * ui_mode * pressure)
+        pairs_tp <- pairs(emm_tp, adjust = "holm")
+      }, error = function(e) {
+        if (is.null(model_tp_error)) {
+          model_tp_error <<- paste0("Could not compute estimated marginal means: ", e$message)
+        }
+      })
+    }
   }
+} else {
+  diag_tp <- list(n_participants = 0, n_trials = 0)
+  model_tp_error <- "No data available for throughput analysis."
 }
 
 # Model 2: Movement Time
 model_rt <- NULL
 emm_rt <- NULL
 pairs_rt <- NULL
+diag_rt <- NULL
+model_rt_error <- NULL
 
-if (nrow(df) > 0 && n_distinct(df$pid) > 1) {
-  model_rt <- tryCatch({
-    lmer(log_rt ~ modality * ui_mode * pressure + (1 | pid), 
-         data = df, REML = FALSE,
-         control = lmerControl(optimizer = "bobyqa"))
-  }, error = function(e) {
-    warning("Could not fit movement time model: ", e$message)
-    NULL
-  })
+if (nrow(df) > 0) {
+  diag_rt <- diagnose_model_data(df, "Movement Time")
   
-  if (!is.null(model_rt)) {
-    tryCatch({
-      emm_rt <- emmeans(model_rt, ~ modality * ui_mode * pressure, type = "response")
-      pairs_rt <- pairs(emm_rt, adjust = "holm")
+  if (diag_rt$n_participants <= 1) {
+    model_rt_error <- paste0("Insufficient participants: N = ", diag_rt$n_participants, ". Need at least 2 participants for mixed-effects models.")
+  } else if (diag_rt$n_trials == 0) {
+    model_rt_error <- "No valid trials in dataset."
+  } else if (diag_rt$min_trials_per_condition < 3) {
+    model_rt_error <- paste0("Insufficient data per condition: minimum ", diag_rt$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
+  } else if (diag_rt$empty_conditions > 0) {
+    model_rt_error <- paste0("Empty conditions detected: ", diag_rt$empty_conditions, " condition(s) have no data.")
+  } else {
+    model_rt <- tryCatch({
+      lmer(log_rt ~ modality * ui_mode * pressure + (1 | pid), 
+           data = df, REML = FALSE,
+           control = lmerControl(optimizer = "bobyqa"))
     }, error = function(e) {
-      warning("Could not compute EMMs for movement time: ", e$message)
+      model_rt_error <<- paste0("Model fitting failed: ", e$message)
+      NULL
+    }, warning = function(w) {
+      if (is.null(model_rt_error)) {
+        model_rt_error <<- paste0("Model fitting warning: ", w$message)
+      }
+      NULL
     })
+    
+    if (!is.null(model_rt)) {
+      # Check for convergence warnings
+      conv_warnings <- warnings()
+      if (length(conv_warnings) > 0) {
+        model_rt_error <- paste0("Convergence warnings detected. Model may be unreliable.")
+      }
+      
+      tryCatch({
+        emm_rt <- emmeans(model_rt, ~ modality * ui_mode * pressure, type = "response")
+        pairs_rt <- pairs(emm_rt, adjust = "holm")
+      }, error = function(e) {
+        if (is.null(model_rt_error)) {
+          model_rt_error <<- paste0("Could not compute estimated marginal means: ", e$message)
+        }
+      })
+    }
   }
+} else {
+  diag_rt <- list(n_participants = 0, n_trials = 0)
+  model_rt_error <- "No data available for movement time analysis."
 }
 
 # Model 3: Error Rate
@@ -200,25 +310,61 @@ df_errors <- df_all_trials %>%
 model_err <- NULL
 emm_err <- NULL
 pairs_err <- NULL
+diag_err <- NULL
+model_err_error <- NULL
 
-if (nrow(df_errors) > 0 && n_distinct(df_errors$pid) > 1) {
-  model_err <- tryCatch({
-    glmer(error ~ modality * ui_mode * pressure + (1 | pid),
-          data = df_errors, family = binomial(link = "logit"),
-          control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
-  }, error = function(e) {
-    warning("Could not fit error rate model: ", e$message)
-    NULL
-  })
+if (nrow(df_errors) > 0) {
+  diag_err <- diagnose_model_data(df_errors, "Error Rate")
   
-  if (!is.null(model_err)) {
-    tryCatch({
-      emm_err <- emmeans(model_err, ~ modality * ui_mode * pressure, type = "response")
-      pairs_err <- pairs(emm_err, adjust = "holm")
-    }, error = function(e) {
-      warning("Could not compute EMMs for error rate: ", e$message)
-    })
+  if (diag_err$n_participants <= 1) {
+    model_err_error <- paste0("Insufficient participants: N = ", diag_err$n_participants, ". Need at least 2 participants for mixed-effects models.")
+  } else if (diag_err$n_trials == 0) {
+    model_err_error <- "No valid trials in dataset."
+  } else if (diag_err$min_trials_per_condition < 3) {
+    model_err_error <- paste0("Insufficient data per condition: minimum ", diag_err$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
+  } else if (diag_err$empty_conditions > 0) {
+    model_err_error <- paste0("Empty conditions detected: ", diag_err$empty_conditions, " condition(s) have no data.")
+  } else {
+    # Check for sufficient error variance (GLMM needs some errors)
+    error_rate <- mean(df_errors$error, na.rm = TRUE)
+    if (error_rate < 0.01 || error_rate > 0.99) {
+      model_err_error <- paste0("Insufficient error variance: error rate = ", round(error_rate * 100, 1), "%. GLMM requires some variation in outcomes.")
+    } else {
+      model_err <- tryCatch({
+        glmer(error ~ modality * ui_mode * pressure + (1 | pid),
+              data = df_errors, family = binomial(link = "logit"),
+              control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+      }, error = function(e) {
+        model_err_error <<- paste0("Model fitting failed: ", e$message)
+        NULL
+      }, warning = function(w) {
+        if (is.null(model_err_error)) {
+          model_err_error <<- paste0("Model fitting warning: ", w$message)
+        }
+        NULL
+      })
+      
+      if (!is.null(model_err)) {
+        # Check for convergence warnings
+        conv_warnings <- warnings()
+        if (length(conv_warnings) > 0) {
+          model_err_error <- paste0("Convergence warnings detected. Model may be unreliable.")
+        }
+        
+        tryCatch({
+          emm_err <- emmeans(model_err, ~ modality * ui_mode * pressure, type = "response")
+          pairs_err <- pairs(emm_err, adjust = "holm")
+        }, error = function(e) {
+          if (is.null(model_err_error)) {
+            model_err_error <<- paste0("Could not compute estimated marginal means: ", e$message)
+          }
+        })
+      }
+    }
   }
+} else {
+  diag_err <- list(n_participants = 0, n_trials = 0)
+  model_err_error <- "No data available for error rate analysis."
 }
 ```
 
@@ -339,6 +485,7 @@ tp_summary %>%
 ## Visualizations
 
 ```{r plot-tp}
+#| fig-cap: "Throughput by Modality and UI Mode. Higher values indicate better performance. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles, and individual points may be visible as outliers."
 # Main plot with all conditions - improved faceting and aesthetics
 p1 <- ggplot(df_iso, aes(x = ui_mode, y = TP, fill = ui_mode)) +
   geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
@@ -356,8 +503,6 @@ p1 <- ggplot(df_iso, aes(x = ui_mode, y = TP, fill = ui_mode)) +
                      labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
-    title = "Throughput by Modality and UI Mode",
-    subtitle = "Higher is Better. White diamonds indicate means.",
     x = "UI Mode",
     y = "Throughput (bits/s)",
     fill = "UI Mode"
@@ -372,7 +517,10 @@ p1 <- ggplot(df_iso, aes(x = ui_mode, y = TP, fill = ui_mode)) +
   )
 
 print(p1)
+```
 
+```{r plot-tp-emm}
+#| fig-cap: "Estimated Marginal Means for Throughput. Error bars represent 95% confidence intervals from the linear mixed-effects model. Points are connected by lines to show the interaction pattern between modality and UI mode, faceted by pressure condition."
 # Interaction plot
 if (exists("emm_tp") && !is.null(emm_tp)) {
   emm_tp_df <- as.data.frame(emm_tp) %>%
@@ -390,8 +538,6 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
     scale_color_manual(values = custom_palette_2,
                         labels = c("Static", "Adaptive")) +
     labs(
-      title = "Estimated Marginal Means: Throughput",
-      subtitle = "Error bars show 95% confidence intervals",
       x = "Input Modality",
       y = "Throughput (bits/s)",
       color = "UI Mode"
@@ -409,6 +555,12 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
 if (exists("model_tp") && !is.null(model_tp)) {
   cat("### Model: TP ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
   
+  # Show diagnostics
+  if (!is.null(diag_tp)) {
+    cat("**Data Summary:** ", diag_tp$n_participants, " participants, ", diag_tp$n_trials, " trials, ", 
+        diag_tp$n_conditions, " conditions, minimum ", diag_tp$min_trials_per_condition, " trials per condition.\n\n")
+  }
+  
   # ANOVA table
   cat("#### ANOVA Table\n")
   anova_tp <- anova(model_tp, type = "III")
@@ -425,7 +577,27 @@ if (exists("model_tp") && !is.null(model_tp)) {
     print(pairs_tp_df %>% head(20))
   }
 } else {
-  cat("⚠ Statistical model could not be fitted. Check data structure.\n")
+  cat("⚠ **Statistical model could not be fitted for Throughput.**\n\n")
+  
+  if (!is.null(model_tp_error)) {
+    cat("**Reason:** ", model_tp_error, "\n\n")
+  }
+  
+  if (!is.null(diag_tp)) {
+    cat("**Diagnostics:**\n")
+    cat("- Participants: ", diag_tp$n_participants, "\n")
+    cat("- Total trials: ", diag_tp$n_trials, "\n")
+    cat("- Conditions: ", diag_tp$n_conditions, "\n")
+    cat("- Minimum trials per condition: ", diag_tp$min_trials_per_condition, "\n")
+    cat("- Empty conditions: ", diag_tp$empty_conditions, "\n")
+    
+    if (!is.null(diag_tp$condition_counts)) {
+      cat("\n**Trials per condition:**\n")
+      print(diag_tp$condition_counts)
+    }
+  } else {
+    cat("**Diagnostics:** No data available for analysis.\n")
+  }
 }
 ```
 
@@ -457,6 +629,7 @@ rt_summary %>%
 ## Visualizations
 
 ```{r plot-rt}
+#| fig-cap: "Movement Time by Modality and UI Mode. Lower values indicate faster performance. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles, and individual points may be visible as outliers."
 # Movement time distribution - improved faceting and aesthetics
 p1 <- ggplot(df, aes(x = ui_mode, y = rt_s, fill = ui_mode)) +
   geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
@@ -474,8 +647,6 @@ p1 <- ggplot(df, aes(x = ui_mode, y = rt_s, fill = ui_mode)) +
                      labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
-    title = "Movement Time by Modality and UI Mode",
-    subtitle = "Lower is Better. White diamonds indicate means.",
     x = "UI Mode",
     y = "Movement Time (s)",
     fill = "UI Mode"
@@ -490,7 +661,10 @@ p1 <- ggplot(df, aes(x = ui_mode, y = rt_s, fill = ui_mode)) +
   )
 
 print(p1)
+```
 
+```{r plot-rt-emm}
+#| fig-cap: "Estimated Marginal Means for Movement Time. Error bars represent 95% confidence intervals from the linear mixed-effects model. Points are connected by lines to show the interaction pattern between modality and UI mode, faceted by pressure condition."
 # Estimated marginal means
 if (exists("emm_rt") && !is.null(emm_rt)) {
   emm_rt_df <- as.data.frame(emm_rt) %>%
@@ -508,8 +682,6 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
     scale_color_manual(values = custom_palette_2,
                         labels = c("Static", "Adaptive")) +
     labs(
-      title = "Estimated Marginal Means: Movement Time",
-      subtitle = "Error bars show 95% confidence intervals",
       x = "Input Modality",
       y = "Movement Time (s)",
       color = "UI Mode"
@@ -527,6 +699,12 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
 if (exists("model_rt") && !is.null(model_rt)) {
   cat("### Model: log(Movement Time) ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
   
+  # Show diagnostics
+  if (!is.null(diag_rt)) {
+    cat("**Data Summary:** ", diag_rt$n_participants, " participants, ", diag_rt$n_trials, " trials, ", 
+        diag_rt$n_conditions, " conditions, minimum ", diag_rt$min_trials_per_condition, " trials per condition.\n\n")
+  }
+  
   # ANOVA table
   cat("#### ANOVA Table\n")
   anova_rt <- anova(model_rt, type = "III")
@@ -539,7 +717,27 @@ if (exists("model_rt") && !is.null(model_rt)) {
     print(pairs_rt_df %>% head(20))
   }
 } else {
-  cat("⚠ Statistical model could not be fitted. Check data structure.\n")
+  cat("⚠ **Statistical model could not be fitted for Movement Time.**\n\n")
+  
+  if (!is.null(model_rt_error)) {
+    cat("**Reason:** ", model_rt_error, "\n\n")
+  }
+  
+  if (!is.null(diag_rt)) {
+    cat("**Diagnostics:**\n")
+    cat("- Participants: ", diag_rt$n_participants, "\n")
+    cat("- Total trials: ", diag_rt$n_trials, "\n")
+    cat("- Conditions: ", diag_rt$n_conditions, "\n")
+    cat("- Minimum trials per condition: ", diag_rt$min_trials_per_condition, "\n")
+    cat("- Empty conditions: ", diag_rt$empty_conditions, "\n")
+    
+    if (!is.null(diag_rt$condition_counts)) {
+      cat("\n**Trials per condition:**\n")
+      print(diag_rt$condition_counts)
+    }
+  } else {
+    cat("**Diagnostics:** No data available for analysis.\n")
+  }
 }
 ```
 
@@ -551,6 +749,7 @@ if (exists("model_rt") && !is.null(model_rt)) {
 *Flatter slopes indicate less sensitivity to difficulty (ballistic movement).*
 
 ```{r plot-fitts}
+#| fig-cap: "Fitts' Law Regression (Movement Time vs Effective Index of Difficulty). The effective index of difficulty (IDe) is calculated using the effective target width (We) derived from the spatial distribution of selection endpoints. Shaded regions around regression lines represent 95% confidence intervals. Linear regression fits are shown separately for each modality and UI mode combination."
 # Aggregate for regression plot
 fitts_model <- df_iso %>%
   group_by(modality, ui_mode, IDe) %>%
@@ -580,15 +779,15 @@ ggplot(fitts_model, aes(x = IDe, y = MT, color = ui_mode)) +
     scale_color_manual(values = custom_palette_2,
                         labels = c("Static", "Adaptive")) +
   labs(
-    title = "Fitts' Law Regression (MT vs IDe)",
-    subtitle = "Effective Index of Difficulty (IDe) used. Shaded regions show 95% CI.",
     x = "Index of Difficulty (bits)",
     y = "Movement Time (s)",
     color = "UI Mode"
   ) +
   theme_light(base_size = 14) +
   theme(legend.position = "top")
+```
 
+```{r}
 # Display R² values
 if (nrow(fitts_fits) > 0) {
   cat("\n### Model Fit Statistics\n")
@@ -606,6 +805,7 @@ if (nrow(fitts_fits) > 0) {
 **Research Question:** How do error rates differ across conditions?
 
 ```{r error-analysis}
+#| fig-cap: "Error Rate by Modality and UI Mode. Lower values indicate fewer errors. Error rate is calculated as the percentage of trials with incorrect selections (misses, timeouts, or false activations). White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
 # Calculate error rates
 error_summary <- df_errors %>%
   group_by(modality, ui_mode, pressure) %>%
@@ -640,13 +840,11 @@ p_err <- df_errors %>%
   scale_fill_manual(values = custom_palette_2,
                      labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
-  labs(
-    title = "Error Rate by Modality and UI Mode",
-    subtitle = "Lower is Better. White diamonds indicate means.",
-    x = "UI Mode",
-    y = "Error Rate (%)",
-    fill = "UI Mode"
-  ) +
+    labs(
+      x = "UI Mode",
+      y = "Error Rate (%)",
+      fill = "UI Mode"
+    ) +
   theme_minimal(base_size = 14) +
   theme(
     legend.position = "top",
@@ -657,11 +855,21 @@ p_err <- df_errors %>%
   )
 
 print(p_err)
+```
 
-# Statistical model
+## Statistical Model Results
+
+```{r error-model}
 if (exists("model_err") && !is.null(model_err)) {
-  cat("\n### Statistical Model Results\n")
-  cat("#### Model: Error ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  cat("### Model: Error ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  
+  # Show diagnostics
+  if (!is.null(diag_err)) {
+    error_rate <- mean(df_errors$error, na.rm = TRUE)
+    cat("**Data Summary:** ", diag_err$n_participants, " participants, ", diag_err$n_trials, " trials, ", 
+        diag_err$n_conditions, " conditions, minimum ", diag_err$min_trials_per_condition, " trials per condition.\n")
+    cat("**Overall Error Rate:** ", round(error_rate * 100, 1), "%\n\n")
+  }
   
   # ANOVA table
   if (requireNamespace("car", quietly = TRUE)) {
@@ -676,6 +884,30 @@ if (exists("model_err") && !is.null(model_err)) {
     pairs_err_df <- as.data.frame(pairs_err)
     print(pairs_err_df %>% head(20))
   }
+} else {
+  cat("⚠ **Statistical model could not be fitted for Error Rate.**\n\n")
+  
+  if (!is.null(model_err_error)) {
+    cat("**Reason:** ", model_err_error, "\n\n")
+  }
+  
+  if (!is.null(diag_err)) {
+    error_rate <- mean(df_errors$error, na.rm = TRUE)
+    cat("**Diagnostics:**\n")
+    cat("- Participants: ", diag_err$n_participants, "\n")
+    cat("- Total trials: ", diag_err$n_trials, "\n")
+    cat("- Conditions: ", diag_err$n_conditions, "\n")
+    cat("- Minimum trials per condition: ", diag_err$min_trials_per_condition, "\n")
+    cat("- Empty conditions: ", diag_err$empty_conditions, "\n")
+    cat("- Overall error rate: ", round(error_rate * 100, 1), "%\n")
+    
+    if (!is.null(diag_err$condition_counts)) {
+      cat("\n**Trials per condition:**\n")
+      print(diag_err$condition_counts)
+    }
+  } else {
+    cat("**Diagnostics:** No data available for analysis.\n")
+  }
 }
 ```
 
@@ -687,7 +919,9 @@ if (exists("model_err") && !is.null(model_err)) {
 
 *Lower $W_e$ indicates tighter shot grouping (higher precision).*
 
-```{r plot-we}
+```{r we-summary}
+#| tbl-cap: "Effective Width (px) by Condition"
+
 we_summary <- df_iso %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
@@ -696,9 +930,11 @@ we_summary <- df_iso %>%
     .groups = "drop"
   )
 
-we_summary %>%
-  kable(caption = "Effective Width (px) by Condition") %>%
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+knitr::kable(we_summary)
+```
+
+```{r plot-we}
+#| fig-cap: "Effective Target Width (Accuracy) by Modality and UI Mode. Lower values indicate tighter shot grouping and higher precision. Effective width (We) is calculated as 4.133 × SD of projected errors along the task axis, normalizing to a 4% error rate. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
 
 ggplot(df_iso, aes(x = ui_mode, y = We, fill = ui_mode)) +
   geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
@@ -716,8 +952,6 @@ ggplot(df_iso, aes(x = ui_mode, y = We, fill = ui_mode)) +
                      labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
-    title = "Effective Target Width (Accuracy)",
-    subtitle = "Lower is Better. White diamonds indicate means.",
     y = "Effective Width (px)",
     x = "UI Mode",
     fill = "UI Mode"
@@ -736,7 +970,10 @@ ggplot(df_iso, aes(x = ui_mode, y = We, fill = ui_mode)) +
 
 *Visualization of endpoint errors relative to target center. Each point represents one trial's endpoint position.*
 
-```{r plot-accuracy-scatter, fig.width=12, fig.height=8}
+```{r plot-accuracy-scatter}
+#| fig-width: 12
+#| fig-height: 8
+#| fig-cap: "Endpoint Accuracy Scatter Plot for Gaze Modality. Each point represents one trial's endpoint position relative to the target center (0,0). The red dashed circle shows the approximate target size. Points closer to the center indicate better accuracy. Dotted lines indicate zero error in X and Y directions. Faceted by pressure condition."
 # Calculate endpoint errors relative to target center
 df_accuracy <- df %>%
   filter(
@@ -783,9 +1020,6 @@ if (nrow(gaze_accuracy) > 0) {
                         labels = c("Static", "Adaptive")) +
     coord_fixed(ratio = 1, xlim = c(-50, 50), ylim = c(-50, 50)) +
     labs(
-      title = "Endpoint Accuracy: Gaze Modality",
-      subtitle = paste("Red circle shows approximate target size (radius ≈", 
-                      round(target_radius, 1), "px). Points closer to center indicate better accuracy."),
       x = "Error X (px)",
       y = "Error Y (px)",
       color = "UI Mode"
@@ -794,8 +1028,32 @@ if (nrow(gaze_accuracy) > 0) {
     theme(legend.position = "top")
   
   print(p_accuracy)
-  
-  # Summary statistics
+} else {
+  cat("⚠ No gaze accuracy data available for scatter plot.\n")
+}
+```
+
+```{r accuracy-summary}
+# Summary statistics for accuracy scatter plot
+df_accuracy <- df %>%
+  filter(
+    !is.na(endpoint_x), !is.na(endpoint_y),
+    !is.na(target_center_x), !is.na(target_center_y),
+    correct == TRUE | correct == "true" | correct == 1
+  ) %>%
+  mutate(
+    err_x = endpoint_x - target_center_x,
+    err_y = endpoint_y - target_center_y,
+    err_distance = sqrt(err_x^2 + err_y^2),
+    Modality = str_to_title(modality),
+    UI = str_to_title(ui_mode)
+  )
+
+# Focus on Gaze modality (most interesting for accuracy)
+gaze_accuracy <- df_accuracy %>%
+  filter(str_to_lower(modality) == "gaze")
+
+if (nrow(gaze_accuracy) > 0) {
   accuracy_summary <- gaze_accuracy %>%
     group_by(ui_mode, pressure) %>%
     summarise(
@@ -810,7 +1068,7 @@ if (nrow(gaze_accuracy) > 0) {
     kable(caption = "Endpoint Error Distance (px) for Gaze Modality") %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 } else {
-  cat("⚠ No gaze accuracy data available for scatter plot.\n")
+  cat("⚠ No gaze accuracy data available for summary table.\n")
 }
 ```
 
@@ -818,8 +1076,7 @@ if (nrow(gaze_accuracy) > 0) {
 
 *Target Re-entries measure how often the cursor drifted out of the target before selection.*
 
-```{r plot-reentry}
-# Only meaningful for Gaze really, but plotting both for control
+```{r reentry-summary}
 reentry_summary <- df_iso %>%
   filter(!is.na(reentries)) %>%
   group_by(modality, ui_mode, pressure) %>%
@@ -832,6 +1089,10 @@ reentry_summary <- df_iso %>%
 reentry_summary %>%
   kable(caption = "Target Re-entries by Condition") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r plot-reentry}
+#| fig-cap: "Target Re-entries (Control Stability) by Modality and UI Mode. Re-entries count how often the cursor drifted out of the target before final selection, measuring control stability during the verification phase. Counts > 1 indicate slipping out of target. Lower values are better. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
 
 ggplot(df_iso %>% filter(!is.na(reentries)), 
        aes(x = ui_mode, y = reentries, fill = ui_mode)) +
@@ -850,8 +1111,6 @@ ggplot(df_iso %>% filter(!is.na(reentries)),
                      labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
-    title = "Target Re-entries (Control Stability)",
-    subtitle = "Counts > 1 indicate slipping out of target. Lower is better. White diamonds indicate means.",
     y = "Avg Re-entries per Trial",
     x = "UI Mode",
     fill = "UI Mode"
@@ -873,6 +1132,7 @@ ggplot(df_iso %>% filter(!is.na(reentries)),
 *Subjective workload scores (lower is better).*
 
 ```{r plot-tlx}
+#| fig-cap: "NASA-TLX Workload Scores by Modality and UI Mode. Scores range from 0-100, where lower values indicate lower subjective workload. The six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration) are shown separately. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
 # Check if TLX columns exist
 tlx_cols <- c("tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration")
 
@@ -919,8 +1179,6 @@ if(all(tlx_cols %in% names(df_raw))) {
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
     labs(
-      title = "NASA-TLX Workload Scores",
-      subtitle = "Lower is Better. White diamonds indicate means.",
       y = "Score (0-100)",
       x = "UI Mode",
       fill = "UI Mode"
@@ -938,6 +1196,17 @@ if(all(tlx_cols %in% names(df_raw))) {
   print(p1)
   
   # Overall workload score - improved faceting
+} else {
+  cat("⚠ TLX Data not found in trial_data.csv\n")
+  cat("Expected columns:", paste(tlx_cols, collapse = ", "), "\n")
+  cat("Available columns with 'tlx':", 
+      paste(grep("tlx", names(df_raw), value = TRUE, ignore.case = TRUE), collapse = ", "), "\n")
+}
+```
+
+```{r plot-tlx-overall}
+#| fig-cap: "Overall NASA-TLX Workload Score. Average across all 6 scales (Mental, Physical, Temporal, Performance, Effort, Frustration). Lower values indicate lower overall subjective workload. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
+if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
   df_tlx_overall <- df_tlx %>%
     group_by(pid, modality, ui_mode) %>%
     summarise(Overall_TLX = mean(Score, na.rm = TRUE), .groups = "drop") %>%
@@ -961,8 +1230,6 @@ if(all(tlx_cols %in% names(df_raw))) {
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
     labs(
-      title = "Overall NASA-TLX Workload Score",
-      subtitle = "Average across all 6 scales. Lower is better. White diamonds indicate means.",
       y = "Overall TLX Score (0-100)",
       x = "UI Mode",
       fill = "UI Mode"
@@ -977,7 +1244,12 @@ if(all(tlx_cols %in% names(df_raw))) {
     )
   
   print(p2)
-  
+}
+```
+
+```{r plot-tlx-stacked}
+#| fig-cap: "NASA-TLX Workload Components (Stacked Bar Chart). Total height represents overall workload, with each colored segment representing one of the six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Lower total height indicates lower overall subjective workload."
+if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
   # Stacked bar chart (inspired by Python script)
   df_tlx_stacked <- df_tlx %>%
     group_by(modality, ui_mode, Scale) %>%
@@ -993,8 +1265,6 @@ if(all(tlx_cols %in% names(df_raw))) {
     geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
     scale_fill_manual(values = custom_palette_multi) +
     labs(
-      title = "NASA-TLX Workload Components (Stacked)",
-      subtitle = "Total height represents overall workload. Lower is better.",
       y = "TLX Score (0-100)",
       x = "Condition",
       fill = "TLX Scale"
@@ -1007,12 +1277,6 @@ if(all(tlx_cols %in% names(df_raw))) {
     guides(fill = guide_legend(ncol = 1))
   
   print(p3)
-  
-} else {
-  cat("⚠ TLX Data not found in trial_data.csv\n")
-  cat("Expected columns:", paste(tlx_cols, collapse = ", "), "\n")
-  cat("Available columns with 'tlx':", 
-      paste(grep("tlx", names(df_raw), value = TRUE, ignore.case = TRUE), collapse = ", "), "\n")
 }
 ```
 
@@ -1195,7 +1459,13 @@ if (nrow(df_learning_aligned) > 0) {
   learning_summary_table %>%
     kable(caption = "Learning Curve Data Summary by Condition") %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
-  
+}
+```
+
+```{r plot-learning-rt}
+#| fig-cap: "Learning Curves: Movement Time Within Condition. Learning aligned by position within condition (accounting for counterbalancing). LOESS smoothing. Lower is better. Shaded regions show 95% CI."
+
+if (nrow(df_learning_aligned) > 0) {
   # Create plot with dynamic x variable
   p1 <- ggplot(df_learning_aligned, aes(x = .data[[x_var]], y = rt_mean, color = ui_mode, fill = ui_mode)) +
     # Individual position means (light points)
@@ -1221,7 +1491,11 @@ if (nrow(df_learning_aligned) > 0) {
     theme(legend.position = "top", strip.text = element_text(face = "bold"))
   
   print(p1)
-  
+}
+```
+
+```{r error-summary-learning}
+if (nrow(df_learning_aligned) > 0) {
   # Error rate learning curve (aligned by condition position)
   # Check error rate data availability
   error_summary <- df_learning_aligned %>%
@@ -1247,7 +1521,13 @@ if (nrow(df_learning_aligned) > 0) {
   error_summary %>%
     kable(caption = "Error Rate Summary by Condition") %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
-  
+}
+```
+
+```{r plot-learning-error}
+#| fig-cap: "Learning Curves: Error Rate Within Condition. Learning aligned by position within condition (accounting for counterbalancing). LOESS smoothing. Lower is better. Shaded regions show 95% CI."
+
+if (nrow(df_learning_aligned) > 0) {
   # Ensure we have data for both UI modes in each condition
   # If error rates are very low, use a different scale or show raw values
   p2 <- ggplot(df_learning_aligned, aes(x = .data[[x_var]], y = error_mean, color = ui_mode, fill = ui_mode)) +
@@ -1315,7 +1595,18 @@ if ("submovement_count" %in% names(df)) {
     submov_summary %>%
       kable(caption = "Submovement Count by Condition") %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
-    
+  }
+}
+```
+
+```{r plot-submovement}
+#| fig-cap: "Submovement Count (Movement Quality) by Modality and UI Mode. Lower indicates smoother, more ballistic movements. White diamonds indicate means. Violin plots show the distribution shape, boxplots show quartiles."
+
+if ("submovement_count" %in% names(df)) {
+  df_submov <- df %>%
+    filter(!is.na(submovement_count), submovement_count >= 0)
+  
+  if (nrow(df_submov) > 0) {
     # Visualization
     # Visualization - improved faceting and aesthetics
     p1 <- ggplot(df_submov, aes(x = ui_mode, y = submovement_count, fill = ui_mode)) +
@@ -1350,7 +1641,18 @@ if ("submovement_count" %in% names(df)) {
       )
     
     print(p1)
-    
+  }
+}
+```
+
+```{r plot-submovement-id}
+#| fig-cap: "Submovements vs. Index of Difficulty. How movement corrections scale with task difficulty. Linear regression with 95% confidence intervals."
+
+if ("submovement_count" %in% names(df)) {
+  df_submov <- df %>%
+    filter(!is.na(submovement_count), submovement_count >= 0)
+  
+  if (nrow(df_submov) > 0) {
     # Submovements vs. Difficulty
     # Check if IDe exists, otherwise use ID
     if ("IDe" %in% names(df_submov)) {
@@ -1538,6 +1840,33 @@ if ("err_type" %in% names(df_raw)) {
     error_type_summary %>%
       kable(caption = "Error Type Distribution by Condition") %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  }
+}
+```
+
+```{r plot-error-types-stacked}
+#| fig-cap: "Error Type Distribution. Breakdown of error types by condition. Stacked bars show absolute counts for each error type (Miss, Timeout, Slip)."
+
+if ("err_type" %in% names(df_raw)) {
+  df_error_types <- df_raw %>%
+    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+    filter(!is.na(err_type), err_type != "") %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      err_type = factor(err_type, levels = c("miss", "timeout", "slip"))
+    )
+  
+  if (nrow(df_error_types) > 0) {
+    error_type_summary <- df_error_types %>%
+      group_by(modality, ui_mode, pressure, err_type) %>%
+      summarise(Count = n(), .groups = "drop") %>%
+      group_by(modality, ui_mode, pressure) %>%
+      mutate(
+        Total = sum(Count),
+        Percentage = round(100 * Count / Total, 1)
+      ) %>%
+      ungroup()
     
     # Stacked bar chart
     p1 <- ggplot(error_type_summary, aes(x = interaction(modality, ui_mode), y = Count, fill = err_type)) +
@@ -1562,6 +1891,33 @@ if ("err_type" %in% names(df_raw)) {
       )
     
     print(p1)
+  }
+}
+```
+
+```{r plot-error-types-proportional}
+#| fig-cap: "Error Type Proportions. Relative distribution of error types. Stacked bars show percentage of each error type (Miss, Timeout, Slip) within each condition."
+
+if ("err_type" %in% names(df_raw)) {
+  df_error_types <- df_raw %>%
+    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+    filter(!is.na(err_type), err_type != "") %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      err_type = factor(err_type, levels = c("miss", "timeout", "slip"))
+    )
+  
+  if (nrow(df_error_types) > 0) {
+    error_type_summary <- df_error_types %>%
+      group_by(modality, ui_mode, pressure, err_type) %>%
+      summarise(Count = n(), .groups = "drop") %>%
+      group_by(modality, ui_mode, pressure) %>%
+      mutate(
+        Total = sum(Count),
+        Percentage = round(100 * Count / Total, 1)
+      ) %>%
+      ungroup()
     
     # Proportional stacked bar
     p2 <- ggplot(error_type_summary, aes(x = interaction(modality, ui_mode), y = Percentage, fill = err_type)) +
@@ -1674,6 +2030,10 @@ if ("block_number" %in% names(df_raw)) {
 } else {
   df_blocks_tp <- data.frame()
 }
+```
+
+```{r plot-blocks-tp}
+#| fig-cap: "Performance Across Blocks: Throughput. Throughput by block number. Higher is better. Shaded regions show ±1 SE."
 
 # Throughput by block (if data available)
 if (nrow(df_blocks_tp) > 0) {
@@ -1692,8 +2052,6 @@ if (nrow(df_blocks_tp) > 0) {
   scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
   scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
   labs(
-    title = "Performance Across Blocks",
-    subtitle = "Throughput by block number. Shaded regions show ±1 SE.",
     x = "Block Number",
     y = "Throughput (bits/s)",
     color = "UI Mode",
@@ -1706,6 +2064,10 @@ if (nrow(df_blocks_tp) > 0) {
 } else {
   cat("⚠ Throughput by block data not available (requires block-level aggregation).\n")
 }
+```
+
+```{r plot-blocks-rt}
+#| fig-cap: "Performance Across Blocks: Movement Time. Movement time by block number. Lower is better. Shaded regions show ±1 SE."
 
 # Movement time by block
 p2 <- ggplot(df_blocks, aes(x = block_number, y = rt_mean, color = ui_mode, fill = ui_mode)) +
@@ -1756,6 +2118,10 @@ block_summary_table <- df_blocks %>%
 block_summary_table %>%
   kable(caption = "Block-Level Data Summary by Condition") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r plot-blocks-error}
+#| fig-cap: "Performance Across Blocks: Error Rate. Error rate by block number. Lower is better. Shaded regions show ±1 SE."
 
 p3 <- ggplot(df_blocks, aes(x = block_number, y = error_mean, color = ui_mode, fill = ui_mode)) +
   geom_ribbon(aes(ymin = error_mean - error_se, ymax = error_mean + error_se), 
