@@ -149,6 +149,7 @@ diagnose_model_data <- function(data, model_name) {
     diag$min_trials_per_condition <- 0
     diag$empty_conditions <- 0
     diag$condition_counts <- data.frame()
+    diag$single_level_factors <- character(0)
     return(diag)
   }
   
@@ -159,6 +160,19 @@ diagnose_model_data <- function(data, model_name) {
   has_modality <- "modality" %in% names(data)
   has_ui_mode <- "ui_mode" %in% names(data)
   has_pressure <- "pressure" %in% names(data)
+  
+  # Check for single-level factors (causes "contrasts" error)
+  single_level_factors <- character(0)
+  if (has_modality && n_distinct(data$modality, na.rm = TRUE) < 2) {
+    single_level_factors <- c(single_level_factors, "modality")
+  }
+  if (has_ui_mode && n_distinct(data$ui_mode, na.rm = TRUE) < 2) {
+    single_level_factors <- c(single_level_factors, "ui_mode")
+  }
+  if (has_pressure && n_distinct(data$pressure, na.rm = TRUE) < 2) {
+    single_level_factors <- c(single_level_factors, "pressure")
+  }
+  diag$single_level_factors <- single_level_factors
   
   if (has_modality && has_ui_mode && has_pressure) {
     diag$n_conditions <- length(unique(interaction(data$modality, data$ui_mode, data$pressure, drop = TRUE)))
@@ -200,6 +214,10 @@ if (nrow(df_iso) > 0) {
     model_tp_error <- paste0("Insufficient participants: N = ", diag_tp$n_participants, ". Need at least 2 participants for mixed-effects models.")
   } else if (diag_tp$n_trials == 0) {
     model_tp_error <- "No valid trials in dataset."
+  } else if (length(diag_tp$single_level_factors) > 0) {
+    model_tp_error <- paste0("Single-level factor(s) detected: ", paste(diag_tp$single_level_factors, collapse = ", "), 
+                             ". All factors (modality, ui_mode, pressure) must have at least 2 levels for the model to fit. ",
+                             "This typically happens when data collection is incomplete (e.g., only pressure=1 data collected so far).")
   } else if (diag_tp$min_trials_per_condition < 3) {
     model_tp_error <- paste0("Insufficient data per condition: minimum ", diag_tp$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_tp$empty_conditions > 0) {
@@ -255,6 +273,10 @@ if (nrow(df) > 0) {
     model_rt_error <- paste0("Insufficient participants: N = ", diag_rt$n_participants, ". Need at least 2 participants for mixed-effects models.")
   } else if (diag_rt$n_trials == 0) {
     model_rt_error <- "No valid trials in dataset."
+  } else if (length(diag_rt$single_level_factors) > 0) {
+    model_rt_error <- paste0("Single-level factor(s) detected: ", paste(diag_rt$single_level_factors, collapse = ", "), 
+                             ". All factors (modality, ui_mode, pressure) must have at least 2 levels for the model to fit. ",
+                             "This typically happens when data collection is incomplete (e.g., only pressure=1 data collected so far).")
   } else if (diag_rt$min_trials_per_condition < 3) {
     model_rt_error <- paste0("Insufficient data per condition: minimum ", diag_rt$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_rt$empty_conditions > 0) {
@@ -320,6 +342,10 @@ if (nrow(df_errors) > 0) {
     model_err_error <- paste0("Insufficient participants: N = ", diag_err$n_participants, ". Need at least 2 participants for mixed-effects models.")
   } else if (diag_err$n_trials == 0) {
     model_err_error <- "No valid trials in dataset."
+  } else if (length(diag_err$single_level_factors) > 0) {
+    model_err_error <- paste0("Single-level factor(s) detected: ", paste(diag_err$single_level_factors, collapse = ", "), 
+                              ". All factors (modality, ui_mode, pressure) must have at least 2 levels for the model to fit. ",
+                              "This typically happens when data collection is incomplete (e.g., only pressure=1 data collected so far).")
   } else if (diag_err$min_trials_per_condition < 3) {
     model_err_error <- paste0("Insufficient data per condition: minimum ", diag_err$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_err$empty_conditions > 0) {
@@ -591,6 +617,11 @@ if (exists("model_tp") && !is.null(model_tp)) {
     cat("- Minimum trials per condition: ", diag_tp$min_trials_per_condition, "\n")
     cat("- Empty conditions: ", diag_tp$empty_conditions, "\n")
     
+    if (length(diag_tp$single_level_factors) > 0) {
+      cat("- **Single-level factors:** ", paste(diag_tp$single_level_factors, collapse = ", "), "\n")
+      cat("  (These factors have only 1 level and prevent model fitting)\n")
+    }
+    
     if (!is.null(diag_tp$condition_counts)) {
       cat("\n**Trials per condition:**\n")
       print(diag_tp$condition_counts)
@@ -730,6 +761,11 @@ if (exists("model_rt") && !is.null(model_rt)) {
     cat("- Conditions: ", diag_rt$n_conditions, "\n")
     cat("- Minimum trials per condition: ", diag_rt$min_trials_per_condition, "\n")
     cat("- Empty conditions: ", diag_rt$empty_conditions, "\n")
+    
+    if (length(diag_rt$single_level_factors) > 0) {
+      cat("- **Single-level factors:** ", paste(diag_rt$single_level_factors, collapse = ", "), "\n")
+      cat("  (These factors have only 1 level and prevent model fitting)\n")
+    }
     
     if (!is.null(diag_rt$condition_counts)) {
       cat("\n**Trials per condition:**\n")
@@ -900,6 +936,11 @@ if (exists("model_err") && !is.null(model_err)) {
     cat("- Minimum trials per condition: ", diag_err$min_trials_per_condition, "\n")
     cat("- Empty conditions: ", diag_err$empty_conditions, "\n")
     cat("- Overall error rate: ", round(error_rate * 100, 1), "%\n")
+    
+    if (length(diag_err$single_level_factors) > 0) {
+      cat("- **Single-level factors:** ", paste(diag_err$single_level_factors, collapse = ", "), "\n")
+      cat("  (These factors have only 1 level and prevent model fitting)\n")
+    }
     
     if (!is.null(diag_err$condition_counts)) {
       cat("\n**Trials per condition:**\n")
