@@ -3057,18 +3057,10 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
   if (nrow(df_plot) > 0) {
     if (has_hexbin) {
       library(hexbin)
-      # Calculate appropriate bin counts for hexbin to maintain proper hexagon shape
-      # Account for the log scale transformation by using log-space ranges
-      x_range <- log10(range(df_plot$drag_distance, na.rm = TRUE))
-      y_range <- log10(range(df_plot$rt_s, na.rm = TRUE))
-      x_span <- diff(x_range)
-      y_span <- diff(y_range)
-      # Adjust bins to maintain hexagon shape on log scale
-      bins_x <- 35
-      bins_y <- round(35 * (y_span / x_span))
-      
+      # Note: geom_hex creates hexagons in data space, which may appear slightly stretched
+      # on log scales. This is expected behavior. For better control, we use a single bins parameter.
       p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
-        geom_hex(bins = bins_x, alpha = 0.7) +
+        geom_hex(bins = 35, alpha = 0.7) +
         geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
                     alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
         scale_x_log10(labels = scales::label_number()) +
