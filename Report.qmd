@@ -706,7 +706,7 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
       ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
     )
   
-  p2 <- ggplot(emm_rt_df, aes(x = modality, y = response, color = ui_mode, group = ui_mode)) +
+  p2 <- ggplot(emm_rt_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
     geom_line(size = 1.2, position = position_dodge(0.2)) +
     geom_point(size = 3, position = position_dodge(0.2)) +
     geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
@@ -2482,22 +2482,53 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
     )
   
   if (nrow(df_width) > 0) {
-    # Summary statistics
-    width_summary <- df_width %>%
-      group_by(modality, ui_mode, pressure) %>%
-      summarise(
-        N = n(),
-        Mean_Scale = round(mean(width_scale_factor, na.rm = TRUE), 3),
-        SD_Scale = round(sd(width_scale_factor, na.rm = TRUE), 3),
-        Mean_Diff = round(mean(width_difference, na.rm = TRUE), 2),
-        SD_Diff = round(sd(width_difference, na.rm = TRUE), 2),
-        Pct_Scaled = round(100 * mean(width_scale_factor != 1, na.rm = TRUE), 1),
-        .groups = "drop"
-      )
+    # Check if any scaling actually occurred
+    has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
     
-    width_summary %>%
-      kable(caption = "Target Width Scaling by Condition") %>%
-      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    if (!has_scaling) {
+      cat("**Note:** No target width scaling was observed in this dataset.\n")
+      cat("All `width_scale_factor` values are 1.0 (no scaling applied).\n\n")
+      cat("This indicates that the adaptive policy did not trigger during data collection.\n")
+      cat("Possible reasons:\n")
+      cat("- Hysteresis gate threshold not met (requires N consecutive slow/error trials)\n")
+      cat("- Performance thresholds (RT p75, error burst) not exceeded\n")
+      cat("- Adaptive policy not properly configured or enabled\n")
+      cat("- Participants performed well enough that adaptation was not needed\n\n")
+      
+      # Still show the summary table for completeness
+      width_summary <- df_width %>%
+        group_by(modality, ui_mode, pressure) %>%
+        summarise(
+          N = n(),
+          Mean_Scale = round(mean(width_scale_factor, na.rm = TRUE), 3),
+          SD_Scale = round(sd(width_scale_factor, na.rm = TRUE), 3),
+          Mean_Diff = round(mean(width_difference, na.rm = TRUE), 2),
+          SD_Diff = round(sd(width_difference, na.rm = TRUE), 2),
+          Pct_Scaled = round(100 * mean(width_scale_factor != 1, na.rm = TRUE), 1),
+          .groups = "drop"
+        )
+      
+      width_summary %>%
+        kable(caption = "Target Width Scaling by Condition (No Scaling Observed)") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    } else {
+      # Summary statistics (when scaling did occur)
+      width_summary <- df_width %>%
+        group_by(modality, ui_mode, pressure) %>%
+        summarise(
+          N = n(),
+          Mean_Scale = round(mean(width_scale_factor, na.rm = TRUE), 3),
+          SD_Scale = round(sd(width_scale_factor, na.rm = TRUE), 3),
+          Mean_Diff = round(mean(width_difference, na.rm = TRUE), 2),
+          SD_Diff = round(sd(width_difference, na.rm = TRUE), 2),
+          Pct_Scaled = round(100 * mean(width_scale_factor != 1, na.rm = TRUE), 1),
+          .groups = "drop"
+        )
+      
+      width_summary %>%
+        kable(caption = "Target Width Scaling by Condition") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    }
   } else {
     cat("⚠ No valid width scaling data available.\n")
   }
@@ -2510,8 +2541,14 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
 #| fig-cap: "Target Width Scale Factor by Condition. Scale factor = 1.0 means no scaling (nominal size). Values > 1.0 indicate enlarged targets, < 1.0 indicate reduced targets. White diamonds show mean values."
 
 if (exists("df_width") && nrow(df_width) > 0) {
-  # Visualization - width scale factor
-  p1 <- ggplot(df_width, aes(x = ui_mode, y = width_scale_factor, fill = ui_mode)) +
+  # Check if any scaling occurred
+  has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
+  
+  if (!has_scaling) {
+    cat("**Note:** Visualization skipped - no width scaling observed (all values = 1.0).\n")
+  } else {
+    # Visualization - width scale factor
+    p1 <- ggplot(df_width, aes(x = ui_mode, y = width_scale_factor, fill = ui_mode)) +
     geom_hline(yintercept = 1.0, linetype = "dashed", color = "red", linewidth = 0.8) +
     geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
                 show.legend = FALSE) +
@@ -2541,7 +2578,8 @@ if (exists("df_width") && nrow(df_width) > 0) {
       panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
     )
   
-  print(p1)
+    print(p1)
+  }
 }
 ```
 
@@ -2549,11 +2587,17 @@ if (exists("df_width") && nrow(df_width) > 0) {
 #| fig-cap: "Width Scaling Over Time (by Trial Number). Shows how target scaling changes throughout the experiment. LOESS smoothing with 95% CI."
 
 if (exists("df_width") && nrow(df_width) > 0 && "trial_number" %in% names(df_width)) {
-  # Width scaling over time
-  df_width_time <- df_width %>%
-    filter(!is.na(trial_number), trial_number > 0, trial_number <= 500)
+  # Check if any scaling occurred
+  has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
-  if (nrow(df_width_time) > 0) {
+  if (!has_scaling) {
+    cat("**Note:** Time series plot skipped - no width scaling observed.\n")
+  } else {
+    # Width scaling over time
+    df_width_time <- df_width %>%
+      filter(!is.na(trial_number), trial_number > 0, trial_number <= 500)
+    
+    if (nrow(df_width_time) > 0) {
     p2 <- ggplot(df_width_time, aes(x = trial_number, y = width_scale_factor, color = ui_mode)) +
       geom_hline(yintercept = 1.0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
       geom_point(alpha = 0.2, size = 1) +
@@ -2577,7 +2621,8 @@ if (exists("df_width") && nrow(df_width) > 0 && "trial_number" %in% names(df_wid
         panel.grid.minor = element_blank()
       )
     
-    print(p2)
+      print(p2)
+    }
   }
 }
 ```
@@ -2586,12 +2631,18 @@ if (exists("df_width") && nrow(df_width) > 0 && "trial_number" %in% names(df_wid
 #| fig-cap: "Width Scale Factor vs. Movement Time. Does target scaling improve performance? Linear regression with 95% CI."
 
 if (exists("df_width") && nrow(df_width) > 0) {
-  # Join with performance data
-  df_width_perf <- df_width %>%
-    filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
-    mutate(rt_s = rt_ms / 1000)
+  # Check if any scaling occurred
+  has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
-  if (nrow(df_width_perf) > 0) {
+  if (!has_scaling) {
+    cat("**Note:** Performance relationship plot skipped - no width scaling observed.\n")
+  } else {
+    # Join with performance data
+    df_width_perf <- df_width %>%
+      filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
+      mutate(rt_s = rt_ms / 1000)
+    
+    if (nrow(df_width_perf) > 0) {
     p3 <- ggplot(df_width_perf, aes(x = width_scale_factor, y = rt_s, color = ui_mode)) +
       geom_point(alpha = 0.3, size = 1.5) +
       geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1.2) +
@@ -2613,7 +2664,8 @@ if (exists("df_width") && nrow(df_width) > 0) {
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5)
       )
     
-    print(p3)
+      print(p3)
+    }
   }
 }
 ```
@@ -2648,6 +2700,8 @@ if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(
         SD_False_Triggers = round(sd(alignment_gate_false_triggers, na.rm = TRUE), 2),
         Mean_Recovery_Time = round(mean(alignment_gate_recovery_time_ms, na.rm = TRUE), 1),
         SD_Recovery_Time = round(sd(alignment_gate_recovery_time_ms, na.rm = TRUE), 1),
+        Mean_Mean_Recovery_Time = round(mean(alignment_gate_mean_recovery_time_ms, na.rm = TRUE), 1),
+        SD_Mean_Recovery_Time = round(sd(alignment_gate_mean_recovery_time_ms, na.rm = TRUE), 1),
         .groups = "drop"
       )
     
@@ -2744,6 +2798,52 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         )
       
       print(p2)
+    }
+  }
+}
+```
+
+```{r plot-alignment-mean-recovery}
+#| fig-cap: "Alignment Gate Mean Recovery Time by Condition. Average recovery time across all false triggers within a trial (ms). Lower is better. White diamonds show mean values."
+
+if (exists("df_gate") && nrow(df_gate) > 0) {
+  # Visualization - mean recovery time (averaged across all recoveries in trial)
+  if (sum(!is.na(df_gate$alignment_gate_mean_recovery_time_ms)) > 0) {
+    df_gate_mean_recovery <- df_gate %>%
+      filter(!is.na(alignment_gate_mean_recovery_time_ms), alignment_gate_mean_recovery_time_ms > 0)
+    
+    if (nrow(df_gate_mean_recovery) > 0) {
+      p3 <- ggplot(df_gate_mean_recovery, 
+                   aes(x = ui_mode, y = alignment_gate_mean_recovery_time_ms, fill = ui_mode)) +
+        geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
+                    show.legend = FALSE) +
+        geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
+                     outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
+        stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
+                     position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+        facet_grid(modality ~ pressure,
+                   labeller = labeller(
+                     modality = function(x) paste("Modality:", str_to_title(x)),
+                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                   )) +
+        scale_fill_manual(values = custom_palette_2,
+                           labels = c("Static", "Adaptive")) +
+        scale_x_discrete(labels = c("Static", "Adaptive")) +
+        labs(
+          x = "UI Mode",
+          y = "Mean Recovery Time (ms)",
+          fill = "UI Mode"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(
+          legend.position = "top",
+          strip.text = element_text(face = "bold", size = 12),
+          strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+          panel.grid.minor = element_blank(),
+          panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+        )
+      
+      print(p3)
     }
   }
 }
@@ -3026,7 +3126,321 @@ if ("hover_ms" %in% names(df_raw)) {
 
 -----
 
-# 16. Summary & Conclusions
+# 16. Advanced Cognitive Models: Linear Ballistic Accumulator (LBA)
+
+**Research Question:** How do decision verification processes differ across conditions? What caution thresholds do users adopt?
+
+*The Linear Ballistic Accumulator (LBA) model [@brown2008] treats the selection decision as a race between independent accumulators. Unlike Drift Diffusion Models (DDM), LBA is robust to low error rates typical of Fitts' tasks and allows explicit estimation of the "Caution Threshold" (b - A)—the amount of evidence users require before committing to selection. We hypothesize that adaptive interventions reduce the cognitive need for caution, mathematically reflecting a lower estimated threshold b.*
+
+**Status:** ⚠️ **PLACEHOLDER - Analysis not yet implemented**
+
+**Note:** This section is a placeholder for future LBA model fitting. The analysis requires verification phase RTs (time from first target entry to selection), which are available in the `verification_time_ms` column. Implementation will require installing R packages such as `RWiener` or `rtdists` and fitting a **hierarchical LBA model** (not per-condition per-person fits) due to limited trials per condition (~24/cell) and low error rates (3-5%). See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed power analysis and modeling recommendations.
+
+**Power Analysis Summary:**
+- **N=48 is sufficient** for medium main effects (dz≈0.41, power≈0.80)
+- **Interactions will be underpowered** unless large (treat as exploratory)
+- **Key constraint:** Trial count (~24/cell) and error rate (3-5%) limit identifiability
+- **Recommendation:** Use hierarchical LBA with parameters as functions of experimental factors
+
+```{r lba-placeholder}
+# TODO: Implement hierarchical LBA model fitting
+# Required packages: RWiener, rtdists, or custom LBA implementation
+# 
+# IMPORTANT: Use hierarchical LBA (not per-condition per-person fits)
+# Rationale: ~24 trials/cell is too thin for stable per-condition parameters
+#            Low error rates (3-5%) limit identifiability
+#            Hierarchical modeling with partial pooling stabilizes estimation
+# 
+# Steps:
+# 1. Prepare data: Extract verification phase RTs (time from first target entry to selection)
+# 2. Fit hierarchical LBA model with parameters as functions of experimental factors:
+#    - Threshold (b-A) ~ UI mode + pressure + (UI mode × pressure) + (1|pid)
+#    - Drift rate (v) ~ modality + (modality × UI mode) + (1|pid)
+#    - Starting point (A): Fixed or vary by condition if theoretically justified
+#    - Non-decision time (t0): Fixed or vary by condition
+# 3. Early identifiability check: Fit on first ~15-20 participants
+#    - Check for: divergent transitions, extreme posteriors, wide credible intervals
+# 4. Compare parameters across conditions (main effects: N=48 sufficient)
+# 5. Test hypothesis: Adaptive conditions → lower threshold (b)
+# 6. Treat interactions as exploratory (underpowered with N=48)
+# 
+# See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations
+
+cat("⚠️ **LBA Analysis Not Yet Implemented**\n\n")
+cat("This section will analyze decision verification processes using the Linear Ballistic Accumulator model.\n\n")
+cat("**Required Data:**\n")
+cat("- Verification time (time from first target entry to selection)\n")
+cat("- Correct/error outcomes\n")
+cat("- Condition labels (modality, ui_mode, pressure)\n\n")
+
+# Check if required data exists
+if ("verification_time_ms" %in% names(df)) {
+  df_verify_check <- df %>%
+    filter(!is.na(verification_time_ms), verification_time_ms > 0, verification_time_ms <= 6000)
+  
+  if (nrow(df_verify_check) > 0) {
+    cat("✅ Verification time data available:\n")
+    cat("   - N trials with verification time:", nrow(df_verify_check), "\n")
+    cat("   - Mean verification time:", round(mean(df_verify_check$verification_time_ms, na.rm = TRUE), 1), "ms\n")
+    cat("   - Range:", round(min(df_verify_check$verification_time_ms, na.rm = TRUE), 1), "-", 
+        round(max(df_verify_check$verification_time_ms, na.rm = TRUE), 1), "ms\n")
+    cat("\n**Data Quality Check:**\n")
+    
+    # Check for sufficient data per condition
+    verify_by_condition <- df_verify_check %>%
+      group_by(modality, ui_mode, pressure) %>%
+      summarise(n = n(), .groups = "drop")
+    
+    min_trials <- min(verify_by_condition$n, na.rm = TRUE)
+    if (min_trials < 20) {
+      cat("   ⚠️  Some conditions have < 20 trials (minimum:", min_trials, ")\n")
+      cat("      ⚠️  CRITICAL: ~24 trials/cell is too thin for per-condition per-person LBA fits\n")
+      cat("      ✅ Use hierarchical LBA with parameters as functions of factors (recommended)\n")
+    } else {
+      cat("   ✅ Sufficient trials per condition (minimum:", min_trials, ")\n")
+      cat("      ⚠️  Note: ~24 trials/cell still requires hierarchical modeling approach\n")
+    }
+    
+    # Check error rate (LBA needs some errors, but can work with low rates)
+    error_rate <- mean(df_errors$error, na.rm = TRUE)
+    cat("   - Overall error rate:", round(error_rate * 100, 2), "%\n")
+    if (error_rate < 0.15) {
+      cat("   ⚠️  CRITICAL: Low error rate (", round(error_rate * 100, 1), "%) limits LBA identifiability\n")
+      cat("      Recommended range: 15-35% errors for strong identifiability\n")
+      cat("      With low errors + small trial counts, parameters may trade off\n")
+      cat("      ✅ Hierarchical modeling helps but identifiability check is essential\n")
+    } else if (error_rate < 0.01) {
+      cat("   ⚠️  Very low error rate - LBA can still fit but boundary separation may be less constrained\n")
+    } else {
+      cat("   ✅ Error rate sufficient for LBA fitting\n")
+    }
+    
+    cat("\n**Next Steps:**\n")
+    cat("1. Install required packages: `install.packages(c('RWiener', 'rtdists'))`\n")
+    cat("2. Prepare verification phase RTs (correct trials only for now)\n")
+    cat("3. Fit HIERARCHICAL LBA model (NOT per-condition per-person):\n")
+    cat("   - Model parameters as functions of experimental factors\n")
+    cat("   - Use partial pooling to stabilize estimation\n")
+    cat("4. Early identifiability check: Fit on first ~15-20 participants\n")
+    cat("   - Check for: divergent transitions, extreme posteriors, wide CIs\n")
+    cat("5. Compare threshold (b) and drift rate (v) across conditions\n")
+    cat("   - Main effects: N=48 is sufficient (dz≈0.41, power≈0.80)\n")
+    cat("   - Interactions: Underpowered, treat as exploratory\n")
+    cat("6. Test hypothesis: Adaptive UI → lower threshold (less caution needed)\n")
+    cat("\n**See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations**\n")
+  } else {
+    cat("❌ No valid verification time data available\n")
+  }
+} else {
+  cat("❌ verification_time_ms column not found in dataset\n")
+}
+```
+
+```{r lba-data-prep}
+# Placeholder: Data preparation for LBA analysis
+# This chunk will prepare verification phase RTs for LBA fitting
+
+if ("verification_time_ms" %in% names(df)) {
+  df_lba_prep <- df %>%
+    filter(
+      !is.na(verification_time_ms),
+      verification_time_ms > 0,
+      verification_time_ms <= 6000,
+      correct == TRUE | correct == "true" | correct == 1
+    ) %>%
+    mutate(
+      verification_s = verification_time_ms / 1000,
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      pressure = factor(pressure)
+    )
+  
+  if (nrow(df_lba_prep) > 0) {
+    cat("**LBA Data Preparation:**\n")
+    cat("- Valid verification RTs:", nrow(df_lba_prep), "\n")
+    cat("- Conditions:", n_distinct(interaction(df_lba_prep$modality, df_lba_prep$ui_mode, df_lba_prep$pressure)), "\n")
+    cat("\n**Verification RT Summary by Condition:**\n")
+    
+    lba_summary <- df_lba_prep %>%
+      group_by(modality, ui_mode, pressure) %>%
+      summarise(
+        N = n(),
+        Mean = round(mean(verification_s, na.rm = TRUE), 3),
+        SD = round(sd(verification_s, na.rm = TRUE), 3),
+        Median = round(median(verification_s, na.rm = TRUE), 3),
+        .groups = "drop"
+      )
+    
+    print(knitr::kable(lba_summary, caption = "Verification Phase RTs (for LBA analysis)"))
+    
+    cat("\n⚠️ **LBA Model Fitting Not Yet Implemented**\n")
+    cat("Data is prepared and ready for LBA analysis.\n")
+  }
+}
+```
+
+**Implementation Notes:**
+- LBA requires RT data from the verification phase (time from target entry to selection)
+- Model fitting can be done using `RWiener` or `rtdists` packages
+- Key parameters to estimate: drift rate (v), threshold (b), starting point (A), non-decision time (t0)
+- Hypothesis: Adaptive conditions should show lower threshold (b), indicating less caution needed
+
+-----
+
+# 17. Control Theory Analysis: Submovement Models
+
+**Research Question:** How does the control loop efficiency differ across conditions? Do adaptive interventions reduce movement corrections?
+
+*The Optimized Submovement Model [@meyer1988] posits that pointing movements are composed of a primary ballistic impulse followed by n corrective submovements. The Submovement Count (N_sub) serves as a proxy for the efficiency of the control loop. In gaze-based interaction, simulated lag and saccadic blindness force users into an intermittent control regime, theoretically increasing N_sub.*
+
+**Status:** ⚠️ **PARTIALLY IMPLEMENTED - Basic analysis done, advanced control theory analysis pending**
+
+**Note:** Basic submovement analysis (submovement count by condition) is already implemented in Section 10 (Movement Quality Metrics). This section is a placeholder for advanced control theory analyses such as velocity profile decomposition, primary vs. corrective movement identification, and control loop efficiency metrics. Trajectory data is now available in the `trajectory` column (JSON string) logged at ~60fps during trials.
+
+**Power Analysis Summary:**
+- **N=48 is sufficient** for medium main effects (dz≈0.41, power≈0.80)
+- **Interactions will be underpowered** unless large (treat as exploratory)
+- **60fps trajectory data** improves measurement precision but doesn't increase effective N
+- **Key considerations:** Use duration-normalized smoothness metrics, control for multiple comparisons (FDR), pre-specify outcomes
+- See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed recommendations
+
+```{r control-theory-placeholder}
+# TODO: Advanced control theory analysis
+# Current status: Basic submovement_count analysis is in Section 10
+# Advanced analysis needed:
+# 1. Velocity profile analysis (extract from cursor trajectory data if available)
+# 2. Submovement detection algorithm (zero-crossings in acceleration)
+# 3. Primary vs. corrective movement decomposition
+# 4. Control loop efficiency metrics
+
+cat("⚠️ **Advanced Control Theory Analysis Not Yet Implemented**\n\n")
+cat("This section will analyze movement control using the Optimized Submovement Model.\n\n")
+cat("**Current Status:**\n")
+cat("- Basic submovement_count analysis: ✅ DONE (Section 10)\n")
+cat("- Velocity profile analysis: ❌ PENDING\n")
+cat("- Submovement detection algorithm: ❌ PENDING\n")
+cat("- Primary vs. corrective movement decomposition: ❌ PENDING\n\n")
+
+# Check if submovement_count data exists
+if ("submovement_count" %in% names(df)) {
+  df_submov_check <- df %>%
+    filter(!is.na(submovement_count), submovement_count >= 0)
+  
+  if (nrow(df_submov_check) > 0) {
+    cat("✅ Submovement count data available:\n")
+    cat("   - N trials with submovement data:", nrow(df_submov_check), "\n")
+    cat("   - Mean submovements per trial:", round(mean(df_submov_check$submovement_count, na.rm = TRUE), 2), "\n")
+    cat("   - Range:", round(min(df_submov_check$submovement_count, na.rm = TRUE), 0), "-", 
+        round(max(df_submov_check$submovement_count, na.rm = TRUE), 0), "\n\n")
+    
+    # Check for condition differences
+    submov_by_condition <- df_submov_check %>%
+      group_by(modality, ui_mode) %>%
+      summarise(
+        Mean_Submov = round(mean(submovement_count, na.rm = TRUE), 2),
+        SD_Submov = round(sd(submovement_count, na.rm = TRUE), 2),
+        .groups = "drop"
+      )
+    
+    cat("**Submovement Count by Modality and UI Mode:**\n")
+    print(knitr::kable(submov_by_condition))
+    
+    cat("\n**Data Quality Check:**\n")
+    # Check if we have cursor trajectory data (needed for velocity profile analysis)
+    if ("trajectory" %in% names(df_raw)) {
+      df_traj_check <- df_raw %>%
+        filter(
+          practice == "false" | practice == FALSE | is.na(practice),
+          !is.na(trajectory),
+          trajectory != "",
+          trajectory != "null"
+        )
+      
+      if (nrow(df_traj_check) > 0) {
+        cat("   ✅ Trajectory data available in CSV:\n")
+        cat("      - N trials with trajectory:", nrow(df_traj_check), "\n")
+        cat("      - Trajectory stored as JSON string in 'trajectory' column\n")
+        cat("      - Can be parsed in R: jsonlite::fromJSON(trajectory)\n")
+      } else {
+        cat("   ⚠️  Trajectory column exists but no data yet (may be from old data)\n")
+      }
+    } else {
+      cat("   ⚠️  Trajectory column not found (may be from old data)\n")
+    }
+    cat("   - Current analysis uses pre-calculated submovement_count from FittsTask.tsx\n")
+    
+    cat("\n**Next Steps for Advanced Analysis:**\n")
+    cat("1. If cursor trajectory data is needed, add logging to FittsTask.tsx\n")
+    cat("2. Implement velocity profile extraction from trajectory\n")
+    cat("3. Detect submovements using zero-crossings in acceleration profile\n")
+    cat("4. Decompose primary vs. corrective movements\n")
+    cat("5. Compare control loop efficiency across conditions\n")
+    cat("6. Test hypothesis: Adaptive UI → fewer submovements (more ballistic)\n")
+  } else {
+    cat("❌ No valid submovement data available\n")
+  }
+} else {
+  cat("❌ submovement_count column not found in dataset\n")
+}
+```
+
+```{r control-theory-advanced}
+# Placeholder: Advanced control theory metrics
+# This would analyze velocity profiles and movement decomposition
+
+cat("⚠️ **Advanced Control Theory Metrics Not Yet Implemented**\n\n")
+cat("**Planned Analyses:**\n")
+cat("1. **Velocity Profile Analysis:**\n")
+cat("   - Peak velocity extraction\n")
+cat("   - Time to peak velocity (TPV)\n")
+cat("   - Deceleration phase duration\n")
+cat("   - Velocity profile asymmetry\n\n")
+cat("2. **Submovement Detection:**\n")
+cat("   - Zero-crossing detection in acceleration profile\n")
+cat("   - Primary movement identification (first ballistic phase)\n")
+cat("   - Corrective submovement count and duration\n")
+cat("   - Inter-submovement intervals\n\n")
+cat("3. **Control Loop Efficiency:**\n")
+cat("   - Ratio of primary to total movement time\n")
+cat("   - Correction frequency (submovements per second)\n")
+cat("   - Movement smoothness metrics (jerk, normalized jerk - MUST be duration-normalized)\n\n")
+cat("4. **Modality-Specific Patterns:**\n")
+cat("   - Gaze: Intermittent control due to lag and saccadic blindness\n")
+cat("   - Hand: Continuous control with proprioceptive feedback\n")
+cat("   - Adaptive: Reduced corrections due to target expansion/declutter\n\n")
+cat("**Data Requirements:**\n")
+cat("✅ Trajectory data is now available in 'trajectory' column (JSON string, ~60fps)\n")
+cat("✅ Current CSV has submovement_count (pre-calculated) AND raw trajectory\n")
+cat("\n**Power & Analysis Considerations:**\n")
+cat("- N=48 is sufficient for main effects (dz≈0.41, power≈0.80)\n")
+cat("- Interactions: Underpowered, treat as exploratory\n")
+cat("- 60fps improves measurement precision but doesn't increase effective N\n")
+cat("- Use duration-normalized smoothness metrics\n")
+cat("- Control for multiple comparisons (FDR) if testing many metrics\n")
+cat("- Pre-specify theoretically motivated outcomes\n")
+cat("\n**See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations**\n")
+```
+
+**Implementation Notes:**
+- Basic submovement analysis is already in Section 10 (Movement Quality Metrics)
+- **Trajectory data is now available** in the `trajectory` column (JSON string, logged at ~60fps)
+- Current `submovement_count` is pre-calculated in `FittsTask.tsx` using velocity peaks
+- **Power:** N=48 sufficient for main effects (dz≈0.41, power≈0.80); interactions underpowered (treat as exploratory)
+- **Key considerations:**
+  - Use duration-normalized smoothness metrics (jerk is duration-sensitive)
+  - Control for multiple comparisons (FDR) if testing many kinematic features
+  - Pre-specify a small set of theoretically motivated outcomes
+  - 60fps improves measurement precision but doesn't increase effective N
+- **See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed power analysis and recommendations**
+
+**Potential Issues to Check:**
+- Verify that `submovement_count` calculation in `FittsTask.tsx` matches the Optimized Submovement Model definition
+- Check if velocity profile data is needed or if pre-calculated counts are sufficient
+- Ensure submovement detection algorithm handles both hand and gaze modalities correctly
+
+-----
+
+# 18. Summary & Conclusions
 
 ## Key Findings Summary
 

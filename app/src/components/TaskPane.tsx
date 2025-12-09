@@ -384,9 +384,11 @@ export function TaskPane() {
   
   // Fitts task handlers
   const startFittsBlockInternal = () => {
-    // Reset policy engine to prevent state pollution between blocks
+    // Note: Policy engine is NOT reset between blocks to allow adaptation
+    // to accumulate across blocks. If you need block-level resets, use:
+    // policyEngine.resetModality(modalityConfig.modality) instead
     const policyEngine = getPolicyEngine()
-    policyEngine.reset()
+    // policyEngine.reset() // DISABLED: Prevents adaptation from triggering
     
     // Get block order from counterbalanced sequence
     if (blockSequence.length === 0 || blockNumber > blockSequence.length) {

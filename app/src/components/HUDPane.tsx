@@ -137,7 +137,8 @@ export function HUDPane() {
         modality: payload.modality || modalityConfig.modality,
         rt_ms: payload.rt_ms,
         correct: payload.correct || false,
-        error: false,
+        error: !(payload.correct || false) || payload.error || false, // Set error based on correct status
+        err_type: payload.err_type || undefined,
         timestamp: payload.timestamp,
       }
       policyEngine.addTrial(entry)
