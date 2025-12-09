@@ -809,8 +809,6 @@ export function FittsTask({
       submovement_primary_peak_t_ms: trajData.submovement_primary_peak_t_ms,
       submovement_algorithm: trajData.submovement_algorithm,
       submovement_params_json: trajData.submovement_params_json,
-      // Trajectory data (for control theory analysis - cursor position over time)
-      trajectory: trajData.trajectory.length > 0 ? trajData.trajectory : (isPractice ? null : []),
       // Condition integrity fields
       ...getConditionData(),
     })
