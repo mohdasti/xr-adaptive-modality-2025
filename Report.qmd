@@ -3170,32 +3170,32 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "ID" %in% names(df_drag)) {
     id_quantiles <- unique(sort(id_quantiles))
     
     # Need at least 2 unique break points for cut() to work
+    # cut() creates length(breaks) - 1 intervals, so we need length(breaks) - 1 labels
     if (length(id_quantiles) >= 2) {
-      # If we have fewer than 4 unique breaks, use fewer bins
-      n_bins <- min(length(id_quantiles) - 1, 4)
+      # Determine how many bins we can create based on unique quantile values
+      n_unique_quantiles <- length(id_quantiles)
+      # We need n_unique_quantiles break points to create n_unique_quantiles - 1 intervals
       
-      if (n_bins >= 2) {
-        # Create breaks with unique values
-        # Note: cut() creates length(breaks) - 1 intervals, so labels must match
-        if (n_bins == 4 && length(id_quantiles) >= 5) {
-          breaks <- id_quantiles
-          labels <- c("Q1 (Low)", "Q2", "Q3", "Q4 (High)")  # 4 labels for 4 intervals
-        } else if (n_bins == 3 && length(id_quantiles) >= 4) {
-          breaks <- c(id_quantiles[1], id_quantiles[ceiling(length(id_quantiles)/2)], id_quantiles[length(id_quantiles)])
-          labels <- c("Low", "Medium", "High")  # 3 labels for 3 intervals
-        } else {
-          # 2 bins: need 3 break points for 2 intervals
-          breaks <- c(id_quantiles[1], id_quantiles[length(id_quantiles)])
-          # If min and max are the same, we can't create bins
-          if (breaks[1] == breaks[2]) {
-            breaks <- NULL
-          } else {
-            labels <- c("Low", "High")  # 2 labels for 2 intervals
-          }
-        }
-        
-        # Only proceed if we have valid breaks
-        if (!is.null(breaks) && length(breaks) >= 2 && length(breaks) == length(labels) + 1) {
+      if (n_unique_quantiles >= 5) {
+        # Can create 4 bins (quartiles)
+        breaks <- id_quantiles
+        labels <- c("Q1 (Low)", "Q2", "Q3", "Q4 (High)")  # 4 labels for 4 intervals
+      } else if (n_unique_quantiles >= 4) {
+        # Can create 3 bins
+        breaks <- c(id_quantiles[1], id_quantiles[2], id_quantiles[n_unique_quantiles])
+        labels <- c("Low", "Medium", "High")  # 3 labels for 3 intervals
+      } else if (n_unique_quantiles >= 3) {
+        # Can create 2 bins
+        breaks <- c(id_quantiles[1], id_quantiles[n_unique_quantiles])
+        labels <- c("Low", "High")  # 2 labels for 2 intervals
+      } else {
+        # Only 2 unique values - can only create 1 bin, which is not useful
+        breaks <- NULL
+        labels <- NULL
+      }
+      
+      # Only proceed if we have valid breaks and labels match intervals
+      if (!is.null(breaks) && length(breaks) >= 2 && length(breaks) == length(labels) + 1) {
           df_binned <- df_filtered %>%
             mutate(
               ID_bin = cut(ID, 
