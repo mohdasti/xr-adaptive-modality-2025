@@ -3058,31 +3058,33 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
     if (has_hexbin) {
       library(hexbin)
       p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
-        geom_hex(bins = 35, alpha = 0.7, show.legend = FALSE) +
+        geom_hex(bins = 35, alpha = 0.7) +
         geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
                     alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
         scale_x_log10(labels = scales::label_number()) +
         scale_y_log10(labels = scales::label_number()) +
-        scale_fill_viridis_c(option = "plasma", trans = "log10") +
+        scale_fill_viridis_c(option = "plasma", trans = "log10", name = "Count") +
         facet_grid(modality ~ pressure,
                    labeller = labeller(
                      modality = function(x) paste("Modality:", str_to_title(x)),
                      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                    )) +
-        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), name = "UI Mode") +
         labs(
           x = "Actual Path Length (px, log10)",
-          y = "Movement Time (s, log10)",
-          color = "UI Mode",
-          fill = "Count"
+          y = "Movement Time (s, log10)"
         ) +
         theme_minimal(base_size = 14) +
         theme(
           legend.position = "top",
+          legend.box = "horizontal",
+          legend.direction = "horizontal",
           strip.text = element_text(face = "bold", size = 12),
           strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-          panel.grid.minor = element_blank()
-        )
+          panel.grid.minor = element_blank(),
+          aspect.ratio = 1  # Ensure square aspect ratio for proper hexagon shape
+        ) +
+        coord_fixed(ratio = 1)  # Force 1:1 aspect ratio to prevent hexagon distortion
     } else {
       # Fallback: use density2d and points
       p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
@@ -3092,22 +3094,22 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
                     alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
         scale_x_log10(labels = scales::label_number()) +
         scale_y_log10(labels = scales::label_number()) +
-        scale_fill_viridis_c(option = "plasma") +
+        scale_fill_viridis_c(option = "plasma", name = "Density") +
         facet_grid(modality ~ pressure,
                    labeller = labeller(
                      modality = function(x) paste("Modality:", str_to_title(x)),
                      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                    )) +
-        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), name = "UI Mode") +
         labs(
           x = "Actual Path Length (px, log10)",
-          y = "Movement Time (s, log10)",
-          color = "UI Mode",
-          fill = "Density"
+          y = "Movement Time (s, log10)"
         ) +
         theme_minimal(base_size = 14) +
         theme(
           legend.position = "top",
+          legend.box = "horizontal",
+          legend.direction = "horizontal",
           strip.text = element_text(face = "bold", size = 12),
           strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
           panel.grid.minor = element_blank()
@@ -3117,7 +3119,6 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
     print(p1)
   }
 }
-```
 
 ```{r plot-path-efficiency}
 #| fig-cap: "Path Efficiency vs. Movement Time. Path efficiency (A / path length) indicates how straight the movement was. Higher efficiency (closer to 1.0) means straighter paths. This plot shows whether inefficient movements lead to longer movement times, and whether adaptive UI improves efficiency."
