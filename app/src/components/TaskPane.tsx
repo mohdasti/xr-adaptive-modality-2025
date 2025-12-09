@@ -20,7 +20,7 @@ import {
   DisplayMetadata,
 } from '../utils/sessionMeta'
 import { sequenceForParticipant, parseCondition, getSequenceId, getSequenceTableVersion, type Cond } from '../experiment/counterbalance'
-import { getPolicyEngine } from '../lib/policy'
+// import { getPolicyEngine } from '../lib/policy' // Not needed - policy engine not reset between blocks
 import { 
   getSessionInfoFromURL, 
   markBlockCompleted,
@@ -386,8 +386,8 @@ export function TaskPane() {
   const startFittsBlockInternal = () => {
     // Note: Policy engine is NOT reset between blocks to allow adaptation
     // to accumulate across blocks. If you need block-level resets, use:
+    // const policyEngine = getPolicyEngine()
     // policyEngine.resetModality(modalityConfig.modality) instead
-    const policyEngine = getPolicyEngine()
     // policyEngine.reset() // DISABLED: Prevents adaptation from triggering
     
     // Get block order from counterbalanced sequence
