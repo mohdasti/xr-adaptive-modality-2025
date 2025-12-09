@@ -1221,6 +1221,7 @@ if(all(tlx_cols %in% names(df_raw))) {
     scale_fill_manual(values = custom_palette_2,
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
+    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
     labs(
       y = "Score (0-100)",
       x = "UI Mode",
@@ -1272,6 +1273,7 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
     scale_fill_manual(values = custom_palette_2,
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
+    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
     labs(
       y = "Overall TLX Score (0-100)",
       x = "UI Mode",
