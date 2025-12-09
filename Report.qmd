@@ -3057,8 +3057,18 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
   if (nrow(df_plot) > 0) {
     if (has_hexbin) {
       library(hexbin)
+      # Calculate appropriate bin counts for hexbin to maintain proper hexagon shape
+      # Account for the log scale transformation by using log-space ranges
+      x_range <- log10(range(df_plot$drag_distance, na.rm = TRUE))
+      y_range <- log10(range(df_plot$rt_s, na.rm = TRUE))
+      x_span <- diff(x_range)
+      y_span <- diff(y_range)
+      # Adjust bins to maintain hexagon shape on log scale
+      bins_x <- 35
+      bins_y <- round(35 * (y_span / x_span))
+      
       p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
-        geom_hex(bins = 35, alpha = 0.7) +
+        geom_hex(bins = bins_x, alpha = 0.7) +
         geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
                     alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
         scale_x_log10(labels = scales::label_number()) +
@@ -3081,10 +3091,8 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
           legend.direction = "horizontal",
           strip.text = element_text(face = "bold", size = 12),
           strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-          panel.grid.minor = element_blank(),
-          aspect.ratio = 1  # Ensure square aspect ratio for proper hexagon shape
-        ) +
-        coord_fixed(ratio = 1)  # Force 1:1 aspect ratio to prevent hexagon distortion
+          panel.grid.minor = element_blank()
+        )
     } else {
       # Fallback: use density2d and points
       p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
