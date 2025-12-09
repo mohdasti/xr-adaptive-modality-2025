@@ -2941,52 +2941,123 @@ if (exists("df_task") && nrow(df_task) > 0 && n_distinct(df_task$task_type) > 1)
 ```
 
 ```{r drag-distance-analysis}
-# If drag tasks exist, analyze drag distance
-if ("drag_distance" %in% names(df_raw)) {
+# Compute path length from trajectory and derive efficiency metrics
+# Note: For pointing tasks, path length is the actual cursor travel distance (not straight-line A)
+# This analysis requires trajectory data - early participants may not have it
+
+library(jsonlite)
+library(purrr)
+
+# Helper function to compute path length from trajectory JSON
+path_length <- function(traj_json) {
+  if (is.na(traj_json) || traj_json == "" || traj_json == "[]" || traj_json == "null") {
+    return(NA_real_)
+  }
+  pts <- tryCatch(fromJSON(traj_json), error = function(e) NULL)
+  if (is.null(pts) || length(pts) == 0 || (is.data.frame(pts) && nrow(pts) < 2)) {
+    return(NA_real_)
+  }
+  # Handle both list and data.frame formats
+  if (is.data.frame(pts)) {
+    dx <- diff(pts$x)
+    dy <- diff(pts$y)
+  } else if (is.list(pts) && length(pts) > 0 && "x" %in% names(pts[[1]])) {
+    x_vals <- sapply(pts, function(p) p$x)
+    y_vals <- sapply(pts, function(p) p$y)
+    dx <- diff(x_vals)
+    dy <- diff(y_vals)
+  } else {
+    return(NA_real_)
+  }
+  sum(sqrt(dx^2 + dy^2), na.rm = TRUE)
+}
+
+# Prepare data with computed path length and derived metrics
+if ("trajectory" %in% names(df_raw) && "A" %in% names(df_raw)) {
   df_drag <- df_raw %>%
     filter(
       practice == "false" | practice == FALSE | is.na(practice),
-      !is.na(drag_distance),
-      drag_distance > 0
+      correct == TRUE | correct == "true" | correct == 1,  # Only successful trials
+      !is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000,
+      !is.na(A), A > 0
     ) %>%
     mutate(
+      rt_s = rt_ms / 1000,
+      # Compute path length from trajectory
+      path_length_computed = map_dbl(trajectory, path_length),
+      # Use existing drag_distance if numeric and valid, otherwise use computed
+      drag_distance = if ("drag_distance" %in% names(.)) {
+        case_when(
+          is.na(drag_distance) | drag_distance == 0 ~ path_length_computed,
+          is.numeric(drag_distance) & drag_distance > 0 ~ drag_distance,
+          TRUE ~ path_length_computed
+        )
+      } else {
+        path_length_computed
+      },
+      # Derived metrics
+      ratio = drag_distance / A,  # Path ratio (≥1, higher = less efficient)
+      eff = A / drag_distance,    # Path efficiency (0-1], higher = more efficient
+      excess = drag_distance - A, # Excess distance (px, 0 = straight)
+      speed = drag_distance / rt_s, # Effective speed (px/s)
+      # Flag outliers
+      bad_traj = ratio < 1 | ratio > 5 | is.na(ratio),
       modality = factor(modality, levels = c("hand", "gaze")),
       ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
       pressure = factor(pressure)
+    ) %>%
+    filter(
+      !is.na(drag_distance),
+      drag_distance > 0,
+      !bad_traj  # Exclude invalid trajectories
     )
   
   if (nrow(df_drag) > 0) {
-    # Summary statistics
+    # Summary statistics with derived metrics
     drag_summary <- df_drag %>%
       group_by(modality, ui_mode, pressure) %>%
       summarise(
         N_Trials = n(),
-        Mean_Distance = round(mean(drag_distance, na.rm = TRUE), 1),
-        SD_Distance = round(sd(drag_distance, na.rm = TRUE), 1),
+        Mean_Path_Length = round(mean(drag_distance, na.rm = TRUE), 1),
+        Mean_Amplitude = round(mean(A, na.rm = TRUE), 1),
+        Mean_Ratio = round(mean(ratio, na.rm = TRUE), 2),
+        Mean_Efficiency = round(mean(eff, na.rm = TRUE), 3),
+        Mean_Excess = round(mean(excess, na.rm = TRUE), 1),
         Mean_RT = round(mean(rt_ms, na.rm = TRUE), 1),
         .groups = "drop"
       )
     
     drag_summary %>%
-      kable(caption = "Drag Distance Metrics by Condition") %>%
+      kable(caption = "Path Length and Efficiency Metrics by Condition") %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  } else {
+    cat("⚠ No valid trajectory data available for path length computation.\n")
+    cat("Note: Path length analysis requires trajectory data. Early participants may not have trajectory logs.\n")
+    cat("This analysis will be limited to participants with trajectory data.\n")
   }
+} else {
+  cat("⚠ Required columns (trajectory, A) not found for path length analysis.\n")
+  cat("Path length metrics require trajectory data to compute actual cursor travel distance.\n")
 }
 ```
 
-```{r plot-drag-distance}
-#| fig-cap: "Drag Distance vs. Movement Time. How drag distance relates to performance. Linear regression with 95% CI."
+```{r plot-path-length-hexbin}
+#| fig-cap: "Path Length vs. Movement Time (Log-Log Scale). 2D density plot showing the relationship between actual cursor path length and movement time. GAM smooth captures nonlinearity. Log scales handle right-skewed distributions and heteroscedasticity."
 
 if (exists("df_drag") && nrow(df_drag) > 0) {
-  # Drag distance vs. RT
-  df_drag_rt <- df_drag %>%
-    filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
-    mutate(rt_s = rt_ms / 1000)
+  library(hexbin)
   
-  if (nrow(df_drag_rt) > 0) {
-    p2 <- ggplot(df_drag_rt, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
-      geom_point(alpha = 0.3, size = 1.5) +
-      geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1.2) +
+  df_plot <- df_drag %>%
+    filter(!is.na(drag_distance), drag_distance > 0, rt_s > 0)
+  
+  if (nrow(df_plot) > 0) {
+    p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
+      geom_hex(bins = 35, alpha = 0.7, show.legend = FALSE) +
+      geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
+                  alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
+      scale_x_log10(labels = scales::label_number()) +
+      scale_y_log10(labels = scales::label_number()) +
+      scale_fill_viridis_c(option = "plasma", trans = "log10") +
       facet_grid(modality ~ pressure,
                  labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
@@ -2994,18 +3065,156 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
                  )) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       labs(
-        x = "Drag Distance (px)",
-        y = "Movement Time (s)",
+        x = "Actual Path Length (px, log10)",
+        y = "Movement Time (s, log10)",
+        color = "UI Mode",
+        fill = "Count"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank()
+      )
+    
+    print(p1)
+  }
+}
+```
+
+```{r plot-path-efficiency}
+#| fig-cap: "Path Efficiency vs. Movement Time. Path efficiency (A / path length) indicates how straight the movement was. Higher efficiency (closer to 1.0) means straighter paths. This plot shows whether inefficient movements lead to longer movement times, and whether adaptive UI improves efficiency."
+
+if (exists("df_drag") && nrow(df_drag) > 0) {
+  df_plot <- df_drag %>%
+    filter(!is.na(eff), eff > 0, eff <= 1, rt_s > 0)
+  
+  if (nrow(df_plot) > 0) {
+    p2 <- ggplot(df_plot, aes(x = eff, y = rt_s, color = ui_mode)) +
+      geom_point(alpha = 0.15, size = 1) +
+      geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
+                  alpha = 0.3, linewidth = 1.1, method.args = list(family = "gaussian")) +
+      geom_vline(xintercept = 0.9, linetype = "dashed", alpha = 0.4, linewidth = 0.5) +
+      scale_y_log10(labels = scales::label_number()) +
+      facet_grid(modality ~ pressure,
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      labs(
+        x = "Path Efficiency (A / path length)",
+        y = "Movement Time (s, log10)",
         color = "UI Mode"
       ) +
       theme_minimal(base_size = 14) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
-        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5)
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank()
       )
     
     print(p2)
+  }
+}
+```
+
+```{r plot-path-ratio-by-id}
+#| fig-cap: "Path Ratio by Index of Difficulty. Mean path ratio (path length / amplitude) binned by ID quartiles. Shows whether excess path length increases with task difficulty, and whether adaptive UI reduces this effect. Higher ratio indicates less efficient (more curved) movements."
+
+if (exists("df_drag") && nrow(df_drag) > 0 && "ID" %in% names(df_drag)) {
+  df_binned <- df_drag %>%
+    filter(!is.na(ID), !is.na(ratio), ratio > 0) %>%
+    mutate(
+      ID_bin = cut(ID, 
+                   breaks = quantile(ID, probs = seq(0, 1, 0.25), na.rm = TRUE, names = FALSE),
+                   include.lowest = TRUE,
+                   labels = c("Q1 (Low)", "Q2", "Q3", "Q4 (High)"))
+    ) %>%
+    filter(!is.na(ID_bin)) %>%
+    group_by(modality, pressure, ui_mode, ID_bin) %>%
+    summarise(
+      n = n(),
+      mean_ratio = mean(ratio, na.rm = TRUE),
+      se_ratio = sd(ratio, na.rm = TRUE) / sqrt(n()),
+      mean_eff = mean(eff, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  if (nrow(df_binned) > 0 && sum(df_binned$n) > 0) {
+    p3 <- ggplot(df_binned, aes(x = ID_bin, y = mean_ratio, group = ui_mode, color = ui_mode)) +
+      geom_line(linewidth = 1, alpha = 0.8) +
+      geom_point(size = 2.5) +
+      geom_errorbar(aes(ymin = mean_ratio - se_ratio, ymax = mean_ratio + se_ratio),
+                    width = 0.1, linewidth = 0.5, alpha = 0.6) +
+      geom_hline(yintercept = 1.0, linetype = "dashed", alpha = 0.3, linewidth = 0.5) +
+      facet_grid(modality ~ pressure,
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      labs(
+        x = "Index of Difficulty (binned by quartiles)",
+        y = "Mean Path Ratio (path length / amplitude)",
+        color = "UI Mode"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+    
+    print(p3)
+  }
+}
+```
+
+```{r plot-path-efficiency-individual}
+#| fig-cap: "Individual Differences in Path Efficiency. Thin lines show per-participant mean efficiency by UI mode. Thick line and large point show condition mean. Shows whether adaptive UI consistently improves efficiency across participants."
+
+if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
+  df_pid <- df_drag %>%
+    filter(!is.na(eff), eff > 0, eff <= 1) %>%
+    group_by(pid, modality, pressure, ui_mode) %>%
+    summarise(
+      mean_eff = mean(eff, na.rm = TRUE),
+      n_trials = n(),
+      .groups = "drop"
+    ) %>%
+    filter(n_trials >= 5)  # Only participants with sufficient data
+  
+  if (nrow(df_pid) > 0) {
+    p4 <- ggplot(df_pid, aes(x = ui_mode, y = mean_eff, group = pid)) +
+      geom_line(alpha = 0.2, linewidth = 0.5) +
+      geom_point(alpha = 0.3, size = 1.5) +
+      stat_summary(aes(group = 1), fun = mean, geom = "line", linewidth = 1.2, color = "black") +
+      stat_summary(aes(group = 1), fun = mean, geom = "point", size = 3, color = "black", shape = 21, fill = "white") +
+      facet_grid(modality ~ pressure,
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 )) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      labs(
+        x = "UI Mode",
+        y = "Mean Path Efficiency (A / path length)",
+        caption = "Thin lines: individual participants. Thick line: condition mean."
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        legend.position = "none",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank()
+      )
+    
+    print(p4)
   }
 }
 ```
