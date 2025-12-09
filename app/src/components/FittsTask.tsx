@@ -126,6 +126,56 @@ export function FittsTask({
   const firstTargetEntryTimeRef = useRef<number | null>(null)
   const [_falseTriggerCount, setFalseTriggerCount] = useState(0)
   const [recoveryStartTime, setRecoveryStartTime] = useState<number | null>(null)
+  
+  // LBA-critical timing fields for verification phase segmentation
+  const enteredTargetRef = useRef<boolean>(false)
+  const firstEntryTimeRef = useRef<number | null>(null) // Relative to trial start
+  const lastExitTimeRef = useRef<number | null>(null) // Relative to trial start
+  const timeInTargetTotalRef = useRef<number>(0) // Sum of all durations inside target
+  const currentEntryTimeRef = useRef<number | null>(null) // Start of current entry period (if inside target)
+  const confirmEventTimeRef = useRef<number | null>(null) // Time of confirm event (relative to trial start)
+  const confirmEventSourceRef = useRef<'click' | 'space' | 'dwell' | 'none'>('none')
+  const trialEndReasonRef = useRef<'confirmed' | 'timeout' | 'aborted' | 'invalid'>('invalid')
+  
+  // Condition integrity: single source of truth (frozen at trial start)
+  const currentConditionRef = useRef<{
+    modality: string
+    ui_mode: string
+    pressure: number
+    condition_id: string
+    condition_version: string
+    app_build_sha: string
+  } | null>(null)
+  
+  // QC/Exclusion telemetry tracking
+  // Note: Eye-tracking fields are included for future compatibility but always null
+  // since gaze is simulated, not actual eye tracking
+  const qcTelemetryRef = useRef<{
+    zoom_pct_measured: number | null
+    tab_hidden_count: number
+    tab_hidden_total_ms: number
+    tab_hidden_start: number | null
+    focus_blur_count: number
+    trial_invalid_reason: string | null
+    trial_valid: boolean
+    // Eye-tracking quality (always null for simulated gaze)
+    eye_valid_sample_pct: null
+    eye_dropout_count: 0
+    eye_avg_confidence: null
+    calibration_age_ms: number | null // Time since calibration (for simulated gaze, tracks calibration timestamp)
+  }>({
+    zoom_pct_measured: null,
+    tab_hidden_count: 0,
+    tab_hidden_total_ms: 0,
+    tab_hidden_start: null,
+    focus_blur_count: 0,
+    trial_invalid_reason: null,
+    trial_valid: true,
+    eye_valid_sample_pct: null,
+    eye_dropout_count: 0,
+    eye_avg_confidence: null,
+    calibration_age_ms: null,
+  })
   const alignmentGateRef = useRef<{
     falseTriggers: number
     recoveryTimes: number[]
@@ -138,6 +188,22 @@ export function FittsTask({
   const trialDataRef = useRef<TrialData | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const targetRef = useRef<HTMLDivElement | null>(null)
+  
+  // Trajectory tracking for control theory analysis
+  // Stores cursor position (x, y) and relative time (ms from trial start) during movement
+  interface TrajectoryPoint {
+    x: number
+    y: number
+    t: number // Time in ms relative to trial start
+  }
+  const trajectoryRef = useRef<TrajectoryPoint[]>([])
+  const trajectoryAnimationFrameRef = useRef<number | null>(null)
+  const lastTrajectoryLogTimeRef = useRef<number>(0)
+  const TRAJECTORY_LOG_INTERVAL_MS = 16 // Log every ~16ms (~60fps)
+  const TRAJECTORY_MAX_POINTS = 600 // Max points before downsampling
+  const TRAJECTORY_GAP_THRESHOLD_MS = 40 // Gap threshold for quality metrics
+  const trajectoryStartReasonRef = useRef<'target_shown' | 'movement_detected'>('target_shown')
+  const movementDetectedRef = useRef<boolean>(false)
   
   // FPS tracking for data quality
   const fpsTrackingRef = useRef<{
@@ -249,6 +315,73 @@ export function FittsTask({
     return avgFPS
   }, [])
 
+  // Get QC telemetry data
+  // Note: Eye-tracking fields are always null/0 for simulated gaze
+  const getQCTelemetryData = useCallback((): {
+    zoom_pct_measured: number | null
+    tab_hidden_count: number
+    tab_hidden_total_ms: number
+    trial_invalid_reason: string | null
+    trial_valid: boolean
+    eye_valid_sample_pct: null // Always null for simulated gaze
+    eye_dropout_count: 0 // Always 0 for simulated gaze
+    eye_avg_confidence: null // Always null for simulated gaze
+    calibration_age_ms: number | null // Calibration timestamp age (for simulated gaze)
+  } => {
+    return {
+      zoom_pct_measured: qcTelemetryRef.current.zoom_pct_measured,
+      tab_hidden_count: qcTelemetryRef.current.tab_hidden_count,
+      tab_hidden_total_ms: qcTelemetryRef.current.tab_hidden_total_ms,
+      trial_invalid_reason: qcTelemetryRef.current.trial_invalid_reason,
+      trial_valid: qcTelemetryRef.current.trial_valid,
+      eye_valid_sample_pct: null, // Simulated gaze - no actual eye tracking
+      eye_dropout_count: 0, // Simulated gaze - no dropouts
+      eye_avg_confidence: null, // Simulated gaze - no confidence scores
+      calibration_age_ms: qcTelemetryRef.current.calibration_age_ms,
+    }
+  }, [])
+
+  // Get condition integrity data and check for mismatches
+  const getConditionData = useCallback((): {
+    cond_modality: string
+    cond_ui_mode: string
+    cond_pressure: number
+    condition_id: string
+    condition_version: string
+    app_build_sha: string
+    condition_mismatch_flag: boolean
+  } => {
+    const condition = currentConditionRef.current
+    if (!condition) {
+      // Fallback if condition not initialized
+      return {
+        cond_modality: modalityConfig.modality,
+        cond_ui_mode: ui_mode,
+        cond_pressure: pressure,
+        condition_id: `${modalityConfig.modality}_${ui_mode}_p${pressure.toFixed(1)}`,
+        condition_version: typeof __CONDITION_VERSION__ !== 'undefined' ? __CONDITION_VERSION__ : '1.0',
+        app_build_sha: typeof __APP_BUILD_SHA__ !== 'undefined' ? __APP_BUILD_SHA__ : 'dev',
+        condition_mismatch_flag: true, // Flag as mismatch if condition not initialized
+      }
+    }
+    
+    // Check for mismatches
+    const mismatch = 
+      condition.modality !== modalityConfig.modality ||
+      condition.ui_mode !== ui_mode ||
+      Math.abs(condition.pressure - pressure) > 0.01 // Allow small floating point differences
+    
+    return {
+      cond_modality: condition.modality,
+      cond_ui_mode: condition.ui_mode,
+      cond_pressure: condition.pressure,
+      condition_id: condition.condition_id,
+      condition_version: condition.condition_version,
+      app_build_sha: condition.app_build_sha,
+      condition_mismatch_flag: mismatch,
+    }
+  }, [modalityConfig.modality, ui_mode, pressure])
+
   // Calculate velocity between two positions over a time delta
   const calculateVelocity = useCallback(
     (pos1: Position, pos2: Position, deltaTime: number): number => {
@@ -260,6 +393,247 @@ export function FittsTask({
     },
     []
   )
+
+  // Compute submovements from trajectory using speed profile peak detection
+  const computeSubmovementsFromTrajectory = useCallback((
+    trajectory: TrajectoryPoint[],
+    minPeakDistanceMs: number = 50,
+    minPeakProminence: number = 20, // px/s
+    smoothingWindow: number = 5
+  ): {
+    submovement_count_recomputed: number
+    submovement_primary_peak_v: number | null
+    submovement_primary_peak_t_ms: number | null
+    submovement_algorithm: string
+    submovement_params_json: string
+  } => {
+    if (trajectory.length < 3) {
+      // Need at least 3 points to compute velocity
+      return {
+        submovement_count_recomputed: 0,
+        submovement_primary_peak_v: null,
+        submovement_primary_peak_t_ms: null,
+        submovement_algorithm: 'peak_detection_v1.0',
+        submovement_params_json: JSON.stringify({
+          min_peak_distance_ms: minPeakDistanceMs,
+          min_peak_prominence: minPeakProminence,
+          smoothing_window: smoothingWindow,
+        }),
+      }
+    }
+    
+    // Compute raw speed profile
+    const speeds: Array<{ v: number; t: number }> = []
+    for (let i = 1; i < trajectory.length; i++) {
+      const dt = trajectory[i].t - trajectory[i - 1].t
+      if (dt > 0) {
+        const dx = trajectory[i].x - trajectory[i - 1].x
+        const dy = trajectory[i].y - trajectory[i - 1].y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        const speed = (distance / dt) * 1000 // px/s
+        speeds.push({
+          v: speed,
+          t: trajectory[i].t, // Use time of second point
+        })
+      }
+    }
+    
+    if (speeds.length === 0) {
+      return {
+        submovement_count_recomputed: 0,
+        submovement_primary_peak_v: null,
+        submovement_primary_peak_t_ms: null,
+        submovement_algorithm: 'peak_detection_v1.0',
+        submovement_params_json: JSON.stringify({
+          min_peak_distance_ms: minPeakDistanceMs,
+          min_peak_prominence: minPeakProminence,
+          smoothing_window: smoothingWindow,
+        }),
+      }
+    }
+    
+    // Apply moving average smoothing
+    const smoothedSpeeds: Array<{ v: number; t: number }> = []
+    const halfWindow = Math.floor(smoothingWindow / 2)
+    
+    for (let i = 0; i < speeds.length; i++) {
+      let sum = 0
+      let count = 0
+      
+      for (let j = Math.max(0, i - halfWindow); j <= Math.min(speeds.length - 1, i + halfWindow); j++) {
+        sum += speeds[j].v
+        count++
+      }
+      
+      smoothedSpeeds.push({
+        v: sum / count,
+        t: speeds[i].t,
+      })
+    }
+    
+    // Detect peaks in smoothed speed profile
+    const peaks: Array<{ v: number; t: number; index: number }> = []
+    
+    for (let i = 1; i < smoothedSpeeds.length - 1; i++) {
+      const prev = smoothedSpeeds[i - 1].v
+      const curr = smoothedSpeeds[i].v
+      const next = smoothedSpeeds[i + 1].v
+      
+      // Check if current point is a local maximum
+      if (curr > prev && curr > next && curr >= minPeakProminence) {
+        // Check minimum distance from previous peak
+        if (peaks.length === 0 || (smoothedSpeeds[i].t - peaks[peaks.length - 1].t) >= minPeakDistanceMs) {
+          peaks.push({
+            v: curr,
+            t: smoothedSpeeds[i].t,
+            index: i,
+          })
+        }
+      }
+    }
+    
+    // Find primary peak (highest velocity)
+    let primaryPeak: { v: number; t: number } | null = null
+    if (peaks.length > 0) {
+      primaryPeak = peaks.reduce((max, peak) => peak.v > max.v ? peak : max)
+    }
+    
+    return {
+      submovement_count_recomputed: peaks.length,
+      submovement_primary_peak_v: primaryPeak?.v ?? null,
+      submovement_primary_peak_t_ms: primaryPeak?.t ?? null,
+      submovement_algorithm: 'peak_detection_v1.0',
+      submovement_params_json: JSON.stringify({
+        min_peak_distance_ms: minPeakDistanceMs,
+        min_peak_prominence: minPeakProminence,
+        smoothing_window: smoothingWindow,
+      }),
+    }
+  }, [])
+
+  // Process trajectory data: calculate quality metrics and downsample if needed
+  const processTrajectory = useCallback((
+    trajectory: TrajectoryPoint[],
+    trajEndReason: 'confirmed' | 'timeout' | 'aborted'
+  ): {
+    trajectory: TrajectoryPoint[]
+    traj_point_count: number
+    traj_duration_ms: number | null
+    traj_median_dt_ms: number | null
+    traj_max_dt_ms: number | null
+    traj_gap_count: number
+    traj_has_monotonic_t: boolean
+    traj_start_reason: 'target_shown' | 'movement_detected'
+    traj_end_reason: 'confirmed' | 'timeout' | 'aborted'
+    traj_downsample_factor: number
+    submovement_count_recomputed: number
+    submovement_primary_peak_v: number | null
+    submovement_primary_peak_t_ms: number | null
+    submovement_algorithm: string
+    submovement_params_json: string
+  } => {
+    // Ensure at least 2 points for very short movements (start + end)
+    let processedTrajectory = [...trajectory]
+    
+    // Downsample if needed
+    let downsampleFactor = 1
+    if (processedTrajectory.length > TRAJECTORY_MAX_POINTS) {
+      downsampleFactor = Math.ceil(processedTrajectory.length / TRAJECTORY_MAX_POINTS)
+      // Deterministic downsampling: keep every k-th point, always keep first and last
+      const downsampled: TrajectoryPoint[] = [processedTrajectory[0]]
+      for (let i = downsampleFactor; i < processedTrajectory.length - 1; i += downsampleFactor) {
+        downsampled.push(processedTrajectory[i])
+      }
+      if (processedTrajectory.length > 1) {
+        downsampled.push(processedTrajectory[processedTrajectory.length - 1])
+      }
+      processedTrajectory = downsampled
+    }
+    
+    // Calculate quality metrics
+    const pointCount = processedTrajectory.length
+    let duration_ms: number | null = null
+    let median_dt_ms: number | null = null
+    let max_dt_ms: number | null = null
+    let gap_count = 0
+    let has_monotonic_t = true
+    
+    if (pointCount >= 2) {
+      // Duration
+      duration_ms = processedTrajectory[pointCount - 1].t - processedTrajectory[0].t
+      
+      // Calculate dt values (time differences between consecutive points)
+      const dts: number[] = []
+      for (let i = 1; i < pointCount; i++) {
+        const dt = processedTrajectory[i].t - processedTrajectory[i - 1].t
+        dts.push(dt)
+        
+        // Check for gaps
+        if (dt > TRAJECTORY_GAP_THRESHOLD_MS) {
+          gap_count++
+        }
+        
+        // Check monotonicity
+        if (dt < 0) {
+          has_monotonic_t = false
+        }
+      }
+      
+      // Median dt
+      if (dts.length > 0) {
+        const sortedDts = [...dts].sort((a, b) => a - b)
+        const mid = Math.floor(sortedDts.length / 2)
+        median_dt_ms = sortedDts.length % 2 === 0
+          ? (sortedDts[mid - 1] + sortedDts[mid]) / 2
+          : sortedDts[mid]
+      }
+      
+      // Max dt
+      max_dt_ms = dts.length > 0 ? Math.max(...dts) : null
+    }
+    
+    // Compute submovements from trajectory
+    const submovementData = computeSubmovementsFromTrajectory(processedTrajectory)
+    
+    return {
+      trajectory: processedTrajectory,
+      traj_point_count: pointCount,
+      traj_duration_ms: duration_ms,
+      traj_median_dt_ms: median_dt_ms,
+      traj_max_dt_ms: max_dt_ms,
+      traj_gap_count: gap_count,
+      traj_has_monotonic_t: has_monotonic_t,
+      traj_start_reason: trajectoryStartReasonRef.current,
+      traj_end_reason: trajEndReason,
+      traj_downsample_factor: downsampleFactor,
+      ...submovementData,
+    }
+  }, [computeSubmovementsFromTrajectory])
+
+  // Track target entry/exit events and accumulate time in target
+  // This is critical for LBA analysis - segments verification phase
+  const trackTargetEntryExit = useCallback((isHovering: boolean, currentTime: number) => {
+    if (!trialStartTime) return // Trial not started yet
+    
+    const relativeTime = currentTime - trialStartTime
+    
+    if (isHovering && currentEntryTimeRef.current === null) {
+      // Entering target
+      enteredTargetRef.current = true
+      if (firstEntryTimeRef.current === null) {
+        firstEntryTimeRef.current = relativeTime
+        firstTargetEntryTimeRef.current = currentTime // Absolute time for verification_time_ms
+      }
+      currentEntryTimeRef.current = relativeTime
+    } else if (!isHovering && currentEntryTimeRef.current !== null) {
+      // Exiting target - accumulate time spent inside
+      const entryDuration = relativeTime - currentEntryTimeRef.current
+      timeInTargetTotalRef.current += entryDuration
+      lastExitTimeRef.current = relativeTime
+      currentEntryTimeRef.current = null
+    }
+    // If still hovering, time accumulation happens on next exit or trial end
+  }, [trialStartTime])
 
   // Detect velocity peaks (submovements)
   // A submovement is defined as a velocity peak that exceeds 10% of peak velocity
@@ -306,10 +680,49 @@ export function FittsTask({
     const avgFPS = calculateAverageFPS()
     const timestamp = performance.now()
     
-    // Calculate verification time for timeout errors (if target was entered)
-    const verification_time_ms = firstTargetEntryTimeRef.current !== null
-      ? timestamp - firstTargetEntryTimeRef.current
-      : null
+    // Finalize time tracking: if still in target, accumulate remaining time
+    if (currentEntryTimeRef.current !== null && trialStartTime) {
+      const relativeTime = timestamp - trialStartTime
+      const entryDuration = relativeTime - currentEntryTimeRef.current
+      timeInTargetTotalRef.current += entryDuration
+      currentEntryTimeRef.current = null
+    }
+    
+    // Set trial end reason and confirm event source
+    trialEndReasonRef.current = 'timeout'
+    confirmEventSourceRef.current = 'none'
+    confirmEventTimeRef.current = null
+    
+    // Calculate verification timing (verification_end_time_ms is null for timeout)
+    const verification_start_time_ms = firstEntryTimeRef.current
+    const verification_end_time_ms = null // Timeout - no confirm event
+    const verification_time_ms = null // Cannot calculate without end time
+    
+    const rt_ms = timestamp - trialData.timestamp
+    const timeout_triggered = true
+    const time_remaining_ms_at_confirm = null // No confirm event for timeout
+    
+    // For non-practice trials, ensure trajectory has end point at timeout
+    if (!isPractice && trialStartTime && trajectoryRef.current.length > 0) {
+      const lastPoint = trajectoryRef.current[trajectoryRef.current.length - 1]
+      const currentPos = cursorPosRef.current
+      // Only add end point if it's different from last point or enough time has passed
+      if (lastPoint.t < rt_ms - 10 || 
+          Math.abs(lastPoint.x - currentPos.x) > 1 || 
+          Math.abs(lastPoint.y - currentPos.y) > 1) {
+        trajectoryRef.current.push({
+          x: currentPos.x,
+          y: currentPos.y,
+          t: rt_ms,
+        })
+      }
+    }
+    
+    // Process trajectory with quality metrics
+    const trajData = processTrajectory(
+      trajectoryRef.current,
+      'timeout'
+    )
 
     bus.emit('trial:error', {
       trialId: trialData.trialId,
@@ -359,16 +772,54 @@ export function FittsTask({
       // Calibration data (for post-hoc visual angle calculations)
       pixels_per_mm: calibrationData?.pixelsPerMM ?? null,
       pixels_per_degree: calibrationData?.pixelsPerDegree ?? null,
+      // Trajectory data (for control theory analysis - cursor position over time)
+      trajectory: trajData.trajectory.length > 0 ? trajData.trajectory : (isPractice ? null : []),
+      // Trajectory quality metrics
+      traj_point_count: trajData.traj_point_count,
+      traj_duration_ms: trajData.traj_duration_ms,
+      traj_median_dt_ms: trajData.traj_median_dt_ms,
+      traj_max_dt_ms: trajData.traj_max_dt_ms,
+      traj_gap_count: trajData.traj_gap_count,
+      traj_has_monotonic_t: trajData.traj_has_monotonic_t,
+      traj_start_reason: trajData.traj_start_reason,
+      traj_end_reason: trajData.traj_end_reason,
+      traj_downsample_factor: trajData.traj_downsample_factor,
       // Target re-entry tracking (proxy for frustration in gaze interactions)
       target_reentry_count: targetReEntryCountRef.current,
       // Verification time (time from first target entry to timeout)
       verification_time_ms: verification_time_ms,
-          // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
-          submovement_count: submovementTrackingRef.current.submovementCount,
+      // LBA-critical timing fields
+      entered_target: enteredTargetRef.current,
+      first_entry_time_ms: firstEntryTimeRef.current,
+      last_exit_time_ms: lastExitTimeRef.current,
+      time_in_target_total_ms: timeInTargetTotalRef.current,
+      verification_start_time_ms: verification_start_time_ms,
+      verification_end_time_ms: verification_end_time_ms,
+      confirm_event_time_ms: confirmEventTimeRef.current,
+      confirm_event_source: confirmEventSourceRef.current,
+      timeout_limit_ms: timeout,
+      timeout_triggered: timeout_triggered,
+      time_remaining_ms_at_confirm: time_remaining_ms_at_confirm,
+      trial_end_reason: trialEndReasonRef.current,
+      // Submovement count (legacy - for comparison)
+      submovement_count_legacy: submovementTrackingRef.current.submovementCount,
+      // Submovement count (recomputed from trajectory)
+      submovement_count_recomputed: trajData.submovement_count_recomputed,
+      submovement_primary_peak_v: trajData.submovement_primary_peak_v,
+      submovement_primary_peak_t_ms: trajData.submovement_primary_peak_t_ms,
+      submovement_algorithm: trajData.submovement_algorithm,
+      submovement_params_json: trajData.submovement_params_json,
+      // Trajectory data (for control theory analysis - cursor position over time)
+      trajectory: trajData.trajectory.length > 0 ? trajData.trajectory : (isPractice ? null : []),
+      // Condition integrity fields
+      ...getConditionData(),
     })
 
+    // Reset trajectory after timeout
+    trajectoryRef.current = []
+    lastTrajectoryLogTimeRef.current = 0
     onTrialError('timeout')
-  }, [getSpatialMetrics, onTrialError, isPaused, calculateAverageFPS, isPractice, calibrationData])
+  }, [getSpatialMetrics, onTrialError, isPaused, calculateAverageFPS, isPractice, calibrationData, processTrajectory, timeout, getConditionData, getQCTelemetryData])
 
   // Canvas dimensions - read from actual DOM element for accuracy
   // CSS handles responsive sizing (70vw/70vh, min 800x600, max 1200x900)
@@ -452,6 +903,48 @@ export function FittsTask({
     targetReEntryCountRef.current = 0
     previousHoverStateRef.current = false
     firstTargetEntryTimeRef.current = null
+    
+    // Reset LBA-critical timing fields
+    enteredTargetRef.current = false
+    firstEntryTimeRef.current = null
+    lastExitTimeRef.current = null
+    timeInTargetTotalRef.current = 0
+    currentEntryTimeRef.current = null
+    confirmEventTimeRef.current = null
+    confirmEventSourceRef.current = 'none'
+    trialEndReasonRef.current = 'invalid'
+    
+    // Reset QC telemetry
+    const zoomPct = getZoomPct()
+    qcTelemetryRef.current = {
+      zoom_pct_measured: zoomPct,
+      tab_hidden_count: 0,
+      tab_hidden_total_ms: 0,
+      tab_hidden_start: null,
+      focus_blur_count: 0,
+      trial_invalid_reason: null,
+      trial_valid: true,
+      eye_valid_sample_pct: null,
+      eye_dropout_count: 0,
+      eye_avg_confidence: null,
+      calibration_age_ms: null,
+    }
+    
+    // Calculate calibration age for gaze mode (simulated gaze - tracks calibration timestamp if available)
+    // Note: This is for simulated gaze calibration, not actual eye tracking
+    if (modalityConfig.modality === Modality.GAZE) {
+      try {
+        const calibrationStr = sessionStorage.getItem('calibration')
+        if (calibrationStr) {
+          const cal = JSON.parse(calibrationStr)
+          if (cal.timestamp) {
+            qcTelemetryRef.current.calibration_age_ms = performance.now() - cal.timestamp
+          }
+        }
+      } catch (e) {
+        // Silently ignore - calibration timestamp is optional for simulated gaze
+      }
+    }
 
     // Set up display requirement monitoring during trial
     enforceDisplayRequirements((pauseMsg) => {
@@ -513,8 +1006,26 @@ export function FittsTask({
         isRising: false,
       }
       
+      // Reset trajectory tracking
+      trajectoryRef.current = []
+      lastTrajectoryLogTimeRef.current = 0
+      
       const startTime = performance.now()
       setTrialStartTime(startTime)
+      
+      // Initialize condition integrity: single source of truth (frozen at trial start)
+      const conditionId = `${modalityConfig.modality}_${ui_mode}_p${pressure.toFixed(1)}`
+      const appBuildSha = typeof __APP_BUILD_SHA__ !== 'undefined' ? __APP_BUILD_SHA__ : 'dev'
+      const conditionVersion = typeof __CONDITION_VERSION__ !== 'undefined' ? __CONDITION_VERSION__ : '1.0'
+      
+      currentConditionRef.current = {
+        modality: modalityConfig.modality,
+        ui_mode: ui_mode,
+        pressure: pressure,
+        condition_id: conditionId,
+        condition_version: conditionVersion,
+        app_build_sha: appBuildSha,
+      }
       
       // Create trial data
       const trialId = `trial-${performance.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -633,6 +1144,90 @@ export function FittsTask({
       }
     }
   }, [trialStartTime, showStart, targetPos])
+  
+  // Trajectory logging loop (for control theory analysis)
+  useEffect(() => {
+    if (!trialStartTime || showStart || !targetPos) {
+      // Stop trajectory logging if trial not active
+      if (trajectoryAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(trajectoryAnimationFrameRef.current)
+        trajectoryAnimationFrameRef.current = null
+      }
+      return
+    }
+    
+    // Reset trajectory tracking state for new trial
+    trajectoryStartReasonRef.current = 'target_shown'
+    movementDetectedRef.current = false
+    
+    // For non-practice trials, always log at least start point
+    if (!isPractice && trialStartTime) {
+      const startPos = cursorPosRef.current
+      trajectoryRef.current.push({
+        x: startPos.x,
+        y: startPos.y,
+        t: 0, // Trial start
+      })
+    }
+    
+    const logTrajectory = () => {
+      if (!trialStartTime || showStart || !targetPos) {
+        trajectoryAnimationFrameRef.current = null
+        return
+      }
+      
+      const currentTime = performance.now()
+      const elapsed = currentTime - trialStartTime
+      const currentPos = cursorPosRef.current
+      
+      // Movement detection: check if cursor has moved significantly from start
+      if (!movementDetectedRef.current && (currentPos.x !== 0 || currentPos.y !== 0)) {
+        const startPoint = trajectoryRef.current[0]
+        if (startPoint) {
+          const distance = Math.sqrt(
+            Math.pow(currentPos.x - startPoint.x, 2) + 
+            Math.pow(currentPos.y - startPoint.y, 2)
+          )
+          // Movement threshold: 5px
+          if (distance > 5) {
+            movementDetectedRef.current = true
+            trajectoryStartReasonRef.current = 'movement_detected'
+          }
+        }
+      }
+      
+      // Only log if enough time has passed (throttle to ~60fps)
+      if (elapsed - lastTrajectoryLogTimeRef.current >= TRAJECTORY_LOG_INTERVAL_MS) {
+        // For non-practice trials, always log (even if at origin)
+        // This ensures we capture at least start + end points
+        if (!isPractice || (currentPos.x !== 0 || currentPos.y !== 0)) {
+          trajectoryRef.current.push({
+            x: currentPos.x,
+            y: currentPos.y,
+            t: elapsed, // Time in ms from trial start
+          })
+          lastTrajectoryLogTimeRef.current = elapsed
+        }
+      }
+      
+      // Continue logging if trial is still active
+      if (targetPos && !showStart && trialStartTime) {
+        trajectoryAnimationFrameRef.current = requestAnimationFrame(logTrajectory)
+      } else {
+        trajectoryAnimationFrameRef.current = null
+      }
+    }
+    
+    // Start trajectory logging
+    trajectoryAnimationFrameRef.current = requestAnimationFrame(logTrajectory)
+    
+    return () => {
+      if (trajectoryAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(trajectoryAnimationFrameRef.current)
+        trajectoryAnimationFrameRef.current = null
+      }
+    }
+  }, [trialStartTime, showStart, targetPos, isPractice])
 
   // Velocity tracking loop for submovement detection
   // Use a ref to track cursor position to avoid dependency on cursorPos state
@@ -717,11 +1312,90 @@ export function FittsTask({
       const trialData = trialDataRef.current
       const confirmType = getConfirmType(isClick)
       
-      // Calculate verification time (time from first target entry to selection)
-      // This isolates the "verification phase" for gaze interaction analysis
-      const verification_time_ms = firstTargetEntryTimeRef.current !== null
-        ? endTime - firstTargetEntryTimeRef.current
+      // Finalize time tracking: if still in target, accumulate remaining time
+      if (currentEntryTimeRef.current !== null && trialStartTime) {
+        const relativeTime = endTime - trialStartTime
+        const entryDuration = relativeTime - currentEntryTimeRef.current
+        timeInTargetTotalRef.current += entryDuration
+        currentEntryTimeRef.current = null
+      }
+      
+      // Finalize QC telemetry: tab hidden time
+      if (qcTelemetryRef.current.tab_hidden_start !== null) {
+        const hiddenDuration = endTime - qcTelemetryRef.current.tab_hidden_start
+        qcTelemetryRef.current.tab_hidden_total_ms += hiddenDuration
+        qcTelemetryRef.current.tab_hidden_start = null
+      }
+      
+      // Validate trial quality
+      const violations: string[] = []
+      if (qcTelemetryRef.current.tab_hidden_count > 0) {
+        violations.push(`tab_hidden_${qcTelemetryRef.current.tab_hidden_count}times`)
+      }
+      if (qcTelemetryRef.current.tab_hidden_total_ms > 500) {
+        violations.push(`tab_hidden_${Math.round(qcTelemetryRef.current.tab_hidden_total_ms)}ms`)
+      }
+      if (qcTelemetryRef.current.focus_blur_count > 2) {
+        violations.push(`focus_blur_${qcTelemetryRef.current.focus_blur_count}times`)
+      }
+      const zoomPct = qcTelemetryRef.current.zoom_pct_measured
+      if (zoomPct !== null && (zoomPct < 95 || zoomPct > 105)) {
+        violations.push(`zoom_${zoomPct.toFixed(1)}pct`)
+      }
+      
+      qcTelemetryRef.current.trial_invalid_reason = violations.length > 0 ? violations.join(';') : null
+      qcTelemetryRef.current.trial_valid = violations.length === 0
+      
+      // Set confirm event time and source
+      const relativeEndTime = rt_ms
+      confirmEventTimeRef.current = relativeEndTime
+      if (isClick) {
+        confirmEventSourceRef.current = 'click'
+      } else if (modalityConfig.modality === Modality.GAZE) {
+        if (modalityConfig.dwellTime > 0) {
+          confirmEventSourceRef.current = 'dwell'
+        } else {
+          confirmEventSourceRef.current = 'space'
+        }
+      } else {
+        confirmEventSourceRef.current = 'space'
+      }
+      
+      // Calculate verification timing
+      const verification_start_time_ms = firstEntryTimeRef.current
+      const verification_end_time_ms = confirmEventTimeRef.current
+      const verification_time_ms = verification_start_time_ms !== null && verification_end_time_ms !== null
+        ? verification_end_time_ms - verification_start_time_ms
         : null
+      
+      // Calculate timeout metadata
+      const timeout_triggered = false // Trial completed before timeout
+      const time_remaining_ms_at_confirm = timeout > 0 && rt_ms < timeout
+        ? timeout - rt_ms
+        : null
+      
+      trialEndReasonRef.current = 'confirmed'
+      
+      // For non-practice trials, ensure trajectory has end point
+      if (!isPractice && trajectoryRef.current.length > 0) {
+        const lastPoint = trajectoryRef.current[trajectoryRef.current.length - 1]
+        // Only add end point if it's different from last point or enough time has passed
+        if (lastPoint.t < rt_ms - 10 || 
+            Math.abs(lastPoint.x - clickPos.x) > 1 || 
+            Math.abs(lastPoint.y - clickPos.y) > 1) {
+          trajectoryRef.current.push({
+            x: clickPos.x,
+            y: clickPos.y,
+            t: rt_ms,
+          })
+        }
+      }
+      
+      // Process trajectory with quality metrics
+      const trajData = processTrajectory(
+        trajectoryRef.current,
+        'confirmed'
+      )
       
       const hit = isHit(clickPos, targetPos, effectiveWidth)
       
@@ -729,6 +1403,7 @@ export function FittsTask({
         const metrics = getSpatialMetrics(clickPos)
         const displayMetrics = getDisplayMetrics()
         const avgFPS = calculateAverageFPS()
+        const conditionData = getConditionData()
 
         // Alignment gate metrics (if enabled)
         const alignmentGateMetrics = alignmentGateEnabled
@@ -810,19 +1485,58 @@ export function FittsTask({
           target_reentry_count: targetReEntryCountRef.current,
           // Verification time (time from first target entry to selection)
           verification_time_ms: verification_time_ms,
-          // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
-          submovement_count: submovementTrackingRef.current.submovementCount,
+          // LBA-critical timing fields
+          entered_target: enteredTargetRef.current,
+          first_entry_time_ms: firstEntryTimeRef.current,
+          last_exit_time_ms: lastExitTimeRef.current,
+          time_in_target_total_ms: timeInTargetTotalRef.current,
+          verification_start_time_ms: verification_start_time_ms,
+          verification_end_time_ms: verification_end_time_ms,
+          confirm_event_time_ms: confirmEventTimeRef.current,
+          confirm_event_source: confirmEventSourceRef.current,
+          timeout_limit_ms: timeout,
+          timeout_triggered: timeout_triggered,
+          time_remaining_ms_at_confirm: time_remaining_ms_at_confirm,
+          trial_end_reason: trialEndReasonRef.current,
+          // Trajectory data (for control theory analysis - cursor position over time)
+          trajectory: trajData.trajectory.length > 0 ? trajData.trajectory : (isPractice ? null : []),
+          // Trajectory quality metrics
+          traj_point_count: trajData.traj_point_count,
+          traj_duration_ms: trajData.traj_duration_ms,
+          traj_median_dt_ms: trajData.traj_median_dt_ms,
+          traj_max_dt_ms: trajData.traj_max_dt_ms,
+          traj_gap_count: trajData.traj_gap_count,
+          traj_has_monotonic_t: trajData.traj_has_monotonic_t,
+          traj_start_reason: trajData.traj_start_reason,
+          traj_end_reason: trajData.traj_end_reason,
+          traj_downsample_factor: trajData.traj_downsample_factor,
+          // Submovement count (legacy - for comparison)
+          submovement_count_legacy: submovementTrackingRef.current.submovementCount,
+          // Submovement count (recomputed from trajectory)
+          submovement_count_recomputed: trajData.submovement_count_recomputed,
+          submovement_primary_peak_v: trajData.submovement_primary_peak_v,
+          submovement_primary_peak_t_ms: trajData.submovement_primary_peak_t_ms,
+          submovement_algorithm: trajData.submovement_algorithm,
+          submovement_params_json: trajData.submovement_params_json,
+          // Condition integrity fields
+          ...conditionData,
+          // QC/Exclusion telemetry
+          ...getQCTelemetryData(),
         })
         
-        // Clear trial start time to prevent duplicate completions
+        // Clear trial start time and reset trajectory to prevent duplicate completions
         setTrialStartTime(null)
+        trajectoryRef.current = []
+        lastTrajectoryLogTimeRef.current = 0
         onTrialComplete()
       } else {
         // Miss or slip
         const errorType = isClick ? 'miss' : 'slip'
+        trialEndReasonRef.current = 'confirmed' // Confirm event happened, just missed target
         const metrics = getSpatialMetrics(clickPos)
         const displayMetrics = getDisplayMetrics()
         const avgFPS = calculateAverageFPS()
+        const conditionData = getConditionData()
 
         bus.emit('trial:error', {
           trialId: trialData.trialId,
@@ -878,16 +1592,53 @@ export function FittsTask({
           target_reentry_count: targetReEntryCountRef.current,
           // Verification time (time from first target entry to selection)
           verification_time_ms: verification_time_ms,
-          // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
-          submovement_count: submovementTrackingRef.current.submovementCount,
+          // LBA-critical timing fields
+          entered_target: enteredTargetRef.current,
+          first_entry_time_ms: firstEntryTimeRef.current,
+          last_exit_time_ms: lastExitTimeRef.current,
+          time_in_target_total_ms: timeInTargetTotalRef.current,
+          verification_start_time_ms: verification_start_time_ms,
+          verification_end_time_ms: verification_end_time_ms,
+          confirm_event_time_ms: confirmEventTimeRef.current,
+          confirm_event_source: confirmEventSourceRef.current,
+          timeout_limit_ms: timeout,
+          timeout_triggered: timeout_triggered,
+          time_remaining_ms_at_confirm: time_remaining_ms_at_confirm,
+          trial_end_reason: trialEndReasonRef.current,
+          // Trajectory data (for control theory analysis - cursor position over time)
+          trajectory: trajData.trajectory.length > 0 ? trajData.trajectory : (isPractice ? null : []),
+          // Trajectory quality metrics
+          traj_point_count: trajData.traj_point_count,
+          traj_duration_ms: trajData.traj_duration_ms,
+          traj_median_dt_ms: trajData.traj_median_dt_ms,
+          traj_max_dt_ms: trajData.traj_max_dt_ms,
+          traj_gap_count: trajData.traj_gap_count,
+          traj_has_monotonic_t: trajData.traj_has_monotonic_t,
+          traj_start_reason: trajData.traj_start_reason,
+          traj_end_reason: trajData.traj_end_reason,
+          traj_downsample_factor: trajData.traj_downsample_factor,
+          // Submovement count (legacy - for comparison)
+          submovement_count_legacy: submovementTrackingRef.current.submovementCount,
+          // Submovement count (recomputed from trajectory)
+          submovement_count_recomputed: trajData.submovement_count_recomputed,
+          submovement_primary_peak_v: trajData.submovement_primary_peak_v,
+          submovement_primary_peak_t_ms: trajData.submovement_primary_peak_t_ms,
+          submovement_algorithm: trajData.submovement_algorithm,
+          submovement_params_json: trajData.submovement_params_json,
+          // Condition integrity fields
+          ...conditionData,
+          // QC/Exclusion telemetry
+          ...getQCTelemetryData(),
         })
         
         // Clear trial start time to prevent duplicate completions
         setTrialStartTime(null)
+        trajectoryRef.current = []
+        lastTrajectoryLogTimeRef.current = 0
         onTrialError(errorType)
       }
     },
-    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType, isPaused, calibrationData]
+    [trialStartTime, targetPos, onTrialComplete, onTrialError, effectiveWidth, getSpatialMetrics, getConfirmType, isPaused, calibrationData, processTrajectory, isPractice, timeout, getConditionData, getQCTelemetryData]
   )
 
   // Alignment gate: check if selection is allowed
@@ -996,6 +1747,7 @@ export function FittsTask({
       if (!canvasRef.current) return
 
       const isHovering = isHit(mousePosRef.current, targetPos, effectiveWidth)
+      const currentTime = performance.now()
 
       // Track target re-entries for hand mode too
       if (isHovering !== previousHoverStateRef.current) {
@@ -1005,6 +1757,9 @@ export function FittsTask({
         }
         previousHoverStateRef.current = isHovering
       }
+
+      // Track entry/exit events for LBA timing analysis
+      trackTargetEntryExit(isHovering, currentTime)
 
       setIsHoveringTarget(isHovering)
 
@@ -1249,13 +2004,13 @@ export function FittsTask({
         if (isHovering && !previousHoverStateRef.current) {
           // Cursor entered the target
           targetReEntryCountRef.current += 1
-          
-          // Track first target entry time (for verification_time_ms calculation)
-          if (firstTargetEntryTimeRef.current === null) {
-            firstTargetEntryTimeRef.current = currentTime
-          }
         }
         previousHoverStateRef.current = isHovering
+      }
+      
+      // Track entry/exit events for LBA timing analysis (only for target, not start button)
+      if (!showStart && targetPos) {
+        trackTargetEntryExit(isHovering, currentTime)
       }
       
       setGazeState((prev) => {
@@ -1370,8 +2125,59 @@ export function FittsTask({
           if (!showStart && targetPos && trialDataRef.current) {
             const trialData = trialDataRef.current
             const timestamp = performance.now()
+            const rt_ms = timestamp - trialData.timestamp
+            
+            // Finalize time tracking: if still in target, accumulate remaining time
+            if (currentEntryTimeRef.current !== null && trialStartTime) {
+              const relativeTime = timestamp - trialStartTime
+              const entryDuration = relativeTime - currentEntryTimeRef.current
+              timeInTargetTotalRef.current += entryDuration
+              currentEntryTimeRef.current = null
+            }
+            
+            // Set confirm event time and source
+            const relativeEndTime = rt_ms
+            confirmEventTimeRef.current = relativeEndTime
+            confirmEventSourceRef.current = 'space'
+            trialEndReasonRef.current = 'confirmed' // Confirm event happened, just premature
+            
+            // Calculate verification timing
+            const verification_start_time_ms = firstEntryTimeRef.current
+            const verification_end_time_ms = confirmEventTimeRef.current
+            const verification_time_ms = verification_start_time_ms !== null && verification_end_time_ms !== null
+              ? verification_end_time_ms - verification_start_time_ms
+              : null
+            
+            // Calculate timeout metadata
+            const timeout_triggered = false // Trial completed before timeout
+            const time_remaining_ms_at_confirm = timeout > 0 && rt_ms < timeout
+              ? timeout - rt_ms
+              : null
+            
+            // For non-practice trials, ensure trajectory has end point
+            if (!isPractice && trialStartTime && trajectoryRef.current.length > 0) {
+              const lastPoint = trajectoryRef.current[trajectoryRef.current.length - 1]
+              // Only add end point if it's different from last point or enough time has passed
+              if (lastPoint.t < rt_ms - 10 || 
+                  Math.abs(lastPoint.x - cursorPos.x) > 1 || 
+                  Math.abs(lastPoint.y - cursorPos.y) > 1) {
+                trajectoryRef.current.push({
+                  x: cursorPos.x,
+                  y: cursorPos.y,
+                  t: rt_ms,
+                })
+              }
+            }
+            
+            // Process trajectory with quality metrics
+            const trajData = processTrajectory(
+              trajectoryRef.current,
+              'confirmed'
+            )
+            
             const metrics = getSpatialMetrics(cursorPos)
             const avgFPS = calculateAverageFPS()
+            const conditionData = getConditionData()
 
             bus.emit('trial:error', {
               trialId: trialData.trialId,
@@ -1383,7 +2189,7 @@ export function FittsTask({
               block_trial_count: trialData.blockTrialCount,
               error: 'slip',
               err_type: 'slip',
-              rt_ms: timestamp - trialData.timestamp,
+              rt_ms,
               clickPos: cursorPos,
               targetPos,
               target_center_x: metrics.targetCenter?.x ?? null,
@@ -1406,11 +2212,45 @@ export function FittsTask({
               width_scale_factor: widthScale,
               confirm_type: getConfirmType(false),
               timestamp,
+              // LBA-critical timing fields
+              entered_target: enteredTargetRef.current,
+              first_entry_time_ms: firstEntryTimeRef.current,
+              last_exit_time_ms: lastExitTimeRef.current,
+              time_in_target_total_ms: timeInTargetTotalRef.current,
+              verification_start_time_ms: verification_start_time_ms,
+              verification_end_time_ms: verification_end_time_ms,
+              verification_time_ms: verification_time_ms,
+              confirm_event_time_ms: confirmEventTimeRef.current,
+              confirm_event_source: confirmEventSourceRef.current,
+              timeout_limit_ms: timeout,
+              timeout_triggered: timeout_triggered,
+              time_remaining_ms_at_confirm: time_remaining_ms_at_confirm,
+              trial_end_reason: trialEndReasonRef.current,
+              // Trajectory data (for control theory analysis - cursor position over time)
+              trajectory: trajData.trajectory.length > 0 ? trajData.trajectory : (isPractice ? null : []),
+              // Trajectory quality metrics
+              traj_point_count: trajData.traj_point_count,
+              traj_duration_ms: trajData.traj_duration_ms,
+              traj_median_dt_ms: trajData.traj_median_dt_ms,
+              traj_max_dt_ms: trajData.traj_max_dt_ms,
+              traj_gap_count: trajData.traj_gap_count,
+              traj_has_monotonic_t: trajData.traj_has_monotonic_t,
+              traj_start_reason: trajData.traj_start_reason,
+              traj_end_reason: trajData.traj_end_reason,
+              traj_downsample_factor: trajData.traj_downsample_factor,
               // Practice and FPS tracking
               practice: isPractice,
               avg_fps: avgFPS,
-              // Submovement count (for Hybrid Analysis - quantifies intermittent control strategy)
-              submovement_count: submovementTrackingRef.current.submovementCount,
+              // Submovement count (legacy - for comparison)
+              submovement_count_legacy: submovementTrackingRef.current.submovementCount,
+              // Submovement count (recomputed from trajectory)
+              submovement_count_recomputed: trajData.submovement_count_recomputed,
+              submovement_primary_peak_v: trajData.submovement_primary_peak_v,
+              submovement_primary_peak_t_ms: trajData.submovement_primary_peak_t_ms,
+              submovement_algorithm: trajData.submovement_algorithm,
+              submovement_params_json: trajData.submovement_params_json,
+              // Condition integrity fields
+              ...conditionData,
             })
             onTrialError('slip')
           }
@@ -1535,6 +2375,51 @@ export function FittsTask({
       console.log('[FittsTask] Timer interval cleared')
     }
   }, [pressureEnabled, showStart, targetPos, timeout, handleTimeout])
+
+  // QC telemetry: visibility and focus tracking
+  useEffect(() => {
+    if (!trialStartTime || showStart || !targetPos) {
+      return
+    }
+    
+    const handleVisibilityChange = () => {
+      const now = performance.now()
+      if (document.hidden) {
+        // Tab hidden
+        if (qcTelemetryRef.current.tab_hidden_start === null) {
+          qcTelemetryRef.current.tab_hidden_start = now
+          qcTelemetryRef.current.tab_hidden_count++
+        }
+      } else {
+        // Tab visible again
+        if (qcTelemetryRef.current.tab_hidden_start !== null) {
+          const hiddenDuration = now - qcTelemetryRef.current.tab_hidden_start
+          qcTelemetryRef.current.tab_hidden_total_ms += hiddenDuration
+          qcTelemetryRef.current.tab_hidden_start = null
+        }
+      }
+    }
+    
+    const handleBlur = () => {
+      qcTelemetryRef.current.focus_blur_count++
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('blur', handleBlur)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('blur', handleBlur)
+      
+      // Finalize tab hidden time if still hidden
+      if (qcTelemetryRef.current.tab_hidden_start !== null) {
+        const now = performance.now()
+        const hiddenDuration = now - qcTelemetryRef.current.tab_hidden_start
+        qcTelemetryRef.current.tab_hidden_total_ms += hiddenDuration
+        qcTelemetryRef.current.tab_hidden_start = null
+      }
+    }
+  }, [trialStartTime, showStart, targetPos])
 
   // Cleanup on unmount
   useEffect(() => {

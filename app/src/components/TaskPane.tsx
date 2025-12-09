@@ -19,7 +19,7 @@ import {
   meetsDisplayRequirements,
   DisplayMetadata,
 } from '../utils/sessionMeta'
-import { sequenceForParticipant, parseCondition, type Cond } from '../experiment/counterbalance'
+import { sequenceForParticipant, parseCondition, getSequenceId, getSequenceTableVersion, type Cond } from '../experiment/counterbalance'
 import { getPolicyEngine } from '../lib/policy'
 import { 
   getSessionInfoFromURL, 
@@ -142,11 +142,19 @@ export function TaskPane() {
       if (!isNaN(idx)) {
         setParticipantIndex(idx)
         setParticipantId(storedPid)
-        const sequence = sequenceForParticipant(idx)
-        setBlockSequence(sequence)
-        const progress = getSessionProgress(storedPid, sequence.length)
-        setSessionProgress(progress)
-        return
+            const sequence = sequenceForParticipant(idx)
+            setBlockSequence(sequence)
+            const progress = getSessionProgress(storedPid, sequence.length)
+            setSessionProgress(progress)
+            
+            // Store sequence info for CSV logging
+            const sequenceInfo = {
+              sequence_id: getSequenceId(idx),
+              sequence_table_version: getSequenceTableVersion(),
+            }
+            sessionStorage.setItem('sequence_info', JSON.stringify(sequenceInfo))
+            
+            return
       }
     }
     

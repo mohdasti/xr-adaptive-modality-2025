@@ -48,6 +48,21 @@ export const WILLIAMS_8: Cond[][] = [
 ]
 
 /**
+ * Compute hash of the Williams matrix for versioning
+ */
+export function getSequenceTableVersion(): string {
+  // Simple hash of the matrix structure
+  const matrixStr = JSON.stringify(WILLIAMS_8)
+  let hash = 0
+  for (let i = 0; i < matrixStr.length; i++) {
+    const char = matrixStr.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return `v${Math.abs(hash).toString(36).substring(0, 8)}`
+}
+
+/**
  * Get counterbalanced sequence for a participant
  * @param participantIndex - Zero-based participant index
  * @returns Array of 8 condition codes in order
@@ -55,6 +70,70 @@ export const WILLIAMS_8: Cond[][] = [
 export function sequenceForParticipant(participantIndex: number): Cond[] {
   const sequenceIndex = participantIndex % 8
   return [...WILLIAMS_8[sequenceIndex]]
+}
+
+/**
+ * Get sequence index (1-8) for a participant
+ * @param participantIndex - Zero-based participant index
+ * @returns Sequence index (1-based)
+ */
+export function getSequenceId(participantIndex: number): number {
+  return (participantIndex % 8) + 1
+}
+
+/**
+ * Validate Williams block assignment
+ * Checks that exactly 8 blocks are completed and each condition appears exactly once
+ */
+export function validateWilliamsAssignment(
+  completedBlocks: Array<{ blockNumber: number; condition: Cond }>
+): {
+  valid: boolean
+  errors: string[]
+  session_invalid: boolean
+} {
+  const errors: string[] = []
+  
+  // Check exactly 8 blocks
+  if (completedBlocks.length !== 8) {
+    errors.push(`Expected 8 blocks, found ${completedBlocks.length}`)
+  }
+  
+  // Check each condition appears exactly once
+  const conditionCounts = new Map<Cond, number>()
+  const allConditions: Cond[] = ['HaS_P0', 'HaS_P1', 'GaS_P0', 'GaS_P1', 'HaA_P0', 'HaA_P1', 'GaA_P0', 'GaA_P1']
+  
+  for (const cond of allConditions) {
+    conditionCounts.set(cond, 0)
+  }
+  
+  for (const block of completedBlocks) {
+    const count = conditionCounts.get(block.condition) || 0
+    conditionCounts.set(block.condition, count + 1)
+  }
+  
+  // Check for duplicates
+  for (const [cond, count] of conditionCounts.entries()) {
+    if (count === 0) {
+      errors.push(`Missing condition: ${cond}`)
+    } else if (count > 1) {
+      errors.push(`Duplicate condition: ${cond} (appears ${count} times)`)
+    }
+  }
+  
+  // Check block numbers are 1-8
+  const blockNumbers = completedBlocks.map(b => b.blockNumber).sort((a, b) => a - b)
+  for (let i = 0; i < blockNumbers.length; i++) {
+    if (blockNumbers[i] !== i + 1) {
+      errors.push(`Block numbers not sequential: found ${blockNumbers.join(', ')}`)
+      break
+    }
+  }
+  
+  const valid = errors.length === 0
+  const session_invalid = !valid
+  
+  return { valid, errors, session_invalid }
 }
 
 /**

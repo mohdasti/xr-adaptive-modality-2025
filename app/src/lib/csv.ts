@@ -55,6 +55,31 @@ export const CSV_HEADERS = [
   'target_reentry_count',
   'submovement_count',
   'verification_time_ms',
+  // LBA-critical timing fields
+  'entered_target',
+  'first_entry_time_ms',
+  'last_exit_time_ms',
+  'time_in_target_total_ms',
+  'verification_start_time_ms',
+  'verification_end_time_ms',
+  'confirm_event_time_ms',
+  'confirm_event_source',
+  'timeout_limit_ms',
+  'timeout_triggered',
+  'time_remaining_ms_at_confirm',
+  'trial_end_reason',
+  // Trajectory data (for control theory analysis - cursor position over time)
+  'trajectory',
+  // Trajectory quality metrics
+  'traj_point_count',
+  'traj_duration_ms',
+  'traj_median_dt_ms',
+  'traj_max_dt_ms',
+  'traj_gap_count',
+  'traj_has_monotonic_t',
+  'traj_start_reason',
+  'traj_end_reason',
+  'traj_downsample_factor',
   // Width metrics (nominal vs displayed)
   'nominal_width_px',
   'displayed_width_px',
@@ -87,6 +112,42 @@ export const CSV_HEADERS = [
   'dpi',
   'practice',
   'avg_fps',
+  // Submovement analysis
+  'submovement_count_legacy',
+  'submovement_count_recomputed',
+  'submovement_primary_peak_v',
+  'submovement_primary_peak_t_ms',
+  'submovement_algorithm',
+  'submovement_params_json',
+  // Condition integrity fields
+  'cond_modality',
+  'cond_ui_mode',
+  'cond_pressure',
+  'condition_id',
+  'condition_version',
+  'app_build_sha',
+  'condition_mismatch_flag',
+  // Counterbalancing fields
+  'sequence_id',
+  'sequence_table_version',
+  'session_invalid',
+  // QC/Exclusion telemetry
+  'zoom_pct_measured',
+  'tab_hidden_count',
+  'tab_hidden_total_ms',
+  'trial_invalid_reason',
+  'trial_valid',
+  // Eye-tracking quality (always null/0 for simulated gaze - included for schema compatibility)
+  'eye_valid_sample_pct',
+  'eye_dropout_count',
+  'eye_avg_confidence',
+  'calibration_age_ms',
+  // Export metadata
+  'schema_version',
+  'exported_at_iso',
+  'data_quality_flags_json',
+  'traj_usable',
+  'exclude_main',
   // TLX columns (merged from block data)
   'tlx_mental',
   'tlx_physical',
@@ -165,6 +226,23 @@ export class CSVLogger {
       }
     }
     
+    // Load sequence info from sessionStorage if available
+    let sequenceInfo: Partial<CSVRow> = {}
+    if (typeof window !== 'undefined') {
+      try {
+        const sequenceStr = sessionStorage.getItem('sequence_info')
+        if (sequenceStr) {
+          const seqData = JSON.parse(sequenceStr)
+          sequenceInfo = {
+            sequence_id: seqData.sequence_id ?? null,
+            sequence_table_version: seqData.sequence_table_version ?? null,
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load sequence info from sessionStorage:', e)
+      }
+    }
+    
     // Load demographics from sessionStorage
     let demographics: Partial<CSVRow> = {}
     if (typeof window !== 'undefined') {
@@ -195,6 +273,7 @@ export class CSVLogger {
       ...(meta ?? {}),
       ...data,
       ...demographics,
+      ...sequenceInfo,
       pid,
       session_number: sessionNumber || null,
       browser: this.getBrowser(),
@@ -239,6 +318,8 @@ export class CSVLogger {
 
   /**
    * Validate row has required keys
+   * Note: Only validates core fields - all other fields have safe defaults
+   * This ensures data collection continues even if new fields are missing (no pilot data required)
    */
   private validateRow(row: CSVRow): boolean {
     const requiredKeys = ['ts', 'trial']
@@ -248,6 +329,7 @@ export class CSVLogger {
         return false
       }
     }
+    // All other fields are optional and have safe defaults - validation passes
     return true
   }
 
@@ -328,24 +410,75 @@ export class CSVLogger {
   toCSV(): string {
     const lines: string[] = []
     const debriefData = this.getDebriefResponses()
+    const schemaVersion = 'v3'
+    const exportedAt = new Date().toISOString()
 
     // Header row
     lines.push(this.headers.join(','))
 
     // Data rows
     for (const row of this.rows) {
-      // Merge debrief data into row
-      const rowWithDebrief: CSVRow = {
+      // Merge debrief data and export metadata into row
+      const rowWithMetadata: CSVRow = {
         ...row,
         ...debriefData,
+        schema_version: schemaVersion,
+        exported_at_iso: exportedAt,
       }
+      
+      // Add backward compatibility and data quality flags
+      const dataQualityFlags: Record<string, boolean | string> = {}
+      
+      // Check if trajectory is usable
+      const trajectory = rowWithMetadata.trajectory
+      const trajUsable = trajectory && 
+        (typeof trajectory === 'string' ? trajectory !== '[]' && trajectory !== 'null' : Array.isArray(trajectory) && trajectory.length > 0)
+      rowWithMetadata.traj_usable = trajUsable ?? false
+      
+      if (!trajUsable) {
+        dataQualityFlags.trajectory_missing = true
+      }
+      
+      // Check for pressure bug participants (example: based on app_build_sha or date)
+      const appBuildSha = rowWithMetadata.app_build_sha
+      const excludeMain = appBuildSha && typeof appBuildSha === 'string' && 
+        (appBuildSha.includes('bug') || appBuildSha.startsWith('dev'))
+      rowWithMetadata.exclude_main = excludeMain ?? false
+      
+      if (excludeMain) {
+        dataQualityFlags.pressure_bug_detected = true
+      }
+      
+      rowWithMetadata.data_quality_flags_json = Object.keys(dataQualityFlags).length > 0 
+        ? JSON.stringify(dataQualityFlags) 
+        : null
 
       const values = this.headers.map((header) => {
-        const value = rowWithDebrief[header]
+        const value = rowWithMetadata[header]
         if (value === null || value === undefined) return ''
         
-        // Escape quotes and wrap in quotes if contains comma
-        const strValue = String(value)
+        // Special handling for JSON fields: ensure safe stringification
+        let strValue: string
+        if (header === 'trajectory' || header === 'submovement_params_json' || header === 'data_quality_flags_json') {
+          if (value === null || value === undefined || value === '') {
+            strValue = ''
+          } else if (typeof value === 'string') {
+            // Already a string, use as-is
+            strValue = value
+          } else {
+            // Try to stringify, catch errors
+            try {
+              strValue = JSON.stringify(value)
+            } catch (e) {
+              console.warn(`Failed to stringify ${header}:`, e)
+              strValue = ''
+            }
+          }
+        } else {
+          strValue = String(value)
+        }
+        
+        // Escape quotes and wrap in quotes if contains comma/newline
         if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
           return `"${strValue.replace(/"/g, '""')}"`
         }
@@ -359,9 +492,11 @@ export class CSVLogger {
 
   /**
    * Download CSV file
+   * Uses merged CSV to include TLX data and all other block-level data in a single file
    */
   downloadCSV(filename: string = 'experiment_data.csv'): void {
-    const csvContent = this.toCSV()
+    // Use merged CSV to ensure all data (including TLX) is in one file
+    const csvContent = this.toMergedCSV()
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
 
@@ -475,6 +610,8 @@ export class CSVLogger {
    */
   toMergedCSV(): string {
     const debriefData = this.getDebriefResponses()
+    const schemaVersion = 'v3'
+    const exportedAt = new Date().toISOString()
     
     // Create a map of block_number -> TLX values
     const blockTLXMap = new Map<number, {
@@ -506,6 +643,29 @@ export class CSVLogger {
         ? blockTLXMap.get(blockNumber) 
         : null
 
+      // Add backward compatibility and data quality flags
+      const dataQualityFlags: Record<string, boolean | string> = {}
+      
+      // Check if trajectory is usable
+      const trajectory = row.trajectory
+      const trajUsable = trajectory && 
+        (typeof trajectory === 'string' ? trajectory !== '[]' && trajectory !== 'null' : Array.isArray(trajectory) && trajectory.length > 0)
+      const trajUsableValue = trajUsable ?? false
+      
+      if (!trajUsableValue) {
+        dataQualityFlags.trajectory_missing = true
+      }
+      
+      // Check for pressure bug participants
+      const appBuildSha = row.app_build_sha
+      const excludeMain = appBuildSha && typeof appBuildSha === 'string' && 
+        (appBuildSha.includes('bug') || appBuildSha.startsWith('dev'))
+      const excludeMainValue = excludeMain ?? false
+      
+      if (excludeMainValue) {
+        dataQualityFlags.pressure_bug_detected = true
+      }
+
       return {
         ...row,
         tlx_mental: tlxData?.tlx_mental ?? null,
@@ -515,8 +675,22 @@ export class CSVLogger {
         tlx_effort: tlxData?.tlx_effort ?? null,
         tlx_frustration: tlxData?.tlx_frustration ?? null,
         ...debriefData,
+        schema_version: schemaVersion,
+        exported_at_iso: exportedAt,
+        traj_usable: trajUsableValue,
+        exclude_main: excludeMainValue,
+        data_quality_flags_json: Object.keys(dataQualityFlags).length > 0 
+          ? JSON.stringify(dataQualityFlags) 
+          : null,
       }
     })
+
+    // Self-check: warn if missing trials (only warn, don't fail)
+    // Note: This is informational only - doesn't block export
+    const expectedTrials = 8 * 24 // 8 blocks × 24 trials per block (example - adjust based on your design)
+    if (mergedRows.length > 0 && mergedRows.length < expectedTrials * 0.9) {
+      console.warn(`[CSVLogger] Expected ~${expectedTrials} trials, found ${mergedRows.length}. Data may be incomplete.`)
+    }
 
     // Generate CSV with merged data
     const lines: string[] = []
@@ -527,7 +701,25 @@ export class CSVLogger {
         const value = row[header]
         if (value === null || value === undefined) return ''
         
-        const strValue = String(value)
+        // Special handling for JSON fields
+        let strValue: string
+        if (header === 'trajectory' || header === 'submovement_params_json' || header === 'data_quality_flags_json') {
+          if (value === null || value === undefined || value === '') {
+            strValue = ''
+          } else if (typeof value === 'string') {
+            strValue = value
+          } else {
+            try {
+              strValue = JSON.stringify(value)
+            } catch (e) {
+              console.warn(`Failed to stringify ${header}:`, e)
+              strValue = ''
+            }
+          }
+        } else {
+          strValue = String(value)
+        }
+        
         if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
           return `"${strValue.replace(/"/g, '""')}"`
         }
@@ -537,6 +729,95 @@ export class CSVLogger {
     }
 
     return lines.join('\n')
+  }
+  
+  /**
+   * Export block-level CSV (one row per block with TLX and metadata)
+   */
+  toBlockLevelCSV(): string {
+    const schemaVersion = 'v3'
+    const exportedAt = new Date().toISOString()
+    const lines: string[] = []
+    
+    // Block-level headers
+    const blockHeaders = [
+      'participant_id',
+      'block_number',
+      'modality',
+      'ui_mode',
+      'pressure',
+      'condition_id',
+      'block_order',
+      'tlx_mental',
+      'tlx_physical',
+      'tlx_temporal',
+      'tlx_performance',
+      'tlx_effort',
+      'tlx_frustration',
+      'schema_version',
+      'exported_at_iso',
+    ]
+    
+    lines.push(blockHeaders.join(','))
+    
+    for (const blockRow of this.blockRows) {
+      const row: Record<string, string | number | null> = {
+        participant_id: this.participantId,
+        block_number: blockRow.block_number,
+        modality: blockRow.modality,
+        ui_mode: blockRow.ui_mode,
+        pressure: null, // Not stored in block rows, would need to derive
+        condition_id: null, // Would need to derive from modality/ui_mode/pressure
+        block_order: null, // Would need to derive from sequence
+        tlx_mental: blockRow.tlx_mental,
+        tlx_physical: blockRow.tlx_physical,
+        tlx_temporal: blockRow.tlx_temporal,
+        tlx_performance: blockRow.tlx_performance,
+        tlx_effort: blockRow.tlx_effort,
+        tlx_frustration: blockRow.tlx_frustration,
+        schema_version: schemaVersion,
+        exported_at_iso: exportedAt,
+      }
+      
+      const values = blockHeaders.map((header) => {
+        const value = row[header]
+        if (value === null || value === undefined) return ''
+        const strValue = String(value)
+        if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+          return `"${strValue.replace(/"/g, '""')}"`
+        }
+        return strValue
+      })
+      lines.push(values.join(','))
+    }
+    
+    return lines.join('\n')
+  }
+  
+  /**
+   * Download block-level CSV
+   */
+  downloadBlockLevelCSV(filename?: string): void {
+    if (!filename) {
+      const pid = this.participantId || 'unknown'
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      filename = `${pid}_${timestamp}_blocks.csv`
+    }
+    
+    const csvContent = this.toBlockLevelCSV()
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.style.display = 'none'
+
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
   }
 
   /**
@@ -646,6 +927,34 @@ export function createRowFromTrial(
     target_reentry_count: payload.target_reentry_count ?? null,
     submovement_count: payload.submovement_count ?? null,
     verification_time_ms: payload.verification_time_ms ?? null,
+    // LBA-critical timing fields
+    entered_target: payload.entered_target ?? false,
+    first_entry_time_ms: payload.first_entry_time_ms ?? null,
+    last_exit_time_ms: payload.last_exit_time_ms ?? null,
+    time_in_target_total_ms: payload.time_in_target_total_ms ?? 0,
+    verification_start_time_ms: payload.verification_start_time_ms ?? null,
+    verification_end_time_ms: payload.verification_end_time_ms ?? null,
+    confirm_event_time_ms: payload.confirm_event_time_ms ?? null,
+    confirm_event_source: payload.confirm_event_source ?? 'none',
+    timeout_limit_ms: payload.timeout_limit_ms ?? null,
+    timeout_triggered: payload.timeout_triggered ?? false,
+    time_remaining_ms_at_confirm: payload.time_remaining_ms_at_confirm ?? null,
+    trial_end_reason: payload.trial_end_reason ?? 'invalid',
+    // Trajectory data (convert array to JSON string for CSV compatibility)
+    // Always ensure valid JSON: empty array [] for non-practice trials with no movement, null for practice
+    trajectory: payload.trajectory && Array.isArray(payload.trajectory)
+      ? (payload.trajectory.length > 0 ? JSON.stringify(payload.trajectory) : (payload.practice ? null : '[]'))
+      : null,
+    // Trajectory quality metrics
+    traj_point_count: payload.traj_point_count ?? null,
+    traj_duration_ms: payload.traj_duration_ms ?? null,
+    traj_median_dt_ms: payload.traj_median_dt_ms ?? null,
+    traj_max_dt_ms: payload.traj_max_dt_ms ?? null,
+    traj_gap_count: payload.traj_gap_count ?? null,
+    traj_has_monotonic_t: payload.traj_has_monotonic_t ?? null,
+    traj_start_reason: payload.traj_start_reason ?? null,
+    traj_end_reason: payload.traj_end_reason ?? null,
+    traj_downsample_factor: payload.traj_downsample_factor ?? null,
     // Width metrics (nominal vs displayed)
     nominal_width_px: payload.nominal_width_px ?? payload.W ?? null,
     displayed_width_px: payload.displayed_width_px ?? null,
@@ -677,6 +986,43 @@ export function createRowFromTrial(
     user_agent: displayMeta?.user_agent ?? payload.user_agent ?? null,
     practice: payload.practice ?? false,
     avg_fps: payload.avg_fps ?? null,
+    // Submovement analysis (all optional - safe defaults)
+    submovement_count_legacy: payload.submovement_count_legacy ?? payload.submovement_count ?? null,
+    submovement_count_recomputed: payload.submovement_count_recomputed ?? null,
+    submovement_primary_peak_v: payload.submovement_primary_peak_v ?? null,
+    submovement_primary_peak_t_ms: payload.submovement_primary_peak_t_ms ?? null,
+    submovement_algorithm: payload.submovement_algorithm ?? null,
+    submovement_params_json: payload.submovement_params_json ?? null,
+    // Condition integrity fields (all optional - safe defaults)
+    cond_modality: payload.cond_modality ?? payload.modality ?? null,
+    cond_ui_mode: payload.cond_ui_mode ?? payload.ui_mode ?? null,
+    cond_pressure: payload.cond_pressure ?? payload.pressure ?? null,
+    condition_id: payload.condition_id ?? null,
+    condition_version: payload.condition_version ?? null,
+    app_build_sha: payload.app_build_sha ?? null,
+    condition_mismatch_flag: payload.condition_mismatch_flag ?? false,
+    // Counterbalancing fields (optional - loaded from sessionStorage if available)
+    sequence_id: payload.sequence_id ?? null,
+    sequence_table_version: payload.sequence_table_version ?? null,
+    session_invalid: payload.session_invalid ?? false,
+    // QC/Exclusion telemetry (all optional - safe defaults)
+    zoom_pct_measured: payload.zoom_pct_measured ?? payload.zoom_pct ?? null,
+    tab_hidden_count: payload.tab_hidden_count ?? 0,
+    tab_hidden_total_ms: payload.tab_hidden_total_ms ?? 0,
+    trial_invalid_reason: payload.trial_invalid_reason ?? null,
+    trial_valid: payload.trial_valid ?? true,
+    // Eye-tracking quality (always null/0 for simulated gaze - included for schema compatibility)
+    // Note: This study uses simulated gaze, not actual eye tracking
+    eye_valid_sample_pct: payload.eye_valid_sample_pct ?? null,
+    eye_dropout_count: payload.eye_dropout_count ?? 0,
+    eye_avg_confidence: payload.eye_avg_confidence ?? null,
+    calibration_age_ms: payload.calibration_age_ms ?? null, // Calibration timestamp age (for simulated gaze calibration)
+    // Export metadata (set at export time - always present)
+    schema_version: payload.schema_version ?? null,
+    exported_at_iso: payload.exported_at_iso ?? null,
+    data_quality_flags_json: payload.data_quality_flags_json ?? null,
+    traj_usable: payload.traj_usable ?? null,
+    exclude_main: payload.exclude_main ?? false,
   }
   
   return row

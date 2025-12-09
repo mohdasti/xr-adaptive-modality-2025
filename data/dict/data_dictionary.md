@@ -4,14 +4,17 @@ Complete specification of all CSV columns in the experiment data.
 
 ## Overview
 
-The experiment data is exported as CSV files with **77 columns**. Each row represents a single trial.
+The experiment data is exported as **a single merged CSV file** with **162 columns**. Each row represents a single trial.
 
 **File Format**: CSV (UTF-8 encoding)  
 **Column Order**: Fixed (as defined in `app/src/lib/csv.ts`)  
-**Headers**: Present in first row
+**Headers**: Present in first row  
+**Export Method**: Single merged file containing all trial data + TLX data (merged from block-level)
 
-**Last Updated**: December 8, 2025  
-**Schema Version**: 2.0
+**Last Updated**: December 2025  
+**Schema Version**: 3.0
+
+**Note**: Participants download one CSV file that contains all their trial data. TLX (workload) scores are merged into each trial row based on block number.
 
 ---
 
@@ -310,36 +313,153 @@ The experiment data is exported as CSV files with **77 columns**. Each row repre
 - **Type**: Integer
 - **Format**: Count
 - **Example**: `0`, `1`, `2`
-- **Description**: Number of velocity peaks (submovements) in cursor trajectory
-- **Note**: Quantifies intermittent control strategy
+- **Note**: **DEPRECATED** - Use `submovement_count_legacy` or `submovement_count_recomputed` instead
+- **Description**: Legacy submovement count (kept for backward compatibility)
 
 #### 48. `verification_time_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds
+- **Example**: `150`, `300`, `500`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time from first target entry to final selection (verification phase duration)
+- **Note**: Separates "ballistic movement" from "precise stopping" phases. Null if target was never entered.
+
+#### 49-58. LBA-Critical Timing Fields (Verification Phase Segmentation)
+
+These fields enable Linear Ballistic Accumulator (LBA) modeling by segmenting the verification phase.
+
+##### 49. `entered_target`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether the cursor entered the target at least once during the trial
+
+##### 50. `first_entry_time_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds relative to trial start
+- **Example**: `250`, `450`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time of first target entry (relative to trial start)
+- **Note**: Null if target was never entered
+
+##### 51. `last_exit_time_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds relative to trial start
+- **Example**: `300`, `500`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time of last target exit (relative to trial start)
+- **Note**: Null if cursor never exited after entering, or if target was never entered
+
+##### 52. `time_in_target_total_ms`
 - **Type**: Number (integer)
 - **Format**: Milliseconds
-- **Example**: `150`, `300`, `500`
+- **Example**: `0`, `150`, `300`
 - **Units**: Milliseconds (ms)
-- **Description**: Time from first target entry to final selection
-- **Note**: Separates "ballistic movement" from "precise stopping" phases
+- **Description**: Total cumulative time spent inside target (sum of all entry durations)
+- **Note**: Includes time if cursor is still in target at trial end
+
+##### 53. `verification_start_time_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds relative to trial start
+- **Example**: `250`, `450`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Start of verification phase (same as `first_entry_time_ms`)
+- **Note**: Null if target was never entered
+
+##### 54. `verification_end_time_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds relative to trial start
+- **Example**: `400`, `600`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: End of verification phase (confirm event time if confirmed, null for timeout)
+- **Note**: Null if trial ended in timeout without confirmation
+
+##### 55. `confirm_event_time_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds relative to trial start
+- **Example**: `400`, `600`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time when confirmation event occurred (click/space/dwell)
+- **Note**: Null for timeout trials
+
+##### 56. `confirm_event_source`
+- **Type**: String (categorical)
+- **Values**: `'click'`, `'space'`, `'dwell'`, `'none'`
+- **Example**: `'click'`, `'dwell'`, `'none'`
+- **Description**: Source of confirmation event
+- **Encoding**:
+  - `'click'`: Mouse/touch click (hand modality)
+  - `'space'`: Space key press (gaze confirmation mode)
+  - `'dwell'`: Auto-confirm via dwell time (gaze dwell mode)
+  - `'none'`: No confirmation (timeout)
+
+##### 57. `timeout_limit_ms`
+- **Type**: Number (integer)
+- **Format**: Milliseconds
+- **Example**: `6000`
+- **Units**: Milliseconds (ms)
+- **Description**: Timeout limit for this trial (typically 6000ms)
+
+##### 58. `timeout_triggered`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether the trial ended due to timeout
+- **Note**: `true` for timeout errors, `false` for successful completions or misses
+
+##### 59. `time_remaining_ms_at_confirm`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds
+- **Example**: `1500`, `3000`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time remaining on timeout clock when trial completed
+- **Note**: Null for timeout trials or if timeout was not set
+
+##### 60. `trial_end_reason`
+- **Type**: String (categorical)
+- **Values**: `'confirmed'`, `'timeout'`, `'aborted'`, `'invalid'`
+- **Example**: `'confirmed'`, `'timeout'`
+- **Description**: Reason why the trial ended
+- **Encoding**:
+  - `'confirmed'`: Trial completed with confirmation event (hit or miss)
+  - `'timeout'`: Trial ended due to timeout
+  - `'aborted'`: Trial was aborted (rare)
+  - `'invalid'`: Trial state invalid (should not occur)
+
+#### 61. `trajectory`
+- **Type**: String (JSON) | null
+- **Format**: JSON string containing array of trajectory points, or `[]` for empty, or `null` for practice trials
+- **Example**: `[{"x": 100.5, "y": 200.3, "t": 0.0}, {"x": 101.2, "y": 201.1, "t": 16.7}, ...]`
+- **Description**: Cursor position over time during trial, logged at ~60fps
+- **Structure**: Array of objects with:
+  - `x`: Cursor X position (pixels, float)
+  - `y`: Cursor Y position (pixels, float)
+  - `t`: Time relative to trial start (milliseconds, float)
+- **Note**: 
+  - Always logged for non-practice trials (at least start + end points)
+  - `[]` (empty array) for non-practice trials with no movement
+  - `null` for practice trials
+  - Can be parsed in R: `jsonlite::fromJSON(trajectory)`
+  - Used for advanced control theory analyses (velocity profiles, submovement detection, smoothness metrics)
+  - Automatically downsampled if >600 points (see `traj_downsample_factor`)
 
 ---
 
 ### Width Scaling Metrics (3 columns)
 
-#### 49. `nominal_width_px`
+#### 71. `nominal_width_px`
 - **Type**: Number (integer)
 - **Format**: Pixels
 - **Example**: `40`, `50`, `80`
 - **Units**: Pixels (px)
 - **Description**: Original target width (design specification)
 
-#### 50. `displayed_width_px`
+#### 72. `displayed_width_px`
 - **Type**: Number (float)
 - **Format**: Pixels
 - **Example**: `40.0`, `60.0`, `80.0`
 - **Units**: Pixels (px)
 - **Description**: Actual rendered target width (after adaptive scaling)
 
-#### 51. `width_scale_factor`
+#### 73. `width_scale_factor`
 - **Type**: Number (float)
 - **Format**: Multiplier
 - **Example**: `1.0`, `1.5`, `2.0`
@@ -351,38 +471,87 @@ The experiment data is exported as CSV files with **77 columns**. Each row repre
 
 ### Alignment Gate Metrics (4 columns)
 
-#### 52. `alignment_gate_enabled`
+#### 74. `alignment_gate_enabled`
 - **Type**: Boolean
 - **Format**: `true` / `false`
 - **Description**: Whether alignment gate was active for this trial
 
-#### 53. `alignment_gate_false_triggers`
+#### 75. `alignment_gate_false_triggers`
 - **Type**: Integer
 - **Format**: Count
 - **Example**: `0`, `1`, `2`
 - **Description**: Number of false triggers (misalignment detected incorrectly)
 
-#### 54. `alignment_gate_recovery_time_ms`
+#### 76. `alignment_gate_recovery_time_ms`
 - **Type**: Number (integer)
 - **Format**: Milliseconds
 - **Description**: Time spent recovering from false triggers
 
-#### 55. `alignment_gate_mean_recovery_time_ms`
+#### 77. `alignment_gate_mean_recovery_time_ms`
 - **Type**: Number (float)
 - **Format**: Milliseconds
 - **Description**: Mean recovery time across all false triggers in trial
 
 ---
 
+### Submovement Analysis (6 columns)
+
+#### 78. `submovement_count_legacy`
+- **Type**: Integer
+- **Format**: Count
+- **Example**: `0`, `1`, `2`
+- **Description**: Legacy submovement count (on-the-fly detection, kept for comparison)
+- **Note**: Original algorithm using velocity peak detection during trial
+
+#### 79. `submovement_count_recomputed`
+- **Type**: Integer
+- **Format**: Count
+- **Example**: `0`, `1`, `2`, `3`
+- **Description**: Recomputed submovement count from trajectory (post-trial analysis)
+- **Note**: More reliable and reproducible than legacy method
+
+#### 80. `submovement_primary_peak_v`
+- **Type**: Number (float) | null
+- **Format**: Velocity in px/s
+- **Example**: `250.5`, `300.0`, `null`
+- **Units**: Pixels per second (px/s)
+- **Description**: Velocity of the primary (highest) peak in speed profile
+- **Note**: Null if no peaks detected
+
+#### 81. `submovement_primary_peak_t_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds relative to trial start
+- **Example**: `150`, `250`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time of primary peak occurrence
+- **Note**: Null if no peaks detected
+
+#### 82. `submovement_algorithm`
+- **Type**: String
+- **Format**: Algorithm identifier
+- **Example**: `'peak_detection_v1.0'`
+- **Description**: Algorithm used for submovement computation
+- **Note**: Currently `'peak_detection_v1.0'` (speed profile peak detection with smoothing)
+
+#### 83. `submovement_params_json`
+- **Type**: String (JSON)
+- **Format**: JSON string with algorithm parameters
+- **Example**: `{"min_peak_distance_ms": 50, "min_peak_prominence": 20, "smoothing_window": 5}`
+- **Description**: Parameters used for submovement detection
+- **Structure**:
+  - `min_peak_distance_ms`: Minimum time between peaks (default: 50ms)
+  - `min_peak_prominence`: Minimum peak velocity in px/s (default: 20)
+  - `smoothing_window`: Moving average window size (default: 5)
+
 ### Task Configuration (2 columns)
 
-#### 56. `task_type`
+#### 84. `task_type`
 - **Type**: String (categorical)
 - **Values**: `'point'`, `'drag'` (if implemented)
 - **Example**: `'point'`
 - **Description**: Type of task (currently all trials are `'point'`)
 
-#### 57. `drag_distance`
+#### 85. `drag_distance`
 - **Type**: Number (float)
 - **Format**: Pixels
 - **Description**: Distance dragged (for drag tasks, if implemented)
@@ -390,73 +559,251 @@ The experiment data is exported as CSV files with **77 columns**. Each row repre
 
 ---
 
+### Condition Integrity Fields (7 columns)
+
+These fields ensure data quality by tracking the intended experimental condition and detecting any mismatches.
+
+#### 86. `cond_modality`
+- **Type**: String (categorical)
+- **Values**: `'hand'` or `'gaze'`
+- **Description**: Modality from frozen condition (single source of truth)
+- **Note**: Should match `modality` - use `condition_mismatch_flag` to check
+
+#### 87. `cond_ui_mode`
+- **Type**: String (categorical)
+- **Values**: `'static'` or `'adaptive'`
+- **Description**: UI mode from frozen condition (single source of truth)
+- **Note**: Should match `ui_mode`
+
+#### 88. `cond_pressure`
+- **Type**: Number (0 or 1)
+- **Format**: Binary indicator
+- **Description**: Pressure condition from frozen condition (single source of truth)
+- **Note**: Should match `pressure`
+
+#### 89. `condition_id`
+- **Type**: String
+- **Format**: Condition identifier
+- **Example**: `'hand_static_p0'`, `'gaze_adaptive_p1'`
+- **Description**: Unique condition identifier combining modality, UI mode, and pressure
+- **Format**: `{modality}_{ui_mode}_p{pressure}`
+
+#### 90. `condition_version`
+- **Type**: String
+- **Format**: Version string
+- **Example**: `'1.0'`
+- **Description**: Version of condition encoding scheme
+
+#### 91. `app_build_sha`
+- **Type**: String
+- **Format**: Git commit hash or build identifier
+- **Example**: `'abc123def'`, `'dev'`
+- **Description**: Build/commit identifier for reproducibility
+- **Note**: Injected at build time via Vite environment variable
+
+#### 92. `condition_mismatch_flag`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether any condition field mismatches the frozen condition
+- **Note**: `true` indicates potential data quality issue
+
+### Counterbalancing Fields (3 columns)
+
+#### 93. `sequence_id`
+- **Type**: Integer
+- **Format**: Sequence index (1-8)
+- **Example**: `1`, `2`, `8`
+- **Description**: Williams design sequence assigned to participant
+- **Note**: Derived from participant index modulo 8
+
+#### 94. `sequence_table_version`
+- **Type**: String
+- **Format**: Hash identifier
+- **Example**: `'v1a2b3c4'`
+- **Description**: Version hash of the Williams counterbalancing matrix
+- **Note**: Used to verify counterbalancing table consistency
+
+#### 95. `session_invalid`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether session validation failed (e.g., wrong number of blocks, duplicate conditions)
+- **Note**: Set by post-session validation, not per-trial
+
+### QC/Exclusion Telemetry (5 columns)
+
+These fields enable quality control and exclusion of invalid trials.
+
+#### 96. `zoom_pct_measured`
+- **Type**: Number (float) | null
+- **Format**: Percentage
+- **Example**: `100.0`, `95.0`, `105.0`
+- **Units**: Percentage (%)
+- **Description**: Measured browser zoom level at trial start
+- **Note**: Should be 100% for valid trials. Measured reliably (not from browser UI).
+
+#### 97. `tab_hidden_count`
+- **Type**: Integer
+- **Format**: Count
+- **Example**: `0`, `1`, `2`
+- **Description**: Number of times the browser tab was hidden during trial
+- **Note**: Trials with >0 should be reviewed for exclusion
+
+#### 98. `tab_hidden_total_ms`
+- **Type**: Number (integer)
+- **Format**: Milliseconds
+- **Example**: `0`, `150`, `500`
+- **Units**: Milliseconds (ms)
+- **Description**: Total cumulative time the tab was hidden during trial
+- **Note**: Trials with >500ms should be excluded
+
+#### 99. `trial_invalid_reason`
+- **Type**: String | null
+- **Format**: Semicolon-separated violation codes
+- **Example**: `'tab_hidden_2times;tab_hidden_500ms'`, `'zoom_95.0pct'`, `null`
+- **Description**: Reason(s) why trial is invalid (if any)
+- **Violation Codes**:
+  - `tab_hidden_{N}times`: Tab hidden N times
+  - `tab_hidden_{N}ms`: Tab hidden for N milliseconds
+  - `focus_blur_{N}times`: Window lost focus N times
+  - `zoom_{N}pct`: Zoom level not 100%
+
+#### 100. `trial_valid`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether trial passed quality control checks
+- **Note**: `false` if any violations detected (see `trial_invalid_reason`)
+
+### Eye-Tracking Quality (4 columns)
+
+**Note**: These fields are included for schema compatibility but are always null/0 since this study uses **simulated gaze**, not actual eye tracking.
+
+#### 101. `eye_valid_sample_pct`
+- **Type**: null (always)
+- **Description**: Percentage of valid eye tracking samples
+- **Note**: Always `null` for simulated gaze
+
+#### 102. `eye_dropout_count`
+- **Type**: 0 (always)
+- **Description**: Number of eye tracking dropouts
+- **Note**: Always `0` for simulated gaze
+
+#### 103. `eye_avg_confidence`
+- **Type**: null (always)
+- **Description**: Average confidence score from eye tracker
+- **Note**: Always `null` for simulated gaze
+
+#### 104. `calibration_age_ms`
+- **Type**: Number (integer) | null
+- **Format**: Milliseconds
+- **Example**: `5000`, `10000`, `null`
+- **Units**: Milliseconds (ms)
+- **Description**: Time since last calibration (for simulated gaze calibration timestamp)
+- **Note**: Tracks calibration timestamp age, not actual eye tracking calibration
+
 ### Display & System Metadata (13 columns)
 
-#### 58-59. `pixels_per_mm`, `pixels_per_degree`
+#### 105-106. `pixels_per_mm`, `pixels_per_degree`
 - **Type**: Number (float)
 - **Format**: Calibration values
 - **Description**: Display calibration from credit card calibration procedure
 
-#### 60-61. `screen_width`, `screen_height`
+#### 107-108. `screen_width`, `screen_height`
 - **Type**: Integer
 - **Format**: Pixels
 - **Description**: Physical screen resolution
 
-#### 62-63. `window_width`, `window_height`
+#### 109-110. `window_width`, `window_height`
 - **Type**: Integer
 - **Format**: Pixels
 - **Description**: Browser window dimensions
 
-#### 64. `device_pixel_ratio`
+#### 111. `device_pixel_ratio`
 - **Type**: Number (float)
 - **Format**: Ratio
 - **Example**: `1.0`, `2.0`, `1.5`
 - **Description**: Device pixel ratio (DPR) for HiDPI displays
 
-#### 65-66. `zoom_level`, `zoom_pct`
+#### 112-113. `zoom_level`, `zoom_pct`
 - **Type**: Number
 - **Format**: Zoom factor
 - **Description**: Browser zoom level (should be 100% for valid trials)
 
-#### 67-68. `is_fullscreen`, `fullscreen`
+#### 114-115. `is_fullscreen`, `fullscreen`
 - **Type**: Boolean
 - **Format**: `true` / `false`
 - **Description**: Whether window was in fullscreen mode (required for valid trials)
 
-#### 69-70. `viewport_w`, `viewport_h`
+#### 116-117. `viewport_w`, `viewport_h`
 - **Type**: Integer
 - **Format**: Pixels
 - **Description**: Viewport dimensions
 
-#### 71-72. `focus_blur_count`, `tab_hidden_ms`
+#### 118-119. `focus_blur_count`, `tab_hidden_ms`
 - **Type**: Integer
 - **Format**: Count / Milliseconds
 - **Description**: Window focus/blur events and tab visibility duration
 - **Note**: Trials with `tab_hidden_ms > 500ms` should be excluded
 
-#### 73-74. `user_agent`, `browser`
+#### 120-121. `user_agent`, `browser`
 - **Type**: String
 - **Format**: Browser identification
 - **Example**: `'Chrome'`, `'Firefox'`, `'Safari'`
 - **Description**: Browser type and user agent string
 
-#### 75. `dpi`
+#### 122. `dpi`
 - **Type**: Number (float)
 - **Format**: Device pixel ratio (duplicate of `device_pixel_ratio`)
 - **Note**: Legacy field, use `device_pixel_ratio`
 
 ---
 
+### Export Metadata (5 columns)
+
+#### 123. `schema_version`
+- **Type**: String
+- **Format**: Version identifier
+- **Example**: `'v3'`
+- **Description**: Schema version of the CSV export
+- **Note**: Set at export time, same for all rows in file
+
+#### 124. `exported_at_iso`
+- **Type**: String (ISO timestamp)
+- **Format**: ISO 8601 timestamp
+- **Example**: `'2025-12-15T10:30:45.123Z'`
+- **Description**: When the CSV file was exported
+- **Note**: Set at export time, same for all rows in file
+
+#### 125. `data_quality_flags_json`
+- **Type**: String (JSON) | null
+- **Format**: JSON string with computed quality flags
+- **Example**: `{"trajectory_missing": true, "pressure_bug_detected": true}`
+- **Description**: Computed data quality flags at export time
+- **Structure**: Object with boolean flags:
+  - `trajectory_missing`: Trajectory data unavailable
+  - `pressure_bug_detected`: Participant affected by pressure logging bug
+
+#### 126. `traj_usable`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether trajectory data is usable for analysis
+- **Note**: `false` if trajectory missing or empty
+
+#### 127. `exclude_main`
+- **Type**: Boolean
+- **Format**: `true` / `false`
+- **Description**: Whether participant should be excluded from main analysis
+- **Note**: `true` for participants affected by pressure bug or other data quality issues
+
 ### Practice & Performance Tracking (2 columns)
 
-#### 76. `practice`
+#### 128. `practice`
 - **Type**: Boolean
 - **Format**: `true` / `false`
 - **Required**: Yes
 - **Description**: Whether this is a practice trial
 - **Note**: Practice trials should be excluded from analysis
 
-#### 77. `avg_fps`
+#### 129. `avg_fps`
 - **Type**: Number (float)
 - **Format**: Frames per second
 - **Example**: `60.0`, `59.8`
@@ -466,7 +813,7 @@ The experiment data is exported as CSV files with **77 columns**. Each row repre
 
 ### Workload Measures (6 columns)
 
-#### 78-83. NASA-TLX Subscales
+#### 130-135. NASA-TLX Subscales
 - `tlx_mental`: Integer (0-100) - Mental Demand
 - `tlx_physical`: Integer (0-100) - Physical Demand
 - `tlx_temporal`: Integer (0-100) - Temporal Demand
@@ -480,15 +827,15 @@ The experiment data is exported as CSV files with **77 columns**. Each row repre
 
 ### Debrief Responses (3 columns)
 
-#### 84. `debrief_q1_adaptation_noticed`
+#### 136. `debrief_q1_adaptation_noticed`
 - **Type**: String (text)
 - **Description**: Response to "Did you notice the interface adapting?"
 
-#### 85. `debrief_q2_strategy_changed`
+#### 137. `debrief_q2_strategy_changed`
 - **Type**: String (text)
 - **Description**: Response to "Did you change your strategy?"
 
-#### 86. `debrief_timestamp`
+#### 138. `debrief_timestamp`
 - **Type**: String (ISO timestamp)
 - **Description**: When debrief form was submitted
 
@@ -498,14 +845,15 @@ The experiment data is exported as CSV files with **77 columns**. Each row repre
 
 | Type | Count | Example Columns |
 |------|-------|-----------------|
-| String (categorical) | 15 | modality, ui_mode, err_type, confirm_type, browser, block_order |
-| Number (integer) | 25 | trial_number, block_number, rt_ms, A, W, age, gaming_hours_per_week |
-| Number (float) | 20 | ID, pressure, width_scale_factor, pixels_per_mm, device_pixel_ratio |
-| Boolean | 8 | correct, practice, pressure, aging, adaptation_triggered, alignment_gate_enabled |
-| Timestamp | 2 | ts, debrief_timestamp |
+| String (categorical) | 20 | modality, ui_mode, err_type, confirm_type, browser, block_order, condition_id, trial_end_reason |
+| Number (integer) | 45 | trial_number, block_number, rt_ms, A, W, age, gaming_hours_per_week, traj_point_count, sequence_id |
+| Number (float) | 35 | ID, pressure, width_scale_factor, pixels_per_mm, device_pixel_ratio, zoom_pct_measured, submovement_primary_peak_v |
+| Boolean | 12 | correct, practice, pressure, aging, entered_target, timeout_triggered, trial_valid, condition_mismatch_flag |
+| Timestamp | 3 | ts, debrief_timestamp, exported_at_iso |
 | Text | 2 | debrief_q1_adaptation_noticed, debrief_q2_strategy_changed |
+| JSON String | 4 | trajectory, submovement_params_json, data_quality_flags_json |
 
-**Total**: 77 columns
+**Total**: 162 columns (including trajectory and all new fields)
 
 ---
 
@@ -595,6 +943,17 @@ P001,1,25,male,...,hand,static,1,...,450,true,...
 
 ---
 
+## Export Format
+
+**Single CSV File**: Participants download one merged CSV file containing:
+- All trial data (one row per trial)
+- TLX (workload) scores merged into each trial row based on block number
+- All metadata, quality flags, and export information
+
+**File Naming**: `{participant_id}_{timestamp}_merged.csv`
+
+**Note**: The `downloadCSV()` function automatically uses `toMergedCSV()` which merges TLX data from block-level storage into trial rows, ensuring a single comprehensive file.
+
 ## Version History
 
 - **v1.0** (2025-01-15): Initial schema definition (23 columns)
@@ -602,3 +961,13 @@ P001,1,25,male,...,hand,static,1,...,450,true,...
   - Added all new fields (submovement_count, width scaling, alignment gates, etc.)
   - Documented pressure logging bug and fix
   - Removed references to dropped features (aging, pupillometry)
+- **v3.0** (2025-12): Major expansion (162 columns)
+  - Added LBA-critical timing fields (verification phase segmentation)
+  - Added trajectory quality metrics
+  - Added submovement recomputation from trajectory
+  - Added condition integrity fields
+  - Added counterbalancing validation fields
+  - Added QC/exclusion telemetry
+  - Added export metadata (schema version, export timestamp)
+  - Added backward compatibility flags
+  - Clarified simulated gaze (no actual eye tracking)
