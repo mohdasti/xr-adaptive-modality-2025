@@ -1,3 +1,5 @@
+import { getZoomPct } from '../lib/systemCheck'
+
 export interface DisplayMetadata {
   screen_width: number
   screen_height: number
@@ -35,22 +37,9 @@ function isFullscreen(): boolean {
 export function getDisplayMetadata(): DisplayMetadata {
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio ?? 1 : 1
   
-  // Detect browser zoom level (approximate)
-  // Browser zoom affects outerWidth/outerHeight vs screen dimensions
-  let zoomLevel = 100
-  if (typeof window !== 'undefined' && typeof screen !== 'undefined') {
-    // Approximate zoom: compare window outer dimensions to screen
-    // This is an approximation and may not be 100% accurate
-    const zoomX = (window.outerWidth / screen.width) * 100
-    const zoomY = (window.outerHeight / screen.height) * 100
-    // Use average, but if window is maximized/fullscreen, fall back to devicePixelRatio
-    if (window.outerWidth < screen.width * 0.95) {
-      zoomLevel = Math.round((zoomX + zoomY) / 2)
-    } else {
-      // For fullscreen/maximized windows, use devicePixelRatio as proxy
-      zoomLevel = Math.round(devicePixelRatio * 100)
-    }
-  }
+  // Use the improved zoom detection from systemCheck.ts
+  // This handles Chrome's zoom detection bugs on high-DPI displays
+  const zoomLevel = getZoomPct()
 
   return {
     screen_width: typeof window !== 'undefined' ? window.screen.width : 0,

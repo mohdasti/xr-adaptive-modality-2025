@@ -3,6 +3,7 @@
  */
 
 import { telemetryConfig } from './config'
+import { getZoomPct } from '../systemCheck'
 import pako from 'pako'
 
 // Types
@@ -258,7 +259,7 @@ export function recordSystemSnapshot(): SystemSnapshot {
     window_width: window.innerWidth,
     window_height: window.innerHeight,
     device_pixel_ratio: window.devicePixelRatio ?? 1,
-    zoom_level: Math.round((window.devicePixelRatio ?? 1) * 100),
+    zoom_level: getZoomPct(), // Use improved zoom detection
     is_fullscreen: document.fullscreenElement !== null,
   } : {
     screen_width: 0,

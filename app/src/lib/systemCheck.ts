@@ -57,42 +57,47 @@ export function isFullscreen(): boolean {
 
 /**
  * Get zoom percentage
- * Uses visualViewport.scale if available (most accurate), otherwise falls back to 1-inch method
+ * Uses multiple methods to cross-validate and ensure accuracy, especially for Chrome
  * Returns a value that should be close to 100 at default zoom
  * 
- * Note: On high-DPI displays, we need to account for devicePixelRatio correctly.
- * visualViewport.scale is the most reliable method when available.
+ * Note: Chrome can incorrectly report zoom on high-DPI displays, so we use multiple
+ * detection methods and cross-validate the results.
  */
 export function getZoomPct(): number {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return 100
   }
 
-  // Method 1: Prefer visualViewport.scale (most accurate for browser zoom)
-  // visualViewport.scale directly represents browser zoom:
-  // - scale = 1.0 means 100% zoom
-  // - scale = 0.5 means 50% zoom (zoomed out)
-  // - scale = 2.0 means 200% zoom (zoomed in)
+  const dpr = window.devicePixelRatio ?? 1
+  const results: Array<{ method: string; zoom: number; confidence: number }> = []
+
+  // Method 1: visualViewport.scale (most accurate when available)
+  // However, Chrome may report this incorrectly on some displays
   if (window.visualViewport && typeof window.visualViewport.scale === 'number') {
     const scale = window.visualViewport.scale
     const zoomPct = Math.round(scale * 100)
     
-    // Debug logging
+    // Lower confidence if scale seems suspicious (e.g., always 1.0 on Chrome with display scaling)
+    let confidence = 0.9
+    if (zoomPct === 100 && dpr !== 1) {
+      // Chrome might report 100% even when zoomed on high-DPI displays
+      confidence = 0.5
+    }
+    
+    results.push({ method: 'visualViewport', zoom: zoomPct, confidence })
+    
     if (import.meta.env.DEV) {
       console.log('[systemCheck] Zoom detection (visualViewport):', {
         scale,
         zoomPct,
-        dpr: window.devicePixelRatio,
+        dpr,
+        confidence,
       })
     }
-    
-    return zoomPct
   }
 
-  // Method 2: Fallback to 1-inch test element method
+  // Method 2: 1-inch test element method
   // This measures CSS pixels, which are affected by browser zoom
-  // NOTE: On some high-DPI displays/browsers, this method can be unreliable
-  // We'll use it as a fallback but apply corrections if needed
   const div = document.createElement('div')
   div.style.width = '1in'
   div.style.height = '1in'
@@ -111,49 +116,133 @@ export function getZoomPct(): number {
   const px = div.offsetWidth
   document.body.removeChild(div)
 
-  const dpr = window.devicePixelRatio ?? 1
-  
   // At 100% browser zoom, 1in should equal 96 CSS pixels
-  // However, on high-DPI displays, some browsers report this differently
-  // If we measure 192px when DPR=2, it might actually mean 100% zoom (not 200%)
-  // This is because the browser might be accounting for DPR in the measurement
+  // On high-DPI displays, Chrome may report this differently
+  let zoomPct1in = Math.round((px / 96) * 100)
   
-  // Try the direct calculation first
-  let zoomPct = Math.round((px / 96) * 100)
-  
-  // Heuristic: If DPR > 1 and zoom seems too high (>150%), try dividing by DPR
-  // This handles cases where the measurement is doubled on high-DPI displays
-  if (dpr > 1 && zoomPct > 150) {
-    const correctedZoom = Math.round((px / 96 / dpr) * 100)
-    
-    // Debug logging
-    if (import.meta.env.DEV) {
-      console.log('[systemCheck] Zoom detection (1in method, DPR correction):', {
-        measuredPx: px,
-        rawZoomPct: zoomPct,
-        dpr,
-        correctedZoom,
-        usingCorrected: correctedZoom >= 50 && correctedZoom <= 150,
-      })
+  // Chrome quirk: On some high-DPI displays, the 1in measurement might be
+  // affected by display scaling. If we get an unexpected value, try correcting.
+  // If zoom is very low (< 60%), it's likely real zoom, not a measurement error
+  if (zoomPct1in < 60 || (zoomPct1in >= 95 && zoomPct1in <= 105)) {
+    // Likely accurate
+    results.push({ method: '1in', zoom: zoomPct1in, confidence: 0.8 })
+  } else if (dpr > 1 && zoomPct1in > 150) {
+    // Might be DPR-related, try correction
+    const corrected = Math.round((px / 96 / dpr) * 100)
+    if (corrected >= 50 && corrected <= 150) {
+      results.push({ method: '1in-corrected', zoom: corrected, confidence: 0.7 })
     }
-    
-    // Use corrected value if it's in a reasonable range (50-150%)
-    if (correctedZoom >= 50 && correctedZoom <= 150) {
-      return correctedZoom
-    }
+  } else {
+    results.push({ method: '1in', zoom: zoomPct1in, confidence: 0.6 })
   }
 
-  // Debug logging
   if (import.meta.env.DEV) {
     console.log('[systemCheck] Zoom detection (1in method):', {
       measuredPx: px,
-      zoomPct,
+      zoomPct1in,
       dpr,
-      note: 'If zoom seems wrong, check if DPR correction is needed',
     })
   }
 
-  return zoomPct
+  // Method 3: Window size comparison (only reliable when window is maximized/fullscreen)
+  // Compare innerWidth to screen width to detect zoom
+  if (typeof window.screen !== 'undefined') {
+    const windowRatio = window.innerWidth / window.screen.width
+    // At 100% zoom on a maximized window, ratio should be close to 1.0
+    // At 50% zoom, ratio would be ~0.5
+    // At 200% zoom, ratio would be ~2.0 (but limited by screen size)
+    if (windowRatio > 0.4 && windowRatio < 2.0) {
+      const zoomPctWindow = Math.round(windowRatio * 100)
+      // Only use this if window is large enough (likely maximized)
+      if (window.innerWidth >= window.screen.width * 0.9) {
+        results.push({ method: 'window-size', zoom: zoomPctWindow, confidence: 0.7 })
+      }
+    }
+  }
+
+  // Method 4: Use matchMedia to detect zoom (Chrome-specific)
+  // Chrome reports resolution differently at different zoom levels
+  try {
+    const mediaQuery = window.matchMedia('(resolution: 96dpi)')
+    // This is a heuristic - if the media query matches, we're likely at 100% zoom
+    // But this isn't always reliable, so low confidence
+    if (mediaQuery.matches) {
+      results.push({ method: 'matchMedia', zoom: 100, confidence: 0.4 })
+    }
+  } catch (e) {
+    // matchMedia might not support resolution query
+  }
+
+  // Choose the best result
+  if (results.length === 0) {
+    return 100 // Default fallback
+  }
+
+  // Sort by confidence and look for consensus
+  results.sort((a, b) => b.confidence - a.confidence)
+  
+  // If we have multiple high-confidence results, check for consensus
+  const highConfidence = results.filter(r => r.confidence >= 0.7)
+  if (highConfidence.length >= 2) {
+    // Check if they agree (within 5%)
+    const first = highConfidence[0].zoom
+    const second = highConfidence[1].zoom
+    if (Math.abs(first - second) <= 5) {
+      // Consensus - use average
+      const avg = Math.round((first + second) / 2)
+      if (import.meta.env.DEV) {
+        console.log('[systemCheck] Zoom consensus:', { first, second, avg, results })
+      }
+      return avg
+    }
+  }
+
+  // If visualViewport says 100% but 1in method says something very different,
+  // and we're on Chrome with high DPR, trust the 1in method more
+  const visualViewportResult = results.find(r => r.method === 'visualViewport')
+  const oneInchResult = results.find(r => r.method === '1in' || r.method === '1in-corrected')
+  
+  if (visualViewportResult && oneInchResult && dpr > 1) {
+    const vvZoom = visualViewportResult.zoom
+    const oiZoom = oneInchResult.zoom
+    
+    // If visualViewport says 100% but 1in says 50%, trust 1in (Chrome bug)
+    if (vvZoom === 100 && oiZoom >= 45 && oiZoom <= 55) {
+      if (import.meta.env.DEV) {
+        console.log('[systemCheck] Chrome zoom bug detected, using 1in method:', {
+          visualViewport: vvZoom,
+          oneInch: oiZoom,
+          using: oiZoom,
+        })
+      }
+      return oiZoom
+    }
+    
+    // If visualViewport says 50% but 1in says 100%, trust visualViewport
+    if (vvZoom >= 45 && vvZoom <= 55 && oiZoom === 100) {
+      if (import.meta.env.DEV) {
+        console.log('[systemCheck] Using visualViewport over 1in:', {
+          visualViewport: vvZoom,
+          oneInch: oiZoom,
+          using: vvZoom,
+        })
+      }
+      return vvZoom
+    }
+  }
+
+  // Use highest confidence result
+  const best = results[0]
+  if (import.meta.env.DEV) {
+    console.log('[systemCheck] Zoom detection final result:', {
+      method: best.method,
+      zoom: best.zoom,
+      confidence: best.confidence,
+      allResults: results,
+    })
+  }
+  
+  return best.zoom
 }
 
 /**

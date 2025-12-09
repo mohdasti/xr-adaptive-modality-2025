@@ -1,15 +1,8 @@
-// Compute zoom % via 1in CSS trick
+// Compute zoom % using improved detection (handles Chrome bugs on high-DPI displays)
+import { getZoomPct } from './systemCheck'
+
 export function getZoomPercent(): number {
-  const div = document.createElement('div')
-  div.style.width = '1in'
-  div.style.visibility = 'hidden'
-  div.style.position = 'absolute'
-  div.style.top = '-9999px'
-  document.body.appendChild(div)
-  const px = div.offsetWidth
-  document.body.removeChild(div)
-  // 96 CSS px/inch at 100% zoom
-  return Math.round((px / 96) * 100)
+  return getZoomPct()
 }
 
 export function displayStabilityScore(

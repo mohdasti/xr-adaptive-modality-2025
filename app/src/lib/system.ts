@@ -1,3 +1,5 @@
+import { getZoomPct } from './systemCheck'
+
 export type DisplayMeta = {
   screen_width: number
   screen_height: number
@@ -29,7 +31,7 @@ export function getDisplayMetadata(): DisplayMeta {
     window_width: window.innerWidth,
     window_height: window.innerHeight,
     device_pixel_ratio: window.devicePixelRatio ?? 1,
-    zoom_level: Math.round((window.devicePixelRatio ?? 1) * 100),
+    zoom_level: getZoomPct(), // Use improved zoom detection
     is_fullscreen: document.fullscreenElement !== null,
     user_agent: navigator.userAgent,
   }
