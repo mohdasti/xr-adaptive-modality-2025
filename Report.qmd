@@ -2986,15 +2986,18 @@ if ("trajectory" %in% names(df_raw) && "A" %in% names(df_raw)) {
       # Compute path length from trajectory
       path_length_computed = map_dbl(trajectory, path_length),
       # Use existing drag_distance if numeric and valid, otherwise use computed
-      drag_distance = if ("drag_distance" %in% names(.)) {
-        case_when(
-          is.na(drag_distance) | drag_distance == 0 ~ path_length_computed,
-          is.numeric(drag_distance) & drag_distance > 0 ~ drag_distance,
-          TRUE ~ path_length_computed
-        )
+      # Convert drag_distance to numeric first to handle character/string values
+      drag_distance_raw = if ("drag_distance" %in% names(.)) {
+        suppressWarnings(as.numeric(drag_distance))
       } else {
-        path_length_computed
+        NA_real_
       },
+      # Prefer computed path length, fall back to drag_distance if valid
+      drag_distance = ifelse(
+        !is.na(path_length_computed) & path_length_computed > 0,
+        path_length_computed,
+        ifelse(!is.na(drag_distance_raw) & drag_distance_raw > 0, drag_distance_raw, path_length_computed)
+      ),
       # Derived metrics
       ratio = drag_distance / A,  # Path ratio (≥1, higher = less efficient)
       eff = A / drag_distance,    # Path efficiency (0-1], higher = more efficient
@@ -3045,38 +3048,71 @@ if ("trajectory" %in% names(df_raw) && "A" %in% names(df_raw)) {
 #| fig-cap: "Path Length vs. Movement Time (Log-Log Scale). 2D density plot showing the relationship between actual cursor path length and movement time. GAM smooth captures nonlinearity. Log scales handle right-skewed distributions and heteroscedasticity."
 
 if (exists("df_drag") && nrow(df_drag) > 0) {
-  library(hexbin)
+  # Try to load hexbin, fall back to density2d if not available
+  has_hexbin <- requireNamespace("hexbin", quietly = TRUE)
   
   df_plot <- df_drag %>%
     filter(!is.na(drag_distance), drag_distance > 0, rt_s > 0)
   
   if (nrow(df_plot) > 0) {
-    p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
-      geom_hex(bins = 35, alpha = 0.7, show.legend = FALSE) +
-      geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
-                  alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
-      scale_x_log10(labels = scales::label_number()) +
-      scale_y_log10(labels = scales::label_number()) +
-      scale_fill_viridis_c(option = "plasma", trans = "log10") +
-      facet_grid(modality ~ pressure,
-                 labeller = labeller(
-                   modality = function(x) paste("Modality:", str_to_title(x)),
-                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
-      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
-      labs(
-        x = "Actual Path Length (px, log10)",
-        y = "Movement Time (s, log10)",
-        color = "UI Mode",
-        fill = "Count"
-      ) +
-      theme_minimal(base_size = 14) +
-      theme(
-        legend.position = "top",
-        strip.text = element_text(face = "bold", size = 12),
-        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-        panel.grid.minor = element_blank()
-      )
+    if (has_hexbin) {
+      library(hexbin)
+      p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
+        geom_hex(bins = 35, alpha = 0.7, show.legend = FALSE) +
+        geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
+                    alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
+        scale_x_log10(labels = scales::label_number()) +
+        scale_y_log10(labels = scales::label_number()) +
+        scale_fill_viridis_c(option = "plasma", trans = "log10") +
+        facet_grid(modality ~ pressure,
+                   labeller = labeller(
+                     modality = function(x) paste("Modality:", str_to_title(x)),
+                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                   )) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        labs(
+          x = "Actual Path Length (px, log10)",
+          y = "Movement Time (s, log10)",
+          color = "UI Mode",
+          fill = "Count"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(
+          legend.position = "top",
+          strip.text = element_text(face = "bold", size = 12),
+          strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+          panel.grid.minor = element_blank()
+        )
+    } else {
+      # Fallback: use density2d and points
+      p1 <- ggplot(df_plot, aes(x = drag_distance, y = rt_s, color = ui_mode)) +
+        geom_point(alpha = 0.1, size = 0.8) +
+        stat_density2d(aes(fill = ..level..), geom = "polygon", alpha = 0.3, contour = TRUE) +
+        geom_smooth(method = "gam", formula = y ~ s(x, k = 6), se = TRUE, 
+                    alpha = 0.3, linewidth = 1.2, method.args = list(family = "gaussian")) +
+        scale_x_log10(labels = scales::label_number()) +
+        scale_y_log10(labels = scales::label_number()) +
+        scale_fill_viridis_c(option = "plasma") +
+        facet_grid(modality ~ pressure,
+                   labeller = labeller(
+                     modality = function(x) paste("Modality:", str_to_title(x)),
+                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                   )) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        labs(
+          x = "Actual Path Length (px, log10)",
+          y = "Movement Time (s, log10)",
+          color = "UI Mode",
+          fill = "Density"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(
+          legend.position = "top",
+          strip.text = element_text(face = "bold", size = 12),
+          strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+          panel.grid.minor = element_blank()
+        )
+    }
     
     print(p1)
   }
