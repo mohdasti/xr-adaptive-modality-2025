@@ -1647,14 +1647,36 @@ if ("submovement_count" %in% names(df)) {
 ```{r plot-submovement}
 #| fig-cap: "Submovement Count (Movement Quality) by Modality and UI Mode. Lower indicates smoother, more ballistic movements. White diamonds indicate means. Violin plots show the distribution shape, boxplots show quartiles."
 
-if ("submovement_count" %in% names(df)) {
+# Prefer recomputed submovement count (computed from trajectory for both modalities)
+# Fall back to legacy submovement_count if recomputed is not available
+submov_col <- if ("submovement_count_recomputed" %in% names(df)) {
+  "submovement_count_recomputed"
+} else if ("submovement_count" %in% names(df)) {
+  "submovement_count"
+} else {
+  NULL
+}
+
+if (!is.null(submov_col)) {
   df_submov <- df %>%
-    filter(!is.na(submovement_count), submovement_count >= 0)
+    filter(!is.na(.data[[submov_col]]), .data[[submov_col]] >= 0)
   
   if (nrow(df_submov) > 0) {
+    # Check if hand modality has any non-zero values
+    hand_has_data <- df_submov %>%
+      filter(modality == "hand") %>%
+      summarise(has_nonzero = any(.data[[submov_col]] > 0)) %>%
+      pull(has_nonzero)
+    
+    if (!hand_has_data && submov_col == "submovement_count") {
+      cat("⚠ **Note:** Hand modality shows zero submovements because the legacy `submovement_count`\n")
+      cat("   was only computed for gaze. Future data will use `submovement_count_recomputed`\n")
+      cat("   computed from trajectory for both modalities.\n\n")
+    }
+    
     # Visualization
     # Visualization - improved faceting and aesthetics
-    p1 <- ggplot(df_submov, aes(x = ui_mode, y = submovement_count, fill = ui_mode)) +
+    p1 <- ggplot(df_submov, aes(x = ui_mode, y = .data[[submov_col]], fill = ui_mode)) +
       geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
                   show.legend = FALSE) +
       geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
