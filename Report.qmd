@@ -2602,11 +2602,9 @@ if (exists("df_width") && nrow(df_width) > 0) {
   # Check if any scaling occurred
   has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
-  if (!has_scaling) {
-    cat("**Note:** Visualization skipped - no width scaling observed (all values = 1.0).\n")
-  } else {
-    # Visualization - width scale factor
-    p1 <- ggplot(df_width, aes(x = ui_mode, y = width_scale_factor, fill = ui_mode)) +
+  # Show plot even if no scaling occurred - it's still informative
+  # Visualization - width scale factor
+  p1 <- ggplot(df_width, aes(x = ui_mode, y = width_scale_factor, fill = ui_mode)) +
     geom_hline(yintercept = 1.0, linetype = "dashed", color = "red", linewidth = 0.8) +
     geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
                 show.legend = FALSE) +
@@ -2622,10 +2620,16 @@ if (exists("df_width") && nrow(df_width) > 0) {
     scale_fill_manual(values = custom_palette_2,
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
+    scale_y_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
     labs(
       x = "UI Mode",
       y = "Width Scale Factor",
-      fill = "UI Mode"
+      fill = "UI Mode",
+      subtitle = if (!has_scaling) {
+        "No scaling observed (all values = 1.0). Adaptive policy did not trigger."
+      } else {
+        NULL
+      }
     ) +
     theme_minimal(base_size = 14) +
     theme(
@@ -2633,10 +2637,15 @@ if (exists("df_width") && nrow(df_width) > 0) {
       strip.text = element_text(face = "bold", size = 12),
       strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
       panel.grid.minor = element_blank(),
-      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
+      plot.subtitle = element_text(face = "italic", color = "gray40", size = 11, hjust = 0.5)
     )
   
-    print(p1)
+  print(p1)
+  
+  if (!has_scaling) {
+    cat("\n**Note:** All width scale factors are 1.0 (no scaling applied).\n")
+    cat("This indicates the adaptive policy did not trigger during data collection.\n\n")
   }
 }
 ```
@@ -2648,38 +2657,46 @@ if (exists("df_width") && nrow(df_width) > 0 && "trial_number" %in% names(df_wid
   # Check if any scaling occurred
   has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
-  if (!has_scaling) {
-    cat("**Note:** Time series plot skipped - no width scaling observed.\n")
-  } else {
-    # Width scaling over time
-    df_width_time <- df_width %>%
-      filter(!is.na(trial_number), trial_number > 0, trial_number <= 500)
-    
-    if (nrow(df_width_time) > 0) {
+  # Width scaling over time - show even if no scaling occurred
+  df_width_time <- df_width %>%
+    filter(!is.na(trial_number), trial_number > 0, trial_number <= 500)
+  
+  if (nrow(df_width_time) > 0) {
     p2 <- ggplot(df_width_time, aes(x = trial_number, y = width_scale_factor, color = ui_mode)) +
       geom_hline(yintercept = 1.0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
       geom_point(alpha = 0.2, size = 1) +
-      geom_smooth(method = "loess", span = 0.3, se = TRUE, alpha = 0.2, linewidth = 1.2) +
+      {if (has_scaling) geom_smooth(method = "loess", span = 0.3, se = TRUE, alpha = 0.2, linewidth = 1.2) else NULL} +
       facet_grid(modality ~ pressure,
                  labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                  )) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_y_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
       labs(
         x = "Trial Number",
         y = "Width Scale Factor",
-        color = "UI Mode"
+        color = "UI Mode",
+        subtitle = if (!has_scaling) {
+          "No scaling observed (all values = 1.0). Adaptive policy did not trigger."
+        } else {
+          NULL
+        }
       ) +
       theme_minimal(base_size = 14) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-        panel.grid.minor = element_blank()
+        panel.grid.minor = element_blank(),
+        plot.subtitle = element_text(face = "italic", color = "gray40", size = 11, hjust = 0.5)
       )
     
-      print(p2)
+    print(p2)
+    
+    if (!has_scaling) {
+      cat("\n**Note:** All width scale factors remain at 1.0 throughout the experiment.\n")
+      cat("The adaptive policy did not trigger any target size adjustments.\n\n")
     }
   }
 }
