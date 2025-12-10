@@ -2709,37 +2709,47 @@ if (exists("df_width") && nrow(df_width) > 0) {
   # Check if any scaling occurred
   has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
-  if (!has_scaling) {
-    cat("**Note:** Performance relationship plot skipped - no width scaling observed.\n")
-  } else {
-    # Join with performance data
-    df_width_perf <- df_width %>%
-      filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
-      mutate(rt_s = rt_ms / 1000)
-    
-    if (nrow(df_width_perf) > 0) {
+  # Join with performance data - show plot even if no scaling occurred
+  df_width_perf <- df_width %>%
+    filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
+    mutate(rt_s = rt_ms / 1000)
+  
+  if (nrow(df_width_perf) > 0) {
     p3 <- ggplot(df_width_perf, aes(x = width_scale_factor, y = rt_s, color = ui_mode)) +
       geom_point(alpha = 0.3, size = 1.5) +
-      geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1.2) +
+      {if (has_scaling) geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1.2) else NULL} +
+      geom_vline(xintercept = 1.0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
       facet_grid(modality ~ pressure,
                  labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                  )) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_x_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
       labs(
         x = "Width Scale Factor",
         y = "Movement Time (s)",
-        color = "UI Mode"
+        color = "UI Mode",
+        subtitle = if (!has_scaling) {
+          "No scaling observed (all values = 1.0). Cannot assess performance relationship."
+        } else {
+          NULL
+        }
       ) +
       theme_minimal(base_size = 14) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
-        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5)
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        plot.subtitle = element_text(face = "italic", color = "gray40", size = 11, hjust = 0.5)
       )
     
-      print(p3)
+    print(p3)
+    
+    if (!has_scaling) {
+      cat("\n**Note:** All width scale factors are 1.0, so no relationship with performance can be assessed.\n")
+      cat("The plot shows all points at x=1.0, indicating no scaling occurred.\n\n")
     }
   }
 }
