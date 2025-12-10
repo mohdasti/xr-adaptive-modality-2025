@@ -1120,6 +1120,18 @@ if (nrow(gaze_accuracy) > 0) {
 *Target Re-entries measure how often the cursor drifted out of the target before selection.*
 
 ```{r reentry-summary}
+# Check if hand modality has any non-zero reentry values
+hand_has_reentry_data <- df_iso %>%
+  filter(modality == "hand") %>%
+  summarise(has_nonzero = any(!is.na(reentries) & reentries > 0)) %>%
+  pull(has_nonzero)
+
+if (!hand_has_reentry_data) {
+  cat("⚠ **Note:** Hand modality shows zero re-entries because the legacy `target_reentry_count`\n")
+  cat("   was only computed for gaze. Future data may compute re-entries from trajectory\n")
+  cat("   or LBA timing fields for both modalities.\n\n")
+}
+
 reentry_summary <- df_iso %>%
   filter(!is.na(reentries)) %>%
   group_by(modality, ui_mode, pressure) %>%
