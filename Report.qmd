@@ -1693,11 +1693,33 @@ if ("submovement_count" %in% names(df)) {
 ```{r plot-submovement-id}
 #| fig-cap: "Submovements vs. Index of Difficulty. How movement corrections scale with task difficulty. Linear regression with 95% confidence intervals."
 
-if ("submovement_count" %in% names(df)) {
+# Prefer recomputed submovement count (computed from trajectory for both modalities)
+# Fall back to legacy submovement_count if recomputed is not available
+submov_col <- if ("submovement_count_recomputed" %in% names(df)) {
+  "submovement_count_recomputed"
+} else if ("submovement_count" %in% names(df)) {
+  "submovement_count"
+} else {
+  NULL
+}
+
+if (!is.null(submov_col)) {
   df_submov <- df %>%
-    filter(!is.na(submovement_count), submovement_count >= 0)
+    filter(!is.na(.data[[submov_col]]), .data[[submov_col]] >= 0)
   
   if (nrow(df_submov) > 0) {
+    # Check if hand modality has any non-zero values
+    hand_has_data <- df_submov %>%
+      filter(modality == "hand") %>%
+      summarise(has_nonzero = any(.data[[submov_col]] > 0)) %>%
+      pull(has_nonzero)
+    
+    if (!hand_has_data && submov_col == "submovement_count") {
+      cat("⚠ **Note:** Hand modality shows zero submovements because the legacy `submovement_count`\n")
+      cat("   was only computed for gaze. Future data will use `submovement_count_recomputed`\n")
+      cat("   computed from trajectory for both modalities.\n\n")
+    }
+    
     # Submovements vs. Difficulty
     # Check if IDe exists, otherwise use ID
     if ("IDe" %in% names(df_submov)) {
@@ -1713,7 +1735,7 @@ if ("submovement_count" %in% names(df)) {
     }
     
     if (nrow(df_submov_id) > 0) {
-      p2 <- ggplot(df_submov_id, aes(x = difficulty, y = submovement_count, color = ui_mode)) +
+      p2 <- ggplot(df_submov_id, aes(x = difficulty, y = .data[[submov_col]], color = ui_mode)) +
         geom_point(alpha = 0.3, size = 1) +
         geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
         facet_grid(modality ~ pressure, labeller = labeller(
@@ -1737,7 +1759,7 @@ if ("submovement_count" %in% names(df)) {
     cat("⚠ No valid submovement data available.\n")
   }
 } else {
-  cat("⚠ submovement_count column not found in dataset.\n")
+  cat("⚠ Neither submovement_count nor submovement_count_recomputed column found in dataset.\n")
 }
 ```
 
