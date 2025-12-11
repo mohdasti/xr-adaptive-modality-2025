@@ -141,6 +141,60 @@ build_mixed_formula <- function(dv, factors, data) {
   )
 }
 
+# --- HELPER: COMPUTE DYNAMIC SAMPLE SIZES ---
+# These functions compute sample sizes dynamically for different data subsets
+# This ensures captions and headers always reflect the current data
+
+# Get total number of participants in a dataset
+get_n_participants <- function(data) {
+  if (is.null(data) || nrow(data) == 0) return(0)
+  n_distinct(data$pid, na.rm = TRUE)
+}
+
+# Get sample size by condition (modality, ui_mode, pressure)
+get_n_by_condition <- function(data, modality_val = NULL, ui_mode_val = NULL, pressure_val = NULL) {
+  if (is.null(data) || nrow(data) == 0) return(0)
+  
+  filtered_data <- data
+  if (!is.null(modality_val)) {
+    filtered_data <- filtered_data %>% filter(modality == modality_val)
+  }
+  if (!is.null(ui_mode_val)) {
+    filtered_data <- filtered_data %>% filter(ui_mode == ui_mode_val)
+  }
+  if (!is.null(pressure_val)) {
+    filtered_data <- filtered_data %>% filter(pressure == pressure_val)
+  }
+  
+  n_distinct(filtered_data$pid, na.rm = TRUE)
+}
+
+# Get sample size for specific modality
+get_n_by_modality <- function(data, modality_val) {
+  get_n_by_condition(data, modality_val = modality_val)
+}
+
+# Get sample size for specific UI mode
+get_n_by_ui_mode <- function(data, ui_mode_val) {
+  get_n_by_condition(data, ui_mode_val = ui_mode_val)
+}
+
+# Get sample size with data availability check (returns formatted string)
+get_n_string <- function(data, prefix = "N = ", suffix = "") {
+  n <- get_n_participants(data)
+  if (n == 0) return("N = 0 (no data)")
+  paste0(prefix, n, suffix)
+}
+
+# Get sample size by modality with formatted string
+get_n_modality_string <- function(data) {
+  n_hand <- get_n_by_modality(data, "hand")
+  n_gaze <- get_n_by_modality(data, "gaze")
+  if (n_hand == 0 && n_gaze == 0) return("N = 0")
+  if (n_hand == n_gaze) return(paste0("N = ", n_hand, " per modality"))
+  paste0("N = ", n_hand, " (hand), ", n_gaze, " (gaze)")
+}
+
 # --- DATA LOADING ---
 # Load the latest clean data
 # Try multiple possible paths (relative to report location or working directory)
@@ -677,6 +731,8 @@ manip_snapshot %>%
 
 # 2. Demographics
 
+**Sample Size:** `r get_n_string(df_raw %>% distinct(pid))` participants.
+
 ```{r demographics}
 # Ensure pid column exists
 demog_raw <- df_raw
@@ -754,13 +810,16 @@ device_stats %>%
 
 **Research Question:** Does the Adaptive UI improve performance (Throughput) compared to Static, especially for Gaze?
 
+**Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
+
 ## Summary Statistics
 
 ```{r tp-summary}
 tp_summary <- df_iso %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
-    N = n(),
+    N_participants = n_distinct(pid),
+    N_observations = n(),
     Mean = round(mean(TP, na.rm = TRUE), 2),
     SD = round(sd(TP, na.rm = TRUE), 2),
     Median = round(median(TP, na.rm = TRUE), 2),
@@ -771,14 +830,14 @@ tp_summary <- df_iso %>%
   arrange(modality, ui_mode, pressure)
 
 tp_summary %>%
-  kable(caption = "Throughput (bits/s) by Condition") %>%
+  kable(caption = paste0("Throughput (bits/s) by Condition (", get_n_string(df_iso), " participants)")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
 ## Visualizations
 
 ```{r plot-tp}
-#| fig-cap: "Throughput by Modality and UI Mode (participant-level means). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons."
+#| fig-cap: !expr 'paste0("Throughput by Modality and UI Mode (participant-level means). ", get_n_string(df_pid_cond %>% filter(!is.na(tp_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons.")'
 
 # Prepare data for raincloud plot with mirrored half-violins
 df_tp_plot <- df_pid_cond %>%
@@ -877,7 +936,7 @@ print(p_tp)
 ```
 
 ```{r plot-tp-emm, eval=exists("emm_tp") && !is.null(emm_tp)}
-#| fig-cap: "Estimated Marginal Means for Throughput (shown only when model fits and factors exist)."
+#| fig-cap: !expr 'paste0("Estimated Marginal Means for Throughput. ", get_n_string(df_iso), " participants (shown only when model fits and factors exist).")'
 if (exists("emm_tp") && !is.null(emm_tp)) {
   emm_tp_df <- as.data.frame(emm_tp) %>%
     mutate(
@@ -984,13 +1043,16 @@ if (exists("model_tp") && !is.null(model_tp)) {
 
 **Research Question:** How does movement time vary across conditions?
 
+**Sample Size:** `r get_n_string(df)` participants with valid movement time data (correct trials only).
+
 ## Summary Statistics
 
 ```{r rt-summary}
 rt_summary <- df %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
-    N = n(),
+    N_participants = n_distinct(pid),
+    N_trials = n(),
     Mean = round(mean(rt_s, na.rm = TRUE), 3),
     SD = round(sd(rt_s, na.rm = TRUE), 3),
     Median = round(median(rt_s, na.rm = TRUE), 3),
@@ -999,14 +1061,14 @@ rt_summary <- df %>%
   arrange(modality, ui_mode, pressure)
 
 rt_summary %>%
-  kable(caption = "Movement Time (s) by Condition") %>%
+  kable(caption = paste0("Movement Time (s) by Condition (", get_n_string(df), " participants)")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
 ## Visualizations
 
 ```{r plot-rt}
-#| fig-cap: "Movement Time by Modality and UI Mode (participant-level means). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons."
+#| fig-cap: !expr 'paste0("Movement Time by Modality and UI Mode (participant-level means). ", get_n_string(df_pid_cond %>% filter(!is.na(rt_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons.")'
 
 # Prepare data for raincloud plot
 df_rt_plot <- df_pid_cond %>%
@@ -1102,7 +1164,7 @@ print(p_rt)
 ```
 
 ```{r plot-rt-emm, eval=exists("emm_rt") && !is.null(emm_rt)}
-#| fig-cap: "Estimated Marginal Means for Movement Time (shown only when model fits and factors exist)."
+#| fig-cap: !expr 'paste0("Estimated Marginal Means for Movement Time. ", get_n_string(df), " participants (shown only when model fits and factors exist).")'
 if (exists("emm_rt") && !is.null(emm_rt)) {
   emm_rt_df <- as.data.frame(emm_rt) %>%
     mutate(
@@ -1204,10 +1266,13 @@ if (exists("model_rt") && !is.null(model_rt)) {
 # 5. Fitts' Law Modelling
 
 **Research Question:** How well does the data fit Fitts' Law? (Linearity check).
+
+**Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
+
 *Flatter slopes indicate less sensitivity to difficulty (ballistic movement).*
 
 ```{r plot-fitts}
-#| fig-cap: "Fitts' Law Regression (Movement Time vs Effective Index of Difficulty). The effective index of difficulty (IDe) is calculated using the effective target width (We) derived from the spatial distribution of selection endpoints. Shaded regions around regression lines represent 95% confidence intervals. Linear regression fits are shown separately for each modality and UI mode combination."
+#| fig-cap: !expr 'paste0("Fitts Law Regression (Movement Time vs Effective Index of Difficulty). ", get_n_string(df_iso), " participants. The effective index of difficulty (IDe) is calculated using the effective target width (We) derived from the spatial distribution of selection endpoints. Shaded regions around regression lines represent 95% confidence intervals. Linear regression fits are shown separately for each modality and UI mode combination.")'
 # Aggregate for regression plot
 fitts_model <- df_iso %>%
   group_by(modality, ui_mode, IDe) %>%
@@ -1251,7 +1316,7 @@ if (nrow(fitts_fits) > 0) {
   cat("\n### Model Fit Statistics\n")
   fitts_fits %>%
     select(modality, ui_mode, r_squared, slope, intercept) %>%
-    kable(caption = "Linear Regression: MT ~ IDe") %>%
+    kable(caption = paste0("Linear Regression: MT ~ IDe (", get_n_string(df_iso), " participants)")) %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 }
 ```
@@ -1262,13 +1327,15 @@ if (nrow(fitts_fits) > 0) {
 
 **Research Question:** How do error rates differ across conditions?
 
+**Sample Size:** `r get_n_string(df_all_trials)` participants with all trials (correct + incorrect).
+
 ```{r error-analysis}
-#| fig-cap: "Error Rate by Modality and UI Mode (participant-level means). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons."
+#| fig-cap: !expr 'paste0("Error Rate by Modality and UI Mode (participant-level means). ", get_n_string(df_pid_cond %>% filter(!is.na(error_rate))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons.")'
 # Calculate condition-level summary
 error_summary <- df_pid_cond %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
-    Participants = n(),
+    Participants = n_distinct(pid),
     Mean_Error_Rate = round(100 * mean(error_rate, na.rm = TRUE), 2),
     SD_Error_Rate = round(100 * sd(error_rate, na.rm = TRUE), 2),
     .groups = "drop"
@@ -1276,7 +1343,7 @@ error_summary <- df_pid_cond %>%
   arrange(modality, ui_mode, pressure)
 
 error_summary %>%
-  kable(caption = "Error Rates by Condition (participant means)") %>%
+  kable(caption = paste0("Error Rates by Condition (", get_n_string(df_all_trials), " participants)")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
 # Prepare data for raincloud plot
@@ -1440,16 +1507,19 @@ if (exists("model_err") && !is.null(model_err)) {
 
 # 7. Accuracy & Gaze Dynamics
 
+**Sample Size:** `r get_n_string(df_iso)` participants with valid accuracy data.
+
 ## Effective Width ($W_e$)
 
 *Lower $W_e$ indicates tighter shot grouping (higher precision).*
 
 ```{r we-summary}
-#| tbl-cap: "Effective Width (px) by Condition"
+#| tbl-cap: !expr 'paste0("Effective Width (px) by Condition (", get_n_string(df_iso), " participants)")'
 
 we_summary <- df_iso %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
+    N_participants = n_distinct(pid),
     Mean_We = round(mean(We, na.rm = TRUE), 2),
     SD_We = round(sd(We, na.rm = TRUE), 2),
     .groups = "drop"
@@ -1459,7 +1529,7 @@ knitr::kable(we_summary)
 ```
 
 ```{r plot-we}
-#| fig-cap: "Effective Target Width (Accuracy) by Modality and UI Mode. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values indicate tighter shot grouping and higher precision."
+#| fig-cap: !expr 'paste0("Effective Target Width (Accuracy) by Modality and UI Mode. ", get_n_string(df_iso %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(We_mean = mean(We, na.rm = TRUE), .groups = \"drop\") %>% filter(!is.na(We_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values indicate tighter shot grouping and higher precision.")'
 
 # Aggregate to participant-level means
 df_we_plot <- df_iso %>%
@@ -1561,7 +1631,7 @@ ggplot(df_we_plot, aes(x = ui_mode, y = We_mean, fill = ui_mode, color = ui_mode
 ```{r plot-accuracy-scatter}
 #| fig-width: 12
 #| fig-height: 8
-#| fig-cap: "Endpoint Accuracy Scatter Plot for Gaze Modality. Each point represents one trial's endpoint position relative to the target center (0,0). The red dashed circle shows the approximate target size. Points closer to the center indicate better accuracy. Dotted lines indicate zero error in X and Y directions. Faceted by pressure condition."
+#| fig-cap: !expr 'paste0("Endpoint Accuracy Scatter Plot for Gaze Modality. ", get_n_string(df %>% filter(str_to_lower(modality) == \"gaze\", !is.na(endpoint_x), !is.na(endpoint_y))), " participants. Each point represents one trial endpoint position relative to the target center (0,0). The red dashed circle shows the approximate target size. Points closer to the center indicate better accuracy. Dotted lines indicate zero error in X and Y directions. Faceted by pressure condition.")'
 # Calculate endpoint errors relative to target center
 df_accuracy <- df %>%
   filter(
@@ -1681,18 +1751,19 @@ reentry_summary <- df_iso %>%
   filter(!is.na(reentries)) %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
+    N_participants = n_distinct(pid),
     Mean_Reentries = round(mean(reentries, na.rm = TRUE), 2),
     SD_Reentries = round(sd(reentries, na.rm = TRUE), 2),
     .groups = "drop"
   )
 
 reentry_summary %>%
-  kable(caption = "Target Re-entries by Condition") %>%
+  kable(caption = paste0("Target Re-entries by Condition (", get_n_string(df_iso %>% filter(!is.na(reentries))), " participants)")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
 ```{r plot-reentry}
-#| fig-cap: "Target Re-entries (Control Stability) by Modality and UI Mode. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values are better."
+#| fig-cap: !expr 'paste0("Target Re-entries (Control Stability) by Modality and UI Mode. ", get_n_string(df_iso %>% filter(!is.na(reentries)) %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(reentries_mean = mean(reentries, na.rm = TRUE), .groups = \"drop\") %>% filter(!is.na(reentries_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values are better.")'
 
 # Aggregate to participant-level means
 df_reentry_plot <- df_iso %>%
@@ -1794,8 +1865,10 @@ ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, col
 
 *Subjective workload scores (lower is better).*
 
+**Sample Size:** `r get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental)))` participants with TLX data.
+
 ```{r plot-tlx}
-#| fig-cap: "NASA-TLX Workload Scores by Modality and UI Mode. Scores range from 0-100, where lower values indicate lower subjective workload. The six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration) are shown separately. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
+#| fig-cap: !expr 'paste0("NASA-TLX Workload Scores by Modality and UI Mode. ", get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental))), " participants. Scores range from 0-100, where lower values indicate lower subjective workload. The six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration) are shown separately. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles.")'
 # Check if TLX columns exist
 tlx_cols <- c("tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration")
 
@@ -1823,13 +1896,14 @@ if(all(tlx_cols %in% names(df_raw))) {
   tlx_summary <- df_tlx %>%
     group_by(modality, ui_mode, Scale) %>%
     summarise(
+      N_participants = n_distinct(pid),
       Mean = round(mean(Score, na.rm = TRUE), 1),
       SD = round(sd(Score, na.rm = TRUE), 1),
       .groups = "drop"
     )
   
   tlx_summary %>%
-    kable(caption = "NASA-TLX Scores by Condition (block-level where available)") %>%
+    kable(caption = paste0("NASA-TLX Scores by Condition (", get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental))), " participants, block-level where available)")) %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
   
   # Visualization (one concise view)
@@ -1871,7 +1945,7 @@ if(all(tlx_cols %in% names(df_raw))) {
 <!-- Consolidated: removed extra TLX overall violin for interim slimness -->
   
 ```{r plot-tlx-stacked}
-#| fig-cap: "NASA-TLX Workload Components (Stacked Bar Chart). Total height represents overall workload, with each colored segment representing one of the six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Lower total height indicates lower overall subjective workload."
+#| fig-cap: !expr 'paste0("NASA-TLX Workload Components (Stacked Bar Chart). ", get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental))), " participants. Total height represents overall workload, with each colored segment representing one of the six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Lower total height indicates lower overall subjective workload.")'
 if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
   # Stacked bar chart (inspired by Python script)
   df_tlx_stacked <- df_tlx %>%
@@ -1908,6 +1982,8 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
 # 9. Learning Curves & Practice Effects
 
 **Research Question:** How does performance change within each condition? Do learning rates differ by condition?
+
+**Sample Size:** `r get_n_string(df_all_trials)` participants with trial-level data.
 
 *This section shows learning curves aligned by condition start (accounting for Williams counterbalancing). For block-level trends, see Section 12.*
 
@@ -2080,13 +2156,13 @@ if (nrow(df_learning_aligned) > 0) {
     select(Modality, `UI Mode`, Pressure, `N Positions`, `Mean RT (s)`, `Mean Error Rate`)
   
   learning_summary_table %>%
-    kable(caption = "Learning Curve Data Summary by Condition") %>%
+    kable(caption = paste0("Learning Curve Data Summary by Condition (", get_n_string(df_all_trials), " participants)")) %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 }
 ```
   
 ```{r plot-learning-rt}
-#| fig-cap: "Learning Curves: Movement Time Within Condition. Learning aligned by position within condition (accounting for counterbalancing). LOESS smoothing. Lower is better. Shaded regions show 95% CI."
+#| fig-cap: !expr 'paste0("Learning Curves: Movement Time Within Condition. ", get_n_string(df), " participants. Learning aligned by position within condition (accounting for counterbalancing). LOESS smoothing. Lower is better. Shaded regions show 95% CI.")'
 
 if (nrow(df_learning_aligned) > 0) {
   # Create plot with dynamic x variable
@@ -2196,6 +2272,8 @@ if (nrow(df_learning_aligned) > 0) {
 
 **Research Question:** Does adaptive UI reduce movement corrections? How do submovements relate to performance?
 
+**Sample Size:** `r get_n_string(df %>% filter(!is.na(submovement_count)))` participants with submovement data.
+
 *Submovements indicate intermittent control - fewer submovements suggest smoother, more ballistic movements.*
 
 ```{r submovement-analysis}
@@ -2208,7 +2286,8 @@ if ("submovement_count" %in% names(df)) {
     submov_summary <- df_submov %>%
       group_by(modality, ui_mode, pressure) %>%
       summarise(
-        N = n(),
+        N_participants = n_distinct(pid),
+        N_trials = n(),
         Mean = round(mean(submovement_count, na.rm = TRUE), 2),
         SD = round(sd(submovement_count, na.rm = TRUE), 2),
         Median = round(median(submovement_count, na.rm = TRUE), 2),
@@ -2216,14 +2295,14 @@ if ("submovement_count" %in% names(df)) {
       )
     
     submov_summary %>%
-      kable(caption = "Submovement Count by Condition") %>%
+      kable(caption = paste0("Submovement Count by Condition (", get_n_string(df_submov), " participants)")) %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
   }
 }
 ```
 
 ```{r plot-submovement}
-#| fig-cap: "Submovement Count (Movement Quality) by Modality and UI Mode. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower indicates smoother, more ballistic movements."
+#| fig-cap: !expr 'paste0("Submovement Count (Movement Quality) by Modality and UI Mode. ", get_n_string(df %>% filter(!is.na(submovement_count) | !is.na(submovement_count_recomputed))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower indicates smoother, more ballistic movements.")'
 
 # Prefer recomputed submovement count (computed from trajectory for both modalities)
 # Fall back to legacy submovement_count if recomputed is not available
@@ -2350,7 +2429,7 @@ if (!is.null(submov_col)) {
 ```
 
 ```{r plot-submovement-id}
-#| fig-cap: "Submovements vs. Index of Difficulty. How movement corrections scale with task difficulty. Linear regression with 95% confidence intervals."
+#| fig-cap: !expr 'paste0("Submovements vs. Index of Difficulty. ", get_n_string(df %>% filter(!is.na(submovement_count) | !is.na(submovement_count_recomputed))), " participants. How movement corrections scale with task difficulty. Linear regression with 95% confidence intervals.")'
 
 # Prefer recomputed submovement count (computed from trajectory for both modalities)
 # Fall back to legacy submovement_count if recomputed is not available
@@ -2426,6 +2505,8 @@ if (!is.null(submov_col)) {
 
 **Research Question:** How much time is spent "stopping" vs. "moving"? Does adaptive UI reduce verification time?
 
+**Sample Size:** `r get_n_string(df %>% filter(!is.na(verification_time_ms), verification_time_ms > 0))` participants with verification time data.
+
 *Verification time represents the "precise stopping" phase, separate from the ballistic movement phase.*
 
 ```{r verification-time}
@@ -2447,7 +2528,8 @@ if ("verification_time_ms" %in% names(df)) {
     verify_summary <- df_verify %>%
       group_by(modality, ui_mode, pressure) %>%
       summarise(
-        N = n(),
+        N_participants = n_distinct(pid),
+        N_trials = n(),
         Mean_Verify = round(mean(verification_s, na.rm = TRUE), 3),
         Mean_MT = round(mean(rt_s, na.rm = TRUE), 3),
         Mean_Ratio = round(mean(verify_ratio, na.rm = TRUE), 3),
@@ -2455,7 +2537,7 @@ if ("verification_time_ms" %in% names(df)) {
       )
     
     verify_summary %>%
-      kable(caption = "Verification Time by Condition") %>%
+      kable(caption = paste0("Verification Time by Condition (", get_n_string(df_verify), " participants)")) %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
     
     # Aggregate to participant-level means for raincloud plot
@@ -2659,6 +2741,8 @@ if ("verification_time_ms" %in% names(df)) {
 
 **Research Question:** What types of errors occur? Do error patterns differ by condition?
 
+**Sample Size:** `r get_n_string(df_raw %>% filter((practice == 'false' | practice == FALSE | is.na(practice)), !is.na(err_type), err_type != ''))` participants with error type data.
+
 ```{r error-types}
 if ("err_type" %in% names(df_raw)) {
   df_error_types <- df_raw %>%
@@ -2683,7 +2767,7 @@ if ("err_type" %in% names(df_raw)) {
       ungroup()
     
     error_type_summary %>%
-      kable(caption = "Error Type Distribution by Condition") %>%
+      kable(caption = paste0("Error Type Distribution by Condition (", get_n_string(df_error_types), " participants)")) %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
   }
 }
@@ -2698,6 +2782,8 @@ if ("err_type" %in% names(df_raw)) {
 # 12. Block Order & Temporal Effects
 
 **Research Question:** Are there order effects? Does performance improve or degrade over blocks?
+
+**Sample Size:** `r get_n_string(df_all_trials %>% filter(!is.na(block_number)))` participants with block-level data.
 
 ```{r block-effects}
 # Performance by block number
@@ -2867,6 +2953,8 @@ print(p3)
 # 13. Spatial Patterns & Heatmaps
 
 **Research Question:** Are there spatial biases in performance? Do some screen regions show better/worse performance?
+
+**Sample Size:** `r get_n_string(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)))` participants with spatial position data.
 
 ## Performance by Target Position
 
@@ -3118,6 +3206,8 @@ if (nrow(df_error_gaze) > 0) {
 
 **Research Question:** Does the adaptive UI dynamically change target sizes? How does width scaling relate to performance?
 
+**Sample Size:** `r get_n_string(df_raw %>% filter((practice == 'false' | practice == FALSE | is.na(practice)), !is.na(nominal_width_px)))` participants with width scaling data.
+
 *The adaptive UI may scale target widths based on performance. This section examines whether and how target sizes are adjusted.*
 
 ```{r width-scaling-analysis}
@@ -3166,7 +3256,8 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
       width_summary <- df_width %>%
         group_by(modality, ui_mode, pressure) %>%
         summarise(
-          N = n(),
+          N_participants = n_distinct(pid),
+          N_trials = n(),
           Mean_Scale = round(mean(width_scale_factor, na.rm = TRUE), 3),
           SD_Scale = round(sd(width_scale_factor, na.rm = TRUE), 3),
           Mean_Diff = round(mean(width_difference, na.rm = TRUE), 2),
@@ -3176,14 +3267,15 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
         )
       
       width_summary %>%
-        kable(caption = "Target Width Scaling by Condition (No Scaling Observed)") %>%
+        kable(caption = paste0("Target Width Scaling by Condition (", get_n_string(df_width), " participants, No Scaling Observed)")) %>%
         kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
     } else {
       # Summary statistics (when scaling did occur)
       width_summary <- df_width %>%
         group_by(modality, ui_mode, pressure) %>%
         summarise(
-          N = n(),
+          N_participants = n_distinct(pid),
+          N_trials = n(),
           Mean_Scale = round(mean(width_scale_factor, na.rm = TRUE), 3),
           SD_Scale = round(sd(width_scale_factor, na.rm = TRUE), 3),
           Mean_Diff = round(mean(width_difference, na.rm = TRUE), 2),
@@ -3193,7 +3285,7 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
         )
       
       width_summary %>%
-        kable(caption = "Target Width Scaling by Condition") %>%
+        kable(caption = paste0("Target Width Scaling by Condition (", get_n_string(df_width), " participants)")) %>%
         kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
     }
   } else {
@@ -3205,7 +3297,7 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
 ```
 
 ```{r plot-width-scaling}
-#| fig-cap: "Target Width Scale Factor by Condition. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Scale factor = 1.0 means no scaling (nominal size). Values > 1.0 indicate enlarged targets."
+#| fig-cap: !expr 'paste0("Target Width Scale Factor by Condition. ", get_n_string(df_width), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Scale factor = 1.0 means no scaling (nominal size). Values > 1.0 indicate enlarged targets.")'
 
 if (exists("df_width") && nrow(df_width) > 0) {
   # Check if any scaling occurred
