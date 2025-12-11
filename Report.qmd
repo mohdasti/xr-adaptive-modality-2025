@@ -27,6 +27,13 @@ library(lme4)
 library(lmerTest)
 library(emmeans)
 
+# Check for ggdist (needed for proper raincloud plots)
+has_ggdist <- requireNamespace("ggdist", quietly = TRUE)
+if (!has_ggdist) {
+  cat("Note: Install 'ggdist' package for proper raincloud plots: install.packages('ggdist')\n")
+  cat("Using fallback violin plots for now.\n")
+}
+
 # --- COLOR PALETTE ---
 # Use Nature Publishing Group (NPG) palette from scales package
 npg_pal <- pal_npg("nrc")(10)  # Get 10 colors from the palette
@@ -36,6 +43,103 @@ custom_palette_2 <- npg_pal[1:2]
 
 # For multi-level factors (e.g., TLX scales with 6 levels), use first 6 colors
 custom_palette_multi <- npg_pal[1:6]
+
+# --- RAINCLOUD PLOT HELPER ---
+# Function to create proper raincloud plots (half-violin + boxplot + points + lines)
+# Based on Allen et al. (2019) "Raincloud plots: a multi-platform tool for robust data visualization"
+create_raincloud <- function(data, x_var, y_var, fill_var, group_var = NULL, 
+                             violin_side = "r", violin_width = 0.4, 
+                             box_width = 0.15, point_size = 2.5, 
+                             line_alpha = 0.3, point_alpha = 0.7) {
+  
+  # Check if ggdist is available for proper half-violins
+  has_ggdist <- requireNamespace("ggdist", quietly = TRUE)
+  
+  p <- ggplot(data, aes_string(x = x_var, y = y_var, fill = fill_var))
+  
+  if (has_ggdist) {
+    # Use ggdist for proper half-violins
+    p <- p + 
+      ggdist::stat_halfeye(
+        aes(fill = .data[[fill_var]]),
+        side = violin_side,
+        alpha = 0.4,
+        width = violin_width,
+        .width = 0,
+        justification = ifelse(violin_side == "r", -0.3, 1.3),
+        point_colour = NA
+      )
+  } else {
+    # Fallback: create half-violin manually using geom_violin with positioning
+    # This creates a full violin, but we'll position it to show only half
+    p <- p +
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = violin_width,
+        position = position_nudge(x = ifelse(violin_side == "r", 0.25, -0.25)),
+        color = NA
+      )
+  }
+  
+  # Boxplot (positioned on the left, inside the violin area)
+  p <- p +
+    geom_boxplot(
+      width = box_width,
+      alpha = 0.6,
+      outlier.shape = NA,
+      position = position_nudge(x = -0.15),
+      color = "grey30",
+      linewidth = 0.5
+    )
+  
+  # Connecting lines (if group_var provided, for paired data)
+  if (!is.null(group_var)) {
+    p <- p +
+      geom_line(
+        aes_string(group = group_var, color = fill_var),
+        alpha = line_alpha,
+        linewidth = 0.6,
+        position = position_nudge(x = -0.25)
+      )
+  }
+  
+  # Individual points
+  p <- p +
+    geom_point(
+      aes_string(color = fill_var),
+      alpha = point_alpha,
+      size = point_size,
+      position = position_nudge(x = -0.25)
+    )
+  
+  # Mean marker (white diamond)
+  p <- p +
+    stat_summary(
+      fun = mean,
+      geom = "point",
+      shape = 23,
+      size = 4,
+      fill = "white",
+      color = "black",
+      stroke = 1.2,
+      position = position_nudge(x = -0.25)
+    )
+  
+  return(p)
+}
+
+# --- HELPER: BUILD MODEL FORMULAS WITH AVAILABLE FACTORS ---
+build_mixed_formula <- function(dv, factors, data) {
+  keep <- factors[sapply(factors, function(f) n_distinct(data[[f]], na.rm = TRUE) > 1)]
+  dropped <- setdiff(factors, keep)
+  rhs <- if (length(keep) > 0) paste(keep, collapse = " * ") else "1"
+  list(
+    formula = as.formula(paste(dv, "~", rhs, "+ (1 | pid)")),
+    dropped = dropped
+  )
+}
 
 # --- DATA LOADING ---
 # Load the latest clean data
@@ -73,6 +177,11 @@ if ("movement_time_ms" %in% names(df_raw) && !"rt_ms" %in% names(df_raw)) {
   df_raw <- df_raw %>% rename(rt_ms = movement_time_ms)
 }
 
+# Ensure required pid column exists
+if (!"pid" %in% names(df_raw)) {
+  stop("Required column 'pid' is missing after loading data. Available columns: ", paste(names(df_raw), collapse = ", "))
+}
+
 # --- PREPROCESSING ---
 # Create dataframe with ALL trials (correct + incorrect) for error rate calculations
 # This includes trials with valid RTs (even if incorrect) and excludes only practice trials
@@ -106,6 +215,40 @@ df <- df_all_trials %>%
     rt_ms <= 6000  # Time-out threshold
   )
 
+# --- DATA QUALITY & COVERAGE GATE (INTERIM) ---
+# Precompute coverage metrics once; reused across report
+qc_participants_total <- df_raw %>%
+  filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+  pull(pid) %>%
+  n_distinct()
+
+qc_participants_included <- df %>% pull(pid) %>% n_distinct()
+qc_participants_all_trials <- df_all_trials %>% pull(pid) %>% n_distinct()
+
+qc_cell_coverage <- df_all_trials %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    trials = n(),
+    pids = n_distinct(.data$pid),
+    .groups = "drop"
+  ) %>%
+  tidyr::complete(modality, ui_mode, pressure, fill = list(trials = 0, pids = 0)) %>%
+  mutate(missing_cell = trials == 0 | pids == 0)
+
+qc_missing_factors <- list(
+  modality = n_distinct(df_all_trials$modality, na.rm = TRUE) < 2,
+  ui_mode = n_distinct(df_all_trials$ui_mode, na.rm = TRUE) < 2,
+  pressure = n_distinct(df_all_trials$pressure, na.rm = TRUE) < 2
+)
+
+qc_block_completion <- df_all_trials %>%
+  filter(!is.na(block_number)) %>%
+  group_by(pid) %>%
+  summarise(
+    blocks_logged = n_distinct(block_number),
+    .groups = "drop"
+  )
+
 # --- CALCULATE ISO METRICS (Throughput) ---
 # ISO 9241-9: Calculate We (Effective Width) per condition per participant
 df_iso <- df %>%
@@ -135,6 +278,32 @@ df_iso <- df %>%
     # Recreate labels that were lost in summarise
     PressureLabel = ifelse(pressure == 1, "Pressure: ON", "Pressure: OFF"),
     Condition = paste(modality, ui_mode, sep = " - ")
+  )
+
+# Participant-level performance summaries (used across core analyses)
+df_pid_cond <- df %>%
+  group_by(pid, modality, ui_mode, pressure) %>%
+  summarise(
+    rt_mean = mean(rt_s, na.rm = TRUE),
+    rt_median = median(rt_s, na.rm = TRUE),
+    trials_rt = n(),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    df_all_trials %>%
+      group_by(pid, modality, ui_mode, pressure) %>%
+      summarise(
+        error_rate = mean(!is_correct, na.rm = TRUE),
+        trials_all = n(),
+        .groups = "drop"
+      ),
+    by = c("pid", "modality", "ui_mode", "pressure")
+  ) %>%
+  left_join(
+    df_iso %>%
+      group_by(pid, modality, ui_mode, pressure) %>%
+      summarise(tp_mean = mean(TP, na.rm = TRUE), .groups = "drop"),
+    by = c("pid", "modality", "ui_mode", "pressure")
   )
 
 # --- STATISTICAL MODELS ---
@@ -206,6 +375,7 @@ emm_tp <- NULL
 pairs_tp <- NULL
 diag_tp <- NULL
 model_tp_error <- NULL
+model_tp_note <- NULL
 
 if (nrow(df_iso) > 0) {
   diag_tp <- diagnose_model_data(df_iso, "Throughput")
@@ -214,17 +384,17 @@ if (nrow(df_iso) > 0) {
     model_tp_error <- paste0("Insufficient participants: N = ", diag_tp$n_participants, ". Need at least 2 participants for mixed-effects models.")
   } else if (diag_tp$n_trials == 0) {
     model_tp_error <- "No valid trials in dataset."
-  } else if (length(diag_tp$single_level_factors) > 0) {
-    model_tp_error <- paste0("Single-level factor(s) detected: ", paste(diag_tp$single_level_factors, collapse = ", "), 
-                             ". All factors (modality, ui_mode, pressure) must have at least 2 levels for the model to fit. ",
-                             "This typically happens when data collection is incomplete (e.g., only pressure=1 data collected so far).")
   } else if (diag_tp$min_trials_per_condition < 3) {
     model_tp_error <- paste0("Insufficient data per condition: minimum ", diag_tp$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_tp$empty_conditions > 0) {
     model_tp_error <- paste0("Empty conditions detected: ", diag_tp$empty_conditions, " condition(s) have no data.")
   } else {
+  formula_tp <- build_mixed_formula("TP", c("modality", "ui_mode", "pressure"), df_iso)
+  if (length(formula_tp$dropped) > 0) {
+    model_tp_note <- paste0("Dropped single-level factor(s): ", paste(formula_tp$dropped, collapse = ", "), " (interim data).")
+  }
   model_tp <- tryCatch({
-    lmer(TP ~ modality * ui_mode * pressure + (1 | pid), 
+    lmer(formula_tp$formula,
          data = df_iso, REML = FALSE,
          control = lmerControl(optimizer = "bobyqa"))
   }, error = function(e) {
@@ -265,6 +435,7 @@ emm_rt <- NULL
 pairs_rt <- NULL
 diag_rt <- NULL
 model_rt_error <- NULL
+model_rt_note <- NULL
 
 if (nrow(df) > 0) {
   diag_rt <- diagnose_model_data(df, "Movement Time")
@@ -273,17 +444,17 @@ if (nrow(df) > 0) {
     model_rt_error <- paste0("Insufficient participants: N = ", diag_rt$n_participants, ". Need at least 2 participants for mixed-effects models.")
   } else if (diag_rt$n_trials == 0) {
     model_rt_error <- "No valid trials in dataset."
-  } else if (length(diag_rt$single_level_factors) > 0) {
-    model_rt_error <- paste0("Single-level factor(s) detected: ", paste(diag_rt$single_level_factors, collapse = ", "), 
-                             ". All factors (modality, ui_mode, pressure) must have at least 2 levels for the model to fit. ",
-                             "This typically happens when data collection is incomplete (e.g., only pressure=1 data collected so far).")
   } else if (diag_rt$min_trials_per_condition < 3) {
     model_rt_error <- paste0("Insufficient data per condition: minimum ", diag_rt$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_rt$empty_conditions > 0) {
     model_rt_error <- paste0("Empty conditions detected: ", diag_rt$empty_conditions, " condition(s) have no data.")
   } else {
+  formula_rt <- build_mixed_formula("log_rt", c("modality", "ui_mode", "pressure"), df)
+  if (length(formula_rt$dropped) > 0) {
+    model_rt_note <- paste0("Dropped single-level factor(s): ", paste(formula_rt$dropped, collapse = ", "), " (interim data).")
+  }
   model_rt <- tryCatch({
-    lmer(log_rt ~ modality * ui_mode * pressure + (1 | pid), 
+    lmer(formula_rt$formula, 
          data = df, REML = FALSE,
          control = lmerControl(optimizer = "bobyqa"))
   }, error = function(e) {
@@ -334,6 +505,7 @@ emm_err <- NULL
 pairs_err <- NULL
 diag_err <- NULL
 model_err_error <- NULL
+model_err_note <- NULL
 
 if (nrow(df_errors) > 0) {
   diag_err <- diagnose_model_data(df_errors, "Error Rate")
@@ -342,10 +514,6 @@ if (nrow(df_errors) > 0) {
     model_err_error <- paste0("Insufficient participants: N = ", diag_err$n_participants, ". Need at least 2 participants for mixed-effects models.")
   } else if (diag_err$n_trials == 0) {
     model_err_error <- "No valid trials in dataset."
-  } else if (length(diag_err$single_level_factors) > 0) {
-    model_err_error <- paste0("Single-level factor(s) detected: ", paste(diag_err$single_level_factors, collapse = ", "), 
-                              ". All factors (modality, ui_mode, pressure) must have at least 2 levels for the model to fit. ",
-                              "This typically happens when data collection is incomplete (e.g., only pressure=1 data collected so far).")
   } else if (diag_err$min_trials_per_condition < 3) {
     model_err_error <- paste0("Insufficient data per condition: minimum ", diag_err$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_err$empty_conditions > 0) {
@@ -356,8 +524,12 @@ if (nrow(df_errors) > 0) {
     if (error_rate < 0.01 || error_rate > 0.99) {
       model_err_error <- paste0("Insufficient error variance: error rate = ", round(error_rate * 100, 1), "%. GLMM requires some variation in outcomes.")
     } else {
+  formula_err <- build_mixed_formula("error", c("modality", "ui_mode", "pressure"), df_errors)
+  if (length(formula_err$dropped) > 0) {
+    model_err_note <- paste0("Dropped single-level factor(s): ", paste(formula_err$dropped, collapse = ", "), " (interim data).")
+  }
   model_err <- tryCatch({
-    glmer(error ~ modality * ui_mode * pressure + (1 | pid),
+    glmer(formula_err$formula,
           data = df_errors, family = binomial(link = "logit"),
           control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
   }, error = function(e) {
@@ -394,11 +566,104 @@ if (nrow(df_errors) > 0) {
 }
 ```
 
+# Data Quality & Coverage Gate (Interim N)
+
+::: {.callout-note}
+This section prevents misleading models when cells are missing. Current data are interim (N=`r n_distinct(df$pid)`); treat all effects as descriptive.
+:::
+
+```{r qc-gate}
+# Participants
+qc_participants <- tibble(
+  Metric = c("Total participants (raw)", "Participants with any valid trials", "Participants in df (correct, RT-filtered)"),
+  Count = c(qc_participants_total, qc_participants_all_trials, qc_participants_included)
+)
+
+# Cell coverage table
+qc_cells_table <- qc_cell_coverage %>%
+  arrange(modality, ui_mode, pressure) %>%
+  mutate(
+    pressure = as.character(pressure),
+    Status = ifelse(missing_cell, "MISSING", "OK")
+  )
+
+missing_factors <- names(qc_missing_factors)[unlist(qc_missing_factors)]
+
+qc_participants %>%
+  kable(caption = "Participant counts (interim)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+qc_cells_table %>%
+  kable(caption = "Condition coverage (modality × ui_mode × pressure)", align = "c") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+if (length(missing_factors) > 0) {
+  cat("**Missing factor levels detected:**", paste(missing_factors, collapse = ", "), "\n\n")
+} else {
+  cat("All factors have ≥2 levels in the interim data.\n\n")
+}
+
+if (nrow(qc_block_completion) > 0) {
+  qc_block_completion %>%
+    kable(caption = "Blocks logged per participant", align = "c") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+}
+```
+
+
 # 1. Executive Summary
 
 This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' law pointing tasks across two input modalities (Hand, Gaze) and two UI modes (Static, Adaptive).
 
 **Note on Participant Exclusions:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the main 2×2×2 factorial analysis due to a data logging error that incorrectly recorded pressure conditions. The bug was fixed on December 8, 2025 (commit `04758db`), and seven replacement participants (P049-P055) were added. The final analysis sample consists of N=48 participants with complete data across all experimental conditions. See the Data Quality Notes section and `EXCLUSION_CRITERIA.md` for details.
+
+# Results Snapshot (Interim, N = `r qc_participants_included`)
+
+```{r results-snapshot}
+# Simple contrasts: adaptive - static within modality (averaged over pressure where available)
+contrast_table <- df_pid_cond %>%
+  group_by(modality, ui_mode) %>%
+  summarise(tp = mean(tp_mean, na.rm = TRUE),
+            rt = mean(rt_mean, na.rm = TRUE),
+            err = mean(error_rate, na.rm = TRUE),
+            .groups = "drop") %>%
+  pivot_wider(names_from = ui_mode, values_from = c(tp, rt, err)) %>%
+  mutate(
+    tp_diff_adapt_static = tp_adaptive - tp_static,
+    rt_diff_adapt_static = rt_adaptive - rt_static,
+    err_diff_adapt_static = err_adaptive - err_static
+  ) %>%
+  select(modality, tp_diff_adapt_static, rt_diff_adapt_static, err_diff_adapt_static)
+
+tlx_snapshot <- df_raw %>%
+  filter(!is.na(pid)) %>%
+  group_by(pid, modality, ui_mode) %>%
+  summarise(overall_tlx = mean(c_across(starts_with("tlx_")), na.rm = TRUE), .groups = "drop") %>%
+  group_by(modality, ui_mode) %>%
+  summarise(Mean_Overall_TLX = round(mean(overall_tlx, na.rm = TRUE), 1),
+            .groups = "drop")
+
+manip_snapshot <- df_raw %>%
+  filter(!is.na(width_scale_factor)) %>%
+  group_by(modality, ui_mode) %>%
+  summarise(
+    Mean_Width_Scale = round(mean(width_scale_factor, na.rm = TRUE), 3),
+    Pct_Scaled = round(100 * mean(width_scale_factor != 1, na.rm = TRUE), 1),
+    .groups = "drop"
+  )
+
+contrast_table %>%
+  kable(caption = "RQ1 contrasts (adaptive - static; interim descriptive)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+tlx_snapshot %>%
+  kable(caption = "RQ2 snapshot: Overall TLX (interim)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+manip_snapshot %>%
+  kable(caption = "RQ3 manipulation check: width scaling (interim)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
 
 ## Key Findings
 
@@ -513,43 +778,106 @@ tp_summary %>%
 ## Visualizations
 
 ```{r plot-tp}
-#| fig-cap: "Throughput by Modality and UI Mode. Higher values indicate better performance. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles, and individual points may be visible as outliers."
-# Main plot with all conditions - improved faceting and aesthetics
-p1 <- ggplot(df_iso, aes(x = ui_mode, y = TP, fill = ui_mode)) +
-  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-              show.legend = FALSE) +
-  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-  facet_grid(modality ~ pressure, 
-             labeller = labeller(
+#| fig-cap: "Throughput by Modality and UI Mode (participant-level means). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons."
+
+# Prepare data for raincloud plot with mirrored half-violins
+df_tp_plot <- df_pid_cond %>%
+  filter(!is.na(tp_mean))
+
+# Raincloud plot with mirrored half-violins
+p_tp <- ggplot(df_tp_plot, aes(x = ui_mode, y = tp_mean, fill = ui_mode, color = ui_mode)) +
+  # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+  {
+    if (has_ggdist) {
+      list(
+        # Static: half-violin extending LEFT (outward from left position)
+        ggdist::stat_halfeye(
+          data = df_tp_plot %>% filter(ui_mode == "static"),
+          aes(fill = ui_mode),
+          side = "left",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = 1.3,
+          point_colour = NA
+        ),
+        # Adaptive: half-violin extending RIGHT (outward from right position)
+        ggdist::stat_halfeye(
+          data = df_tp_plot %>% filter(ui_mode == "adaptive"),
+          aes(fill = ui_mode),
+          side = "right",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = -0.3,
+          point_colour = NA
+        )
+      )
+    } else {
+      # Fallback: full violins
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = 0.35,
+        position = position_dodge(width = 0),
+        color = NA
+      )
+    }
+  } +
+  # Boxplots inside violins (light gray for visibility)
+  geom_boxplot(
+    width = 0.15,
+    alpha = 0.9,
+    outlier.shape = NA,
+    position = position_dodge(width = 0),
+    fill = "grey90",
+    color = "grey70",
+    linewidth = 0.7,
+    show.legend = FALSE
+  ) +
+  # Individual participant points (in columns, no jitter)
+  geom_point(
+    alpha = 0.5,
+    size = 1.5,
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  # Connecting lines (between paired conditions)
+  geom_line(
+    aes(group = pid),
+    alpha = 0.3,
+    linewidth = 0.4,
+    color = "grey60",
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
              )) +
-  scale_fill_manual(values = custom_palette_2,
-                     labels = c("Static", "Adaptive")) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
     x = "UI Mode",
     y = "Throughput (bits/s)",
     fill = "UI Mode"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 13) +
   theme(
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12),
     strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+    panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
   )
 
-print(p1)
+print(p_tp)
 ```
 
-```{r plot-tp-emm}
-#| fig-cap: "Estimated Marginal Means for Throughput. Error bars represent 95% confidence intervals from the linear mixed-effects model. Points are connected by lines to show the interaction pattern between modality and UI mode, faceted by pressure condition."
-# Interaction plot
+```{r plot-tp-emm, eval=exists("emm_tp") && !is.null(emm_tp)}
+#| fig-cap: "Estimated Marginal Means for Throughput (shown only when model fits and factors exist)."
 if (exists("emm_tp") && !is.null(emm_tp)) {
   emm_tp_df <- as.data.frame(emm_tp) %>%
     mutate(
@@ -557,11 +885,23 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
       ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
     )
   
-  p2 <- ggplot(emm_tp_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
-    geom_line(size = 1.2, position = position_dodge(0.2)) +
-    geom_point(size = 3, position = position_dodge(0.2)) +
-    geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
-                  width = 0.1, position = position_dodge(0.2)) +
+  # Check for CI column names (may vary by emmeans version/type)
+  ci_lower <- if ("lower.CL" %in% names(emm_tp_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_tp_df)) "asymp.LCL" else NULL
+  ci_upper <- if ("upper.CL" %in% names(emm_tp_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_tp_df)) "asymp.UCL" else NULL
+  
+  p_emm_tp <- ggplot(emm_tp_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
+    geom_line(size = 1.1, position = position_dodge(0.2)) +
+    geom_point(size = 2.8, position = position_dodge(0.2))
+  
+  # Add error bars only if CI columns exist
+  if (!is.null(ci_lower) && !is.null(ci_upper)) {
+    p_emm_tp <- p_emm_tp + geom_errorbar(
+      aes(ymin = .data[[ci_lower]], ymax = .data[[ci_upper]]), 
+      width = 0.1, position = position_dodge(0.2)
+    )
+  }
+  
+  p_emm_tp <- p_emm_tp +
     facet_wrap(~pressure, labeller = labeller(pressure = function(x) paste("Pressure:", x))) +
     scale_color_manual(values = custom_palette_2,
                         labels = c("Static", "Adaptive")) +
@@ -570,10 +910,10 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
       y = "Throughput (bits/s)",
       color = "UI Mode"
     ) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = 13) +
     theme(legend.position = "top")
   
-  print(p2)
+  print(p_emm_tp)
 }
 ```
 
@@ -581,12 +921,16 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
 
 ```{r tp-model}
 if (exists("model_tp") && !is.null(model_tp)) {
-  cat("### Model: TP ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  cat("### Model: ", deparse(formula_tp$formula), "\n\n")
   
   # Show diagnostics
   if (!is.null(diag_tp)) {
     cat("**Data Summary:** ", diag_tp$n_participants, " participants, ", diag_tp$n_trials, " trials, ", 
         diag_tp$n_conditions, " conditions, minimum ", diag_tp$min_trials_per_condition, " trials per condition.\n\n")
+  }
+  
+  if (!is.null(model_tp_note)) {
+    cat("**Interim note:** ", model_tp_note, "\n\n")
   }
   
   # ANOVA table
@@ -662,43 +1006,103 @@ rt_summary %>%
 ## Visualizations
 
 ```{r plot-rt}
-#| fig-cap: "Movement Time by Modality and UI Mode. Lower values indicate faster performance. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles, and individual points may be visible as outliers."
-# Movement time distribution - improved faceting and aesthetics
-p1 <- ggplot(df, aes(x = ui_mode, y = rt_s, fill = ui_mode)) +
-  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-              show.legend = FALSE) +
-  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-  facet_grid(modality ~ pressure,
-             labeller = labeller(
+#| fig-cap: "Movement Time by Modality and UI Mode (participant-level means). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons."
+
+# Prepare data for raincloud plot
+df_rt_plot <- df_pid_cond %>%
+  filter(!is.na(rt_mean))
+
+# Raincloud plot with mirrored half-violins
+p_rt <- ggplot(df_rt_plot, aes(x = ui_mode, y = rt_mean, fill = ui_mode, color = ui_mode)) +
+  # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+  {
+    if (has_ggdist) {
+      list(
+        ggdist::stat_halfeye(
+          data = df_rt_plot %>% filter(ui_mode == "static"),
+          aes(fill = ui_mode),
+          side = "left",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = 1.3,
+          point_colour = NA
+        ),
+        ggdist::stat_halfeye(
+          data = df_rt_plot %>% filter(ui_mode == "adaptive"),
+          aes(fill = ui_mode),
+          side = "right",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = -0.3,
+          point_colour = NA
+        )
+      )
+    } else {
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = 0.35,
+        position = position_dodge(width = 0),
+        color = NA
+      )
+    }
+  } +
+  # Boxplots inside violins (light gray for visibility)
+  geom_boxplot(
+    width = 0.15,
+    alpha = 0.9,
+    outlier.shape = NA,
+    position = position_dodge(width = 0),
+    fill = "grey90",
+    color = "grey70",
+    linewidth = 0.7,
+    show.legend = FALSE
+  ) +
+  # Individual participant points (in columns, no jitter)
+  geom_point(
+    alpha = 0.5,
+    size = 1.5,
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  # Connecting lines (between paired conditions)
+  geom_line(
+    aes(group = pid),
+    alpha = 0.3,
+    linewidth = 0.4,
+    color = "grey60",
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
              )) +
-  scale_fill_manual(values = custom_palette_2,
-                     labels = c("Static", "Adaptive")) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
     x = "UI Mode",
     y = "Movement Time (s)",
     fill = "UI Mode"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 13) +
   theme(
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12),
     strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+    panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
   )
 
-print(p1)
+print(p_rt)
 ```
 
-```{r plot-rt-emm}
-#| fig-cap: "Estimated Marginal Means for Movement Time. Error bars represent 95% confidence intervals from the linear mixed-effects model. Points are connected by lines to show the interaction pattern between modality and UI mode, faceted by pressure condition."
-# Estimated marginal means
+```{r plot-rt-emm, eval=exists("emm_rt") && !is.null(emm_rt)}
+#| fig-cap: "Estimated Marginal Means for Movement Time (shown only when model fits and factors exist)."
 if (exists("emm_rt") && !is.null(emm_rt)) {
   emm_rt_df <- as.data.frame(emm_rt) %>%
     mutate(
@@ -706,11 +1110,23 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
       ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
     )
   
-  p2 <- ggplot(emm_rt_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
-    geom_line(size = 1.2, position = position_dodge(0.2)) +
-    geom_point(size = 3, position = position_dodge(0.2)) +
-    geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), 
-                  width = 0.1, position = position_dodge(0.2)) +
+  # Check for CI column names (may vary by emmeans version/type)
+  ci_lower <- if ("lower.CL" %in% names(emm_rt_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_rt_df)) "asymp.LCL" else NULL
+  ci_upper <- if ("upper.CL" %in% names(emm_rt_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_rt_df)) "asymp.UCL" else NULL
+  
+  p_emm_rt <- ggplot(emm_rt_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
+    geom_line(size = 1.1, position = position_dodge(0.2)) +
+    geom_point(size = 2.8, position = position_dodge(0.2))
+  
+  # Add error bars only if CI columns exist
+  if (!is.null(ci_lower) && !is.null(ci_upper)) {
+    p_emm_rt <- p_emm_rt + geom_errorbar(
+      aes(ymin = .data[[ci_lower]], ymax = .data[[ci_upper]]), 
+      width = 0.1, position = position_dodge(0.2)
+    )
+  }
+  
+  p_emm_rt <- p_emm_rt +
     facet_wrap(~pressure, labeller = labeller(pressure = function(x) paste("Pressure:", x))) +
     scale_color_manual(values = custom_palette_2,
                         labels = c("Static", "Adaptive")) +
@@ -719,10 +1135,10 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
       y = "Movement Time (s)",
       color = "UI Mode"
     ) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = 13) +
     theme(legend.position = "top")
   
-  print(p2)
+  print(p_emm_rt)
 }
 ```
 
@@ -730,12 +1146,16 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
 
 ```{r rt-model}
 if (exists("model_rt") && !is.null(model_rt)) {
-  cat("### Model: log(Movement Time) ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  cat("### Model: ", deparse(formula_rt$formula), "\n\n")
   
   # Show diagnostics
   if (!is.null(diag_rt)) {
     cat("**Data Summary:** ", diag_rt$n_participants, " participants, ", diag_rt$n_trials, " trials, ", 
         diag_rt$n_conditions, " conditions, minimum ", diag_rt$min_trials_per_condition, " trials per condition.\n\n")
+  }
+  
+  if (!is.null(model_rt_note)) {
+    cat("**Interim note:** ", model_rt_note, "\n\n")
   }
   
   # ANOVA table
@@ -843,53 +1263,111 @@ if (nrow(fitts_fits) > 0) {
 **Research Question:** How do error rates differ across conditions?
 
 ```{r error-analysis}
-#| fig-cap: "Error Rate by Modality and UI Mode. Lower values indicate fewer errors. Error rate is calculated as the percentage of trials with incorrect selections (misses, timeouts, or false activations). White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
-# Calculate error rates
-error_summary <- df_errors %>%
+#| fig-cap: "Error Rate by Modality and UI Mode (participant-level means). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons."
+# Calculate condition-level summary
+error_summary <- df_pid_cond %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
-    Total = n(),
-    Errors = sum(error, na.rm = TRUE),
-    Error_Rate = round(100 * mean(error, na.rm = TRUE), 2),
+    Participants = n(),
+    Mean_Error_Rate = round(100 * mean(error_rate, na.rm = TRUE), 2),
+    SD_Error_Rate = round(100 * sd(error_rate, na.rm = TRUE), 2),
     .groups = "drop"
   ) %>%
   arrange(modality, ui_mode, pressure)
 
 error_summary %>%
-  kable(caption = "Error Rates by Condition") %>%
+  kable(caption = "Error Rates by Condition (participant means)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-# Visualization - improved faceting and aesthetics
-p_err <- df_errors %>%
-  group_by(modality, ui_mode, pressure, pid) %>%
-  summarise(Error_Rate = 100 * mean(error, na.rm = TRUE), .groups = "drop") %>%
-  ggplot(aes(x = ui_mode, y = Error_Rate, fill = ui_mode)) +
-  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-              show.legend = FALSE) +
-  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-  facet_grid(modality ~ pressure,
-             labeller = labeller(
+# Prepare data for raincloud plot
+df_err_plot <- df_pid_cond %>%
+  filter(!is.na(error_rate)) %>%
+  mutate(Error_Rate = 100 * error_rate)
+
+# Raincloud plot with mirrored half-violins
+p_err <- ggplot(df_err_plot, aes(x = ui_mode, y = Error_Rate, fill = ui_mode, color = ui_mode)) +
+  # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+  {
+    if (has_ggdist) {
+      list(
+        ggdist::stat_halfeye(
+          data = df_err_plot %>% filter(ui_mode == "static"),
+          aes(fill = ui_mode),
+          side = "left",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = 1.3,
+          point_colour = NA
+        ),
+        ggdist::stat_halfeye(
+          data = df_err_plot %>% filter(ui_mode == "adaptive"),
+          aes(fill = ui_mode),
+          side = "right",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = -0.3,
+          point_colour = NA
+        )
+      )
+    } else {
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = 0.35,
+        position = position_dodge(width = 0),
+        color = NA
+      )
+    }
+  } +
+  # Boxplots inside violins (light gray for visibility)
+  geom_boxplot(
+    width = 0.15,
+    alpha = 0.9,
+    outlier.shape = NA,
+    position = position_dodge(width = 0),
+    fill = "grey90",
+    color = "grey70",
+    linewidth = 0.7,
+    show.legend = FALSE
+  ) +
+  # Individual participant points (in columns, no jitter)
+  geom_point(
+    alpha = 0.5,
+    size = 1.5,
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  # Connecting lines (between paired conditions)
+  geom_line(
+    aes(group = pid),
+    alpha = 0.3,
+    linewidth = 0.4,
+    color = "grey60",
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
              )) +
-  scale_fill_manual(values = custom_palette_2,
-                     labels = c("Static", "Adaptive")) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
     x = "UI Mode",
     y = "Error Rate (%)",
     fill = "UI Mode"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 13) +
   theme(
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12),
     strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+    panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
   )
 
 print(p_err)
@@ -899,7 +1377,7 @@ print(p_err)
 
 ```{r error-model}
 if (exists("model_err") && !is.null(model_err)) {
-  cat("### Model: Error ~ Modality × UI Mode × Pressure + (1 | Participant)\n\n")
+  cat("### Model: ", deparse(formula_err$formula), "\n\n")
   
   # Show diagnostics
   if (!is.null(diag_err)) {
@@ -907,6 +1385,10 @@ if (exists("model_err") && !is.null(model_err)) {
     cat("**Data Summary:** ", diag_err$n_participants, " participants, ", diag_err$n_trials, " trials, ", 
         diag_err$n_conditions, " conditions, minimum ", diag_err$min_trials_per_condition, " trials per condition.\n")
     cat("**Overall Error Rate:** ", round(error_rate * 100, 1), "%\n\n")
+  }
+  
+  if (!is.null(model_err_note)) {
+    cat("**Interim note:** ", model_err_note, "\n\n")
   }
   
   # ANOVA table
@@ -977,35 +1459,98 @@ knitr::kable(we_summary)
 ```
 
 ```{r plot-we}
-#| fig-cap: "Effective Target Width (Accuracy) by Modality and UI Mode. Lower values indicate tighter shot grouping and higher precision. Effective width (We) is calculated as 4.133 × SD of projected errors along the task axis, normalizing to a 4% error rate. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
+#| fig-cap: "Effective Target Width (Accuracy) by Modality and UI Mode. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values indicate tighter shot grouping and higher precision."
 
-ggplot(df_iso, aes(x = ui_mode, y = We, fill = ui_mode)) +
-  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-              show.legend = FALSE) +
-  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-  facet_grid(modality ~ pressure,
-             labeller = labeller(
+# Aggregate to participant-level means
+df_we_plot <- df_iso %>%
+  group_by(pid, modality, ui_mode, pressure) %>%
+  summarise(We_mean = mean(We, na.rm = TRUE), .groups = "drop") %>%
+  filter(!is.na(We_mean))
+
+# Raincloud plot for Effective Width
+ggplot(df_we_plot, aes(x = ui_mode, y = We_mean, fill = ui_mode, color = ui_mode)) +
+  # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+  {
+    if (has_ggdist) {
+      list(
+        ggdist::stat_halfeye(
+          data = df_we_plot %>% filter(ui_mode == "static"),
+          aes(fill = ui_mode),
+          side = "left",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = 1.3,
+          point_colour = NA
+        ),
+        ggdist::stat_halfeye(
+          data = df_we_plot %>% filter(ui_mode == "adaptive"),
+          aes(fill = ui_mode),
+          side = "right",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = -0.3,
+          point_colour = NA
+        )
+      )
+    } else {
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = 0.35,
+        position = position_dodge(width = 0),
+        color = NA
+      )
+    }
+  } +
+  # Boxplots inside violins (light gray for visibility)
+  geom_boxplot(
+    width = 0.15,
+    alpha = 0.9,
+    outlier.shape = NA,
+    position = position_dodge(width = 0),
+    fill = "grey90",
+    color = "grey70",
+    linewidth = 0.7,
+    show.legend = FALSE
+  ) +
+  # Individual participant points (in columns, no jitter)
+  geom_point(
+    alpha = 0.5,
+    size = 1.5,
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  # Connecting lines (between paired conditions)
+  geom_line(
+    aes(group = pid),
+    alpha = 0.3,
+    linewidth = 0.4,
+    color = "grey60",
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
              )) +
-  scale_fill_manual(values = custom_palette_2,
-                     labels = c("Static", "Adaptive")) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
     y = "Effective Width (px)",
     x = "UI Mode",
     fill = "UI Mode"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 13) +
   theme(
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12),
     strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+    panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
   )
 ```
 
@@ -1147,36 +1692,99 @@ reentry_summary %>%
 ```
 
 ```{r plot-reentry}
-#| fig-cap: "Target Re-entries (Control Stability) by Modality and UI Mode. Re-entries count how often the cursor drifted out of the target before final selection, measuring control stability during the verification phase. Counts > 1 indicate slipping out of target. Lower values are better. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
+#| fig-cap: "Target Re-entries (Control Stability) by Modality and UI Mode. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values are better."
 
-ggplot(df_iso %>% filter(!is.na(reentries)), 
-       aes(x = ui_mode, y = reentries, fill = ui_mode)) +
-  geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-              show.legend = FALSE) +
-  geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-               outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-               position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-  facet_grid(modality ~ pressure,
-             labeller = labeller(
-               modality = function(x) paste("Modality:", str_to_title(x)),
-               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-             )) +
-  scale_fill_manual(values = custom_palette_2,
-                     labels = c("Static", "Adaptive")) +
+# Aggregate to participant-level means
+df_reentry_plot <- df_iso %>%
+  filter(!is.na(reentries)) %>%
+  group_by(pid, modality, ui_mode, pressure) %>%
+  summarise(reentries_mean = mean(reentries, na.rm = TRUE), .groups = "drop") %>%
+  filter(!is.na(reentries_mean))
+
+# Raincloud plot for Re-entries
+ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, color = ui_mode)) +
+  # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+  {
+    if (has_ggdist) {
+      list(
+        ggdist::stat_halfeye(
+          data = df_reentry_plot %>% filter(ui_mode == "static"),
+          aes(fill = ui_mode),
+          side = "left",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = 1.3,
+          point_colour = NA
+        ),
+        ggdist::stat_halfeye(
+          data = df_reentry_plot %>% filter(ui_mode == "adaptive"),
+          aes(fill = ui_mode),
+          side = "right",
+          alpha = 0.4,
+          width = 0.35,
+          .width = 0,
+          justification = -0.3,
+          point_colour = NA
+        )
+      )
+    } else {
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = 0.35,
+        position = position_dodge(width = 0),
+        color = NA
+      )
+    }
+  } +
+  # Boxplots inside violins (light gray for visibility)
+  geom_boxplot(
+    width = 0.15,
+    alpha = 0.9,
+    outlier.shape = NA,
+    position = position_dodge(width = 0),
+    fill = "grey90",
+    color = "grey70",
+    linewidth = 0.7,
+    show.legend = FALSE
+  ) +
+  # Individual participant points (in columns, no jitter)
+  geom_point(
+    alpha = 0.5,
+    size = 1.5,
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  # Connecting lines (between paired conditions)
+  geom_line(
+    aes(group = pid),
+    alpha = 0.3,
+    linewidth = 0.4,
+    color = "grey60",
+    position = position_dodge(width = 0),
+    show.legend = FALSE
+  ) +
+  facet_grid(modality ~ pressure, labeller = labeller(
+    modality = function(x) paste("Modality:", str_to_title(x)),
+    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+  )) +
+  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
   labs(
     y = "Avg Re-entries per Trial",
     x = "UI Mode",
     fill = "UI Mode"
   ) +
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 13) +
   theme(
     legend.position = "top",
     strip.text = element_text(face = "bold", size = 12),
     strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+    panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
   )
 ```
 
@@ -1192,9 +1800,16 @@ ggplot(df_iso %>% filter(!is.na(reentries)),
 tlx_cols <- c("tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration")
 
 if(all(tlx_cols %in% names(df_raw))) {
+  # Block-level aggregation (if block_number exists), else participant-level
   df_tlx <- df_raw %>%
     filter(!is.na(pid)) %>%
-    group_by(pid, modality, ui_mode) %>%
+    {
+      if ("block_number" %in% names(.)) {
+        group_by(., pid, modality, ui_mode, block_number)
+      } else {
+        group_by(., pid, modality, ui_mode)
+      }
+    } %>%
     summarise(across(starts_with("tlx_"), mean, na.rm = TRUE), .groups = "drop") %>%
     pivot_longer(cols = starts_with("tlx_"), names_to = "Scale", values_to = "Score") %>%
     mutate(
@@ -1214,44 +1829,37 @@ if(all(tlx_cols %in% names(df_raw))) {
     )
   
   tlx_summary %>%
-    kable(caption = "NASA-TLX Scores by Condition") %>%
+    kable(caption = "NASA-TLX Scores by Condition (block-level where available)") %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
   
-  # Visualization - improved faceting and aesthetics
-  p1 <- ggplot(df_tlx, aes(x = ui_mode, y = Score, fill = ui_mode)) +
-    geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                show.legend = FALSE) +
-    geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                 outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-    stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                 position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
+  # Visualization (one concise view)
+  p1 <- ggplot(df_tlx, aes(x = ui_mode, y = Score, color = ui_mode, group = pid)) +
+    geom_line(alpha = 0.25) +
+    geom_point(alpha = 0.6, size = 1.8) +
     facet_grid(modality ~ Scale,
                labeller = labeller(
                  modality = function(x) paste("Modality:", str_to_title(x)),
                  Scale = function(x) x
                )) +
-    scale_fill_manual(values = custom_palette_2,
+    scale_color_manual(values = custom_palette_2,
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
     scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
     labs(
-      y = "Score (0-100)",
+      y = "TLX Score (0-100)",
       x = "UI Mode",
-      fill = "UI Mode"
+      color = "UI Mode"
     ) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = 13) +
     theme(
       legend.position = "top",
       strip.text = element_text(face = "bold", size = 11),
       strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
-      axis.text.x = element_text(angle = 0, hjust = 0.5)
+      panel.grid.minor = element_blank()
     )
   
   print(p1)
   
-  # Overall workload score - improved faceting
 } else {
   cat("⚠ TLX Data not found in trial_data.csv\n")
   cat("Expected columns:", paste(tlx_cols, collapse = ", "), "\n")
@@ -1260,49 +1868,7 @@ if(all(tlx_cols %in% names(df_raw))) {
 }
 ```
 
-```{r plot-tlx-overall}
-#| fig-cap: "Overall NASA-TLX Workload Score. Average across all 6 scales (Mental, Physical, Temporal, Performance, Effort, Frustration). Lower values indicate lower overall subjective workload. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles."
-if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
-  df_tlx_overall <- df_tlx %>%
-    group_by(pid, modality, ui_mode) %>%
-    summarise(Overall_TLX = mean(Score, na.rm = TRUE), .groups = "drop") %>%
-    mutate(
-      modality = factor(modality, levels = c("hand", "gaze")),
-      ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
-    )
-  
-  p2 <- ggplot(df_tlx_overall, aes(x = ui_mode, y = Overall_TLX, fill = ui_mode)) +
-    geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                show.legend = FALSE) +
-    geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                 outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-    stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                 position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-    facet_wrap(~modality,
-               labeller = labeller(
-                 modality = function(x) paste("Modality:", str_to_title(x))
-               )) +
-    scale_fill_manual(values = custom_palette_2,
-                       labels = c("Static", "Adaptive")) +
-    scale_x_discrete(labels = c("Static", "Adaptive")) +
-    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
-    labs(
-      y = "Overall TLX Score (0-100)",
-      x = "UI Mode",
-      fill = "UI Mode"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(
-      legend.position = "top",
-      strip.text = element_text(face = "bold", size = 12),
-      strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-      panel.grid.minor = element_blank(),
-      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
-    )
-  
-  print(p2)
-}
-```
+<!-- Consolidated: removed extra TLX overall violin for interim slimness -->
   
 ```{r plot-tlx-stacked}
 #| fig-cap: "NASA-TLX Workload Components (Stacked Bar Chart). Total height represents overall workload, with each colored segment representing one of the six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Lower total height indicates lower overall subjective workload."
@@ -1657,7 +2223,7 @@ if ("submovement_count" %in% names(df)) {
 ```
 
 ```{r plot-submovement}
-#| fig-cap: "Submovement Count (Movement Quality) by Modality and UI Mode. Lower indicates smoother, more ballistic movements. White diamonds indicate means. Violin plots show the distribution shape, boxplots show quartiles."
+#| fig-cap: "Submovement Count (Movement Quality) by Modality and UI Mode. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower indicates smoother, more ballistic movements."
 
 # Prefer recomputed submovement count (computed from trajectory for both modalities)
 # Fall back to legacy submovement_count if recomputed is not available
@@ -1686,37 +2252,96 @@ if (!is.null(submov_col)) {
       cat("   computed from trajectory for both modalities.\n\n")
     }
     
-    # Visualization
-    # Visualization - improved faceting and aesthetics
-    p1 <- ggplot(df_submov, aes(x = ui_mode, y = .data[[submov_col]], fill = ui_mode)) +
-      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                  show.legend = FALSE) +
-      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-      facet_grid(modality ~ pressure,
-                 labeller = labeller(
-                   modality = function(x) paste("Modality:", str_to_title(x)),
-                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
-      scale_fill_manual(values = custom_palette_2,
-                         labels = c("Static", "Adaptive")) +
+    # Aggregate to participant-level means for raincloud plot
+    df_submov_plot <- df_submov %>%
+      group_by(pid, modality, ui_mode, pressure) %>%
+      summarise(submov_mean = mean(.data[[submov_col]], na.rm = TRUE), .groups = "drop") %>%
+      filter(!is.na(submov_mean))
+    
+    # Raincloud plot for Submovement Count
+    p1 <- ggplot(df_submov_plot, aes(x = ui_mode, y = submov_mean, fill = ui_mode, color = ui_mode)) +
+      # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+      {
+        if (has_ggdist) {
+          list(
+            ggdist::stat_halfeye(
+              data = df_submov_plot %>% filter(ui_mode == "static"),
+              aes(fill = ui_mode),
+              side = "left",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = 1.3,
+              point_colour = NA
+            ),
+            ggdist::stat_halfeye(
+              data = df_submov_plot %>% filter(ui_mode == "adaptive"),
+              aes(fill = ui_mode),
+              side = "right",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = -0.3,
+              point_colour = NA
+            )
+          )
+        } else {
+          geom_violin(
+            alpha = 0.4,
+            trim = FALSE,
+            scale = "width",
+            width = 0.35,
+            position = position_dodge(width = 0),
+            color = NA
+          )
+        }
+      } +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Connecting lines (between paired conditions)
+      geom_line(
+        aes(group = pid),
+        alpha = 0.3,
+        linewidth = 0.4,
+        color = "grey60",
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      facet_grid(modality ~ pressure, labeller = labeller(
+        modality = function(x) paste("Modality:", str_to_title(x)),
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
       labs(
-        title = "Submovement Count (Movement Quality)",
-        subtitle = "Lower indicates smoother, more ballistic movements. White diamonds indicate means.",
         x = "UI Mode",
         y = "Submovement Count",
         fill = "UI Mode"
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = 13) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
         panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
       )
     
     print(p1)
@@ -1833,71 +2458,190 @@ if ("verification_time_ms" %in% names(df)) {
       kable(caption = "Verification Time by Condition") %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
     
-    # Visualization - improved faceting and aesthetics
-    p1 <- ggplot(df_verify, aes(x = ui_mode, y = verification_s, fill = ui_mode)) +
-      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                  show.legend = FALSE) +
-      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-      facet_grid(modality ~ pressure,
-                 labeller = labeller(
+    # Aggregate to participant-level means for raincloud plot
+    df_verify_plot <- df_verify %>%
+      group_by(pid, modality, ui_mode, pressure) %>%
+      summarise(verification_s_mean = mean(verification_s, na.rm = TRUE), .groups = "drop") %>%
+      filter(!is.na(verification_s_mean))
+    
+    # Raincloud plot for Verification Time
+    p1 <- ggplot(df_verify_plot, aes(x = ui_mode, y = verification_s_mean, fill = ui_mode, color = ui_mode)) +
+      # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+      {
+        if (has_ggdist) {
+          list(
+            ggdist::stat_halfeye(
+              data = df_verify_plot %>% filter(ui_mode == "static"),
+              aes(fill = ui_mode),
+              side = "left",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = 1.3,
+              point_colour = NA
+            ),
+            ggdist::stat_halfeye(
+              data = df_verify_plot %>% filter(ui_mode == "adaptive"),
+              aes(fill = ui_mode),
+              side = "right",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = -0.3,
+              point_colour = NA
+            )
+          )
+        } else {
+          geom_violin(
+            alpha = 0.4,
+            trim = FALSE,
+            scale = "width",
+            width = 0.35,
+            position = position_dodge(width = 0),
+            color = NA
+          )
+        }
+      } +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Connecting lines (between paired conditions)
+      geom_line(
+        aes(group = pid),
+        alpha = 0.3,
+        linewidth = 0.4,
+        color = "grey60",
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      facet_grid(modality ~ pressure, labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                  )) +
-      scale_fill_manual(values = custom_palette_2,
-                         labels = c("Static", "Adaptive")) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
       labs(
-        title = "Verification Time (Stopping Phase)",
-        subtitle = "Time spent precisely stopping at target. Lower is better. White diamonds indicate means.",
         x = "UI Mode",
         y = "Verification Time (s)",
         fill = "UI Mode"
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = 13) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
         panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
       )
     
     print(p1)
     
-    # Verification ratio (what proportion of total time is verification) - improved faceting
-    p2 <- ggplot(df_verify, aes(x = ui_mode, y = verify_ratio, fill = ui_mode)) +
-      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                  show.legend = FALSE) +
-      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-      facet_grid(modality ~ pressure,
-                 labeller = labeller(
-                   modality = function(x) paste("Modality:", str_to_title(x)),
-                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
-      scale_fill_manual(values = custom_palette_2,
-                         labels = c("Static", "Adaptive")) +
+    # Verification ratio (what proportion of total time is verification) - raincloud style
+    df_verify_ratio_plot <- df_verify %>%
+      group_by(pid, modality, ui_mode, pressure) %>%
+      summarise(verify_ratio_mean = mean(verify_ratio, na.rm = TRUE), .groups = "drop") %>%
+      filter(!is.na(verify_ratio_mean))
+    
+    p2 <- ggplot(df_verify_ratio_plot, aes(x = ui_mode, y = verify_ratio_mean, fill = ui_mode, color = ui_mode)) +
+      # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+      {
+        if (has_ggdist) {
+          list(
+            ggdist::stat_halfeye(
+              data = df_verify_ratio_plot %>% filter(ui_mode == "static"),
+              aes(fill = ui_mode),
+              side = "left",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = 1.3,
+              point_colour = NA
+            ),
+            ggdist::stat_halfeye(
+              data = df_verify_ratio_plot %>% filter(ui_mode == "adaptive"),
+              aes(fill = ui_mode),
+              side = "right",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = -0.3,
+              point_colour = NA
+            )
+          )
+        } else {
+          geom_violin(
+            alpha = 0.4,
+            trim = FALSE,
+            scale = "width",
+            width = 0.35,
+            position = position_dodge(width = 0),
+            color = NA
+          )
+        }
+      } +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Connecting lines (between paired conditions)
+      geom_line(
+        aes(group = pid),
+        alpha = 0.3,
+        linewidth = 0.4,
+        color = "grey60",
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      facet_grid(modality ~ pressure, labeller = labeller(
+        modality = function(x) paste("Modality:", str_to_title(x)),
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
       scale_y_continuous(labels = scales::percent) +
       labs(
-        title = "Verification Time as Proportion of Total Movement Time",
-        subtitle = "What fraction of time is spent in the stopping phase? White diamonds indicate means.",
         x = "UI Mode",
         y = "Verification Ratio",
         fill = "UI Mode"
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = 13) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
         panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
       )
     
     print(p2)
@@ -1945,112 +2689,9 @@ if ("err_type" %in% names(df_raw)) {
 }
 ```
 
-```{r plot-error-types-stacked}
-#| fig-cap: "Error Type Distribution. Breakdown of error types by condition. Stacked bars show absolute counts for each error type (Miss, Timeout, Slip)."
+<!-- Consolidated: error type plots removed for interim slimness -->
 
-if ("err_type" %in% names(df_raw)) {
-  df_error_types <- df_raw %>%
-    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
-    filter(!is.na(err_type), err_type != "") %>%
-    mutate(
-      modality = factor(modality, levels = c("hand", "gaze")),
-      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
-      err_type = factor(err_type, levels = c("miss", "timeout", "slip"))
-    )
-  
-  if (nrow(df_error_types) > 0) {
-    error_type_summary <- df_error_types %>%
-      group_by(modality, ui_mode, pressure, err_type) %>%
-      summarise(Count = n(), .groups = "drop") %>%
-      group_by(modality, ui_mode, pressure) %>%
-      mutate(
-        Total = sum(Count),
-        Percentage = round(100 * Count / Total, 1)
-      ) %>%
-      ungroup()
-    
-    # Stacked bar chart
-    p1 <- ggplot(error_type_summary, aes(x = interaction(modality, ui_mode), y = Count, fill = err_type)) +
-      geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
-      facet_wrap(~pressure, labeller = labeller(
-        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-      )) +
-      scale_fill_manual(values = custom_palette_multi[1:3],
-                         labels = c("Miss", "Timeout", "Slip")) +
-      labs(
-        title = "Error Type Distribution",
-        subtitle = "Breakdown of error types by condition",
-        x = "Condition (Modality - UI Mode)",
-        y = "Error Count",
-        fill = "Error Type"
-      ) +
-      theme_minimal(base_size = 14) +
-      theme(
-        legend.position = "top",
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.text = element_text(face = "bold")
-      )
-    
-    print(p1)
-  }
-}
-```
-
-```{r plot-error-types-proportional}
-#| fig-cap: "Error Type Proportions. Relative distribution of error types. Stacked bars show percentage of each error type (Miss, Timeout, Slip) within each condition."
-
-if ("err_type" %in% names(df_raw)) {
-  df_error_types <- df_raw %>%
-    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
-    filter(!is.na(err_type), err_type != "") %>%
-    mutate(
-      modality = factor(modality, levels = c("hand", "gaze")),
-      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
-      err_type = factor(err_type, levels = c("miss", "timeout", "slip"))
-    )
-  
-  if (nrow(df_error_types) > 0) {
-    error_type_summary <- df_error_types %>%
-      group_by(modality, ui_mode, pressure, err_type) %>%
-      summarise(Count = n(), .groups = "drop") %>%
-      group_by(modality, ui_mode, pressure) %>%
-      mutate(
-        Total = sum(Count),
-        Percentage = round(100 * Count / Total, 1)
-      ) %>%
-      ungroup()
-    
-    # Proportional stacked bar
-    p2 <- ggplot(error_type_summary, aes(x = interaction(modality, ui_mode), y = Percentage, fill = err_type)) +
-      geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
-      facet_wrap(~pressure, labeller = labeller(
-        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-      )) +
-      scale_fill_manual(values = custom_palette_multi[1:3],
-                         labels = c("Miss", "Timeout", "Slip")) +
-      scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-      labs(
-        title = "Error Type Proportions",
-        subtitle = "Relative distribution of error types",
-        x = "Condition (Modality - UI Mode)",
-        y = "Percentage of Errors",
-        fill = "Error Type"
-      ) +
-      theme_minimal(base_size = 14) +
-      theme(
-        legend.position = "top",
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.text = element_text(face = "bold")
-      )
-    
-    print(p2)
-  } else {
-    cat("⚠ No error type data available.\n")
-  }
-} else {
-  cat("⚠ err_type column not found in dataset.\n")
-}
-```
+<!-- Consolidated: error type proportional plot removed for interim slimness -->
 
 -----
 
@@ -2133,39 +2774,7 @@ if ("block_number" %in% names(df_raw)) {
 }
 ```
 
-```{r plot-blocks-tp}
-#| fig-cap: "Performance Across Blocks: Throughput. Throughput by block number. Higher is better. Shaded regions show ±1 SE."
-
-# Throughput by block (if data available)
-if (nrow(df_blocks_tp) > 0) {
-  p1 <- ggplot(df_blocks_tp, aes(x = block_number, y = TP_mean, color = ui_mode, fill = ui_mode)) +
-  geom_ribbon(aes(ymin = TP_mean - TP_se, ymax = TP_mean + TP_se), 
-              alpha = 0.2, color = NA) +
-  geom_line(size = 1.2) +
-  geom_point(size = 3) +
-  facet_grid(modality ~ pressure, labeller = labeller(
-    pressure = function(x) {
-      x_char <- as.character(x)
-      ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
-    },
-    modality = function(x) str_to_title(x)
-  )) +
-  scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
-  scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
-  labs(
-    x = "Block Number",
-    y = "Throughput (bits/s)",
-    color = "UI Mode",
-    fill = "UI Mode"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "top", strip.text = element_text(face = "bold"))
-  
-  print(p1)
-} else {
-  cat("⚠ Throughput by block data not available (requires block-level aggregation).\n")
-}
-```
+<!-- Consolidated: block-level TP plot removed for interim slimness -->
 
 ```{r plot-blocks-rt}
 #| fig-cap: "Performance Across Blocks: Movement Time. Movement time by block number. Lower is better. Shaded regions show ±1 SE."
@@ -2596,49 +3205,105 @@ if (all(c("nominal_width_px", "displayed_width_px", "width_scale_factor") %in% n
 ```
 
 ```{r plot-width-scaling}
-#| fig-cap: "Target Width Scale Factor by Condition. Scale factor = 1.0 means no scaling (nominal size). Values > 1.0 indicate enlarged targets, < 1.0 indicate reduced targets. White diamonds show mean values."
+#| fig-cap: "Target Width Scale Factor by Condition. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Scale factor = 1.0 means no scaling (nominal size). Values > 1.0 indicate enlarged targets."
 
 if (exists("df_width") && nrow(df_width) > 0) {
   # Check if any scaling occurred
   has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
+  # Aggregate to participant-level means for raincloud plot
+  df_width_plot <- df_width %>%
+    group_by(pid, modality, ui_mode, pressure) %>%
+    summarise(width_scale_factor_mean = mean(width_scale_factor, na.rm = TRUE), .groups = "drop") %>%
+    filter(!is.na(width_scale_factor_mean))
+  
   # Show plot even if no scaling occurred - it's still informative
-  # Visualization - width scale factor
-  p1 <- ggplot(df_width, aes(x = ui_mode, y = width_scale_factor, fill = ui_mode)) +
+  # Raincloud plot for width scale factor
+  p1 <- ggplot(df_width_plot, aes(x = ui_mode, y = width_scale_factor_mean, fill = ui_mode, color = ui_mode)) +
     geom_hline(yintercept = 1.0, linetype = "dashed", color = "red", linewidth = 0.8) +
-    geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                show.legend = FALSE) +
-    geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                 outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-    stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                 position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-    facet_grid(modality ~ pressure,
-               labeller = labeller(
-                 modality = function(x) paste("Modality:", str_to_title(x)),
-                 pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-               )) +
-    scale_fill_manual(values = custom_palette_2,
-                       labels = c("Static", "Adaptive")) +
+    # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+    {
+      if (has_ggdist) {
+        list(
+          ggdist::stat_halfeye(
+            data = df_width_plot %>% filter(ui_mode == "static"),
+            aes(fill = ui_mode),
+            side = "left",
+            alpha = 0.4,
+            width = 0.35,
+            .width = 0,
+            justification = 1.3,
+            point_colour = NA
+          ),
+          ggdist::stat_halfeye(
+            data = df_width_plot %>% filter(ui_mode == "adaptive"),
+            aes(fill = ui_mode),
+            side = "right",
+            alpha = 0.4,
+            width = 0.35,
+            .width = 0,
+            justification = -0.3,
+            point_colour = NA
+          )
+        )
+      } else {
+        geom_violin(
+          alpha = 0.4,
+          trim = FALSE,
+          scale = "width",
+          width = 0.35,
+          position = position_dodge(width = 0),
+          color = NA
+        )
+      }
+    } +
+    # Boxplots inside violins (light gray for visibility)
+    geom_boxplot(
+      width = 0.15,
+      alpha = 0.9,
+      outlier.shape = NA,
+      position = position_dodge(width = 0),
+      fill = "grey90",
+      color = "grey70",
+      linewidth = 0.7,
+      show.legend = FALSE
+    ) +
+    # Individual participant points (in columns, no jitter)
+    geom_point(
+      alpha = 0.5,
+      size = 1.5,
+      position = position_dodge(width = 0),
+      show.legend = FALSE
+    ) +
+    # Connecting lines (between paired conditions)
+    geom_line(
+      aes(group = pid),
+      alpha = 0.3,
+      linewidth = 0.4,
+      color = "grey60",
+      position = position_dodge(width = 0),
+      show.legend = FALSE
+    ) +
+    facet_grid(modality ~ pressure, labeller = labeller(
+      modality = function(x) paste("Modality:", str_to_title(x)),
+      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+    )) +
+    scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+    scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
     scale_y_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
     labs(
       x = "UI Mode",
       y = "Width Scale Factor",
-      fill = "UI Mode",
-      subtitle = if (!has_scaling) {
-        "No scaling observed (all values = 1.0). Adaptive policy did not trigger."
-      } else {
-        NULL
-      }
+      fill = "UI Mode"
     ) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = 13) +
     theme(
       legend.position = "top",
       strip.text = element_text(face = "bold", size = 12),
       strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
       panel.grid.minor = element_blank(),
-      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
-      plot.subtitle = element_text(face = "italic", color = "gray40", size = 11, hjust = 0.5)
+      panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
     )
   
   print(p1)
@@ -2794,7 +3459,22 @@ if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(
       kable(caption = "Alignment Gate Metrics by Condition") %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
   } else {
-    cat("⚠ No trials with alignment gate enabled found in dataset.\n")
+    # Check if columns exist but feature was disabled
+    if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(df_raw))) {
+      enabled_count <- sum(df_raw$alignment_gate_enabled == TRUE | df_raw$alignment_gate_enabled == "true", na.rm = TRUE)
+      disabled_count <- sum(df_raw$alignment_gate_enabled == FALSE | df_raw$alignment_gate_enabled == "false", na.rm = TRUE)
+      cat("⚠ **Alignment gate feature was not enabled during data collection.**\n\n")
+      cat("**Status:**\n")
+      cat("- Alignment gate columns exist in dataset (columns: `alignment_gate_enabled`, `alignment_gate_false_triggers`, `alignment_gate_recovery_time_ms`, `alignment_gate_mean_recovery_time_ms`)\n")
+      cat("- Trials with `alignment_gate_enabled = TRUE`: ", enabled_count, "\n")
+      cat("- Trials with `alignment_gate_enabled = FALSE`: ", disabled_count, "\n")
+      cat("- Trials with null values: ", sum(is.na(df_raw$alignment_gate_enabled)), "\n\n")
+      cat("**Explanation:** Alignment gates are an experimental feature (P1) that is disabled by default.\n")
+      cat("The feature requires hand input and hover-in-target for ≥80ms before selection.\n")
+      cat("To enable alignment gates, set `experimental.alignmentGate = true` in `app/src/config.ts`.\n")
+    } else {
+      cat("⚠ Alignment gate columns not found in dataset.\n")
+    }
   }
 } else {
   cat("⚠ Alignment gate columns not found in dataset.\n")
@@ -2802,39 +3482,101 @@ if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(
 ```
 
 ```{r plot-alignment-gate}
-#| fig-cap: "Alignment Gate False Triggers by Condition. Number of false triggers per trial. Lower is better. White diamonds show mean values."
+#| fig-cap: "Alignment Gate False Triggers by Condition. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower is better."
 
 if (exists("df_gate") && nrow(df_gate) > 0) {
   # Visualization - false triggers
   if (sum(!is.na(df_gate$alignment_gate_false_triggers)) > 0) {
-    p1 <- ggplot(df_gate %>% filter(!is.na(alignment_gate_false_triggers)), 
-                 aes(x = ui_mode, y = alignment_gate_false_triggers, fill = ui_mode)) +
-      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                  show.legend = FALSE) +
-      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-      facet_grid(modality ~ pressure,
-                 labeller = labeller(
-                   modality = function(x) paste("Modality:", str_to_title(x)),
-                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
-      scale_fill_manual(values = custom_palette_2,
-                         labels = c("Static", "Adaptive")) +
+    # Aggregate to participant-level means
+    df_gate_plot <- df_gate %>%
+      filter(!is.na(alignment_gate_false_triggers)) %>%
+      group_by(pid, modality, ui_mode, pressure) %>%
+      summarise(false_triggers_mean = mean(alignment_gate_false_triggers, na.rm = TRUE), .groups = "drop") %>%
+      filter(!is.na(false_triggers_mean))
+    
+    p1 <- ggplot(df_gate_plot, aes(x = ui_mode, y = false_triggers_mean, fill = ui_mode, color = ui_mode)) +
+      # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+      {
+        if (has_ggdist) {
+          list(
+            ggdist::stat_halfeye(
+              data = df_gate_plot %>% filter(ui_mode == "static"),
+              aes(fill = ui_mode),
+              side = "left",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = 1.3,
+              point_colour = NA
+            ),
+            ggdist::stat_halfeye(
+              data = df_gate_plot %>% filter(ui_mode == "adaptive"),
+              aes(fill = ui_mode),
+              side = "right",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = -0.3,
+              point_colour = NA
+            )
+          )
+        } else {
+          geom_violin(
+            alpha = 0.4,
+            trim = FALSE,
+            scale = "width",
+            width = 0.35,
+            position = position_dodge(width = 0),
+            color = NA
+          )
+        }
+      } +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Connecting lines (between paired conditions)
+      geom_line(
+        aes(group = pid),
+        alpha = 0.3,
+        linewidth = 0.4,
+        color = "grey60",
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      facet_grid(modality ~ pressure, labeller = labeller(
+        modality = function(x) paste("Modality:", str_to_title(x)),
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
       labs(
         x = "UI Mode",
         y = "False Trigger Count",
         fill = "UI Mode"
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = 13) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
         panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
       )
     
     print(p1)
@@ -2843,7 +3585,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
 ```
 
 ```{r plot-alignment-recovery}
-#| fig-cap: "Alignment Gate Recovery Time by Condition. Time spent recovering from false triggers (ms). Lower is better. White diamonds show mean values."
+#| fig-cap: "Alignment Gate Recovery Time by Condition. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower is better."
 
 if (exists("df_gate") && nrow(df_gate) > 0) {
   # Visualization - recovery time
@@ -2852,34 +3594,96 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
       filter(!is.na(alignment_gate_recovery_time_ms), alignment_gate_recovery_time_ms > 0)
     
     if (nrow(df_gate_recovery) > 0) {
-      p2 <- ggplot(df_gate_recovery, 
-                   aes(x = ui_mode, y = alignment_gate_recovery_time_ms, fill = ui_mode)) +
-        geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                    show.legend = FALSE) +
-        geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                     outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-        stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                     position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-        facet_grid(modality ~ pressure,
-                   labeller = labeller(
-                     modality = function(x) paste("Modality:", str_to_title(x)),
-                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                   )) +
-        scale_fill_manual(values = custom_palette_2,
-                           labels = c("Static", "Adaptive")) +
+      # Aggregate to participant-level means
+      df_gate_recovery_plot <- df_gate_recovery %>%
+        group_by(pid, modality, ui_mode, pressure) %>%
+        summarise(recovery_time_mean = mean(alignment_gate_recovery_time_ms, na.rm = TRUE), .groups = "drop") %>%
+        filter(!is.na(recovery_time_mean))
+      
+      p2 <- ggplot(df_gate_recovery_plot, 
+                   aes(x = ui_mode, y = recovery_time_mean, fill = ui_mode, color = ui_mode)) +
+        # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+        {
+          if (has_ggdist) {
+            list(
+              ggdist::stat_halfeye(
+                data = df_gate_recovery_plot %>% filter(ui_mode == "static"),
+                aes(fill = ui_mode),
+                side = "left",
+                alpha = 0.4,
+                width = 0.35,
+                .width = 0,
+                justification = 1.3,
+                point_colour = NA
+              ),
+              ggdist::stat_halfeye(
+                data = df_gate_recovery_plot %>% filter(ui_mode == "adaptive"),
+                aes(fill = ui_mode),
+                side = "right",
+                alpha = 0.4,
+                width = 0.35,
+                .width = 0,
+                justification = -0.3,
+                point_colour = NA
+              )
+            )
+          } else {
+            geom_violin(
+              alpha = 0.4,
+              trim = FALSE,
+              scale = "width",
+              width = 0.35,
+              position = position_dodge(width = 0),
+              color = NA
+            )
+          }
+        } +
+        # Boxplots inside violins (light gray for visibility)
+        geom_boxplot(
+          width = 0.15,
+          alpha = 0.9,
+          outlier.shape = NA,
+          position = position_dodge(width = 0),
+          fill = "grey90",
+          color = "grey70",
+          linewidth = 0.7,
+          show.legend = FALSE
+        ) +
+        # Individual participant points (in columns, no jitter)
+        geom_point(
+          alpha = 0.5,
+          size = 1.5,
+          position = position_dodge(width = 0),
+          show.legend = FALSE
+        ) +
+        # Connecting lines (between paired conditions)
+        geom_line(
+          aes(group = pid),
+          alpha = 0.3,
+          linewidth = 0.4,
+          color = "grey60",
+          position = position_dodge(width = 0),
+          show.legend = FALSE
+        ) +
+        facet_grid(modality ~ pressure, labeller = labeller(
+          modality = function(x) paste("Modality:", str_to_title(x)),
+          pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+        )) +
+        scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_x_discrete(labels = c("Static", "Adaptive")) +
         labs(
           x = "UI Mode",
           y = "Recovery Time (ms)",
           fill = "UI Mode"
         ) +
-        theme_minimal(base_size = 14) +
+        theme_minimal(base_size = 13) +
         theme(
           legend.position = "top",
           strip.text = element_text(face = "bold", size = 12),
           strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
           panel.grid.minor = element_blank(),
-          panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+          panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
         )
       
       print(p2)
@@ -2889,7 +3693,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
 ```
 
 ```{r plot-alignment-mean-recovery}
-#| fig-cap: "Alignment Gate Mean Recovery Time by Condition. Average recovery time across all false triggers within a trial (ms). Lower is better. White diamonds show mean values."
+#| fig-cap: "Alignment Gate Mean Recovery Time by Condition. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower is better."
 
 if (exists("df_gate") && nrow(df_gate) > 0) {
   # Visualization - mean recovery time (averaged across all recoveries in trial)
@@ -2898,34 +3702,96 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
       filter(!is.na(alignment_gate_mean_recovery_time_ms), alignment_gate_mean_recovery_time_ms > 0)
     
     if (nrow(df_gate_mean_recovery) > 0) {
-      p3 <- ggplot(df_gate_mean_recovery, 
-                   aes(x = ui_mode, y = alignment_gate_mean_recovery_time_ms, fill = ui_mode)) +
-        geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                    show.legend = FALSE) +
-        geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                     outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-        stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                     position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-        facet_grid(modality ~ pressure,
-                   labeller = labeller(
-                     modality = function(x) paste("Modality:", str_to_title(x)),
-                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                   )) +
-        scale_fill_manual(values = custom_palette_2,
-                           labels = c("Static", "Adaptive")) +
+      # Aggregate to participant-level means
+      df_gate_mean_recovery_plot <- df_gate_mean_recovery %>%
+        group_by(pid, modality, ui_mode, pressure) %>%
+        summarise(mean_recovery_time_mean = mean(alignment_gate_mean_recovery_time_ms, na.rm = TRUE), .groups = "drop") %>%
+        filter(!is.na(mean_recovery_time_mean))
+      
+      p3 <- ggplot(df_gate_mean_recovery_plot, 
+                   aes(x = ui_mode, y = mean_recovery_time_mean, fill = ui_mode, color = ui_mode)) +
+        # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+        {
+          if (has_ggdist) {
+            list(
+              ggdist::stat_halfeye(
+                data = df_gate_mean_recovery_plot %>% filter(ui_mode == "static"),
+                aes(fill = ui_mode),
+                side = "left",
+                alpha = 0.4,
+                width = 0.35,
+                .width = 0,
+                justification = 1.3,
+                point_colour = NA
+              ),
+              ggdist::stat_halfeye(
+                data = df_gate_mean_recovery_plot %>% filter(ui_mode == "adaptive"),
+                aes(fill = ui_mode),
+                side = "right",
+                alpha = 0.4,
+                width = 0.35,
+                .width = 0,
+                justification = -0.3,
+                point_colour = NA
+              )
+            )
+          } else {
+            geom_violin(
+              alpha = 0.4,
+              trim = FALSE,
+              scale = "width",
+              width = 0.35,
+              position = position_dodge(width = 0),
+              color = NA
+            )
+          }
+        } +
+        # Boxplots inside violins (light gray for visibility)
+        geom_boxplot(
+          width = 0.15,
+          alpha = 0.9,
+          outlier.shape = NA,
+          position = position_dodge(width = 0),
+          fill = "grey90",
+          color = "grey70",
+          linewidth = 0.7,
+          show.legend = FALSE
+        ) +
+        # Individual participant points (in columns, no jitter)
+        geom_point(
+          alpha = 0.5,
+          size = 1.5,
+          position = position_dodge(width = 0),
+          show.legend = FALSE
+        ) +
+        # Connecting lines (between paired conditions)
+        geom_line(
+          aes(group = pid),
+          alpha = 0.3,
+          linewidth = 0.4,
+          color = "grey60",
+          position = position_dodge(width = 0),
+          show.legend = FALSE
+        ) +
+        facet_grid(modality ~ pressure, labeller = labeller(
+          modality = function(x) paste("Modality:", str_to_title(x)),
+          pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+        )) +
+        scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_x_discrete(labels = c("Static", "Adaptive")) +
         labs(
           x = "UI Mode",
           y = "Mean Recovery Time (ms)",
           fill = "UI Mode"
         ) +
-        theme_minimal(base_size = 14) +
+        theme_minimal(base_size = 13) +
         theme(
           legend.position = "top",
           strip.text = element_text(face = "bold", size = 12),
           strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
           panel.grid.minor = element_blank(),
-          panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+          panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
         )
       
       print(p3)
@@ -2982,40 +3848,63 @@ if ("task_type" %in% names(df_raw)) {
 ```
 
 ```{r plot-task-type-rt}
-#| fig-cap: "Movement Time by Task Type. Comparison of performance across different task types (if multiple exist). Lower is better. White diamonds show mean values."
+#| fig-cap: "Movement Time by Task Type. Raincloud plot: half-violins with boxplots inside, individual points. Comparison of performance across different task types (if multiple exist). Lower is better."
 
 if (exists("df_task") && nrow(df_task) > 0 && n_distinct(df_task$task_type) > 1) {
-  # Filter for valid RT
-  df_task_rt <- df_task %>%
+  # Filter for valid RT and aggregate to participant-level
+  df_task_rt_plot <- df_task %>%
     filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
-    mutate(rt_s = rt_ms / 1000)
+    mutate(rt_s = rt_ms / 1000) %>%
+    group_by(pid, modality, task_type, ui_mode) %>%
+    summarise(rt_s_mean = mean(rt_s, na.rm = TRUE), .groups = "drop") %>%
+    filter(!is.na(rt_s_mean))
   
-  if (nrow(df_task_rt) > 0) {
-    p1 <- ggplot(df_task_rt, aes(x = task_type, y = rt_s, fill = ui_mode)) +
-      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                  position = position_dodge(0.9)) +
-      geom_boxplot(width = 0.3, position = position_dodge(0.9), alpha = 0.9, 
-                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-      facet_wrap(~modality,
-                 labeller = labeller(
-                   modality = function(x) paste("Modality:", str_to_title(x))
-                 )) +
-      scale_fill_manual(values = custom_palette_2,
-                         labels = c("Static", "Adaptive")) +
+  if (nrow(df_task_rt_plot) > 0) {
+    p1 <- ggplot(df_task_rt_plot, aes(x = task_type, y = rt_s_mean, fill = ui_mode, color = ui_mode)) +
+      # Use regular violins with proper dodging for side-by-side comparison
+      geom_violin(
+        alpha = 0.4,
+        trim = FALSE,
+        scale = "width",
+        width = 0.35,
+        position = position_dodge(width = 0.9),
+        color = NA
+      ) +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0.9),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0.9),
+        show.legend = FALSE
+      ) +
+      facet_wrap(~modality, labeller = labeller(
+        modality = function(x) paste("Modality:", str_to_title(x))
+      )) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       labs(
         x = "Task Type",
         y = "Movement Time (s)",
         fill = "UI Mode"
       ) +
-      theme_minimal(base_size = 14) +
+      theme_minimal(base_size = 13) +
       theme(
         legend.position = "top",
         strip.text = element_text(face = "bold", size = 12),
         strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
         panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
       )
     
     print(p1)
@@ -3388,274 +4277,19 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
 
 -----
 
-# 15. Gaze-Specific Analysis
-
-## Hover Time (Dwell Duration)
-
-**Research Question:** How long do people hover before confirming? Does adaptive UI change dwell behavior?
-
-*For gaze modality, hover time represents the dwell duration before confirmation.*
-
-```{r hover-time}
-if ("hover_ms" %in% names(df_raw)) {
-  df_hover <- df_raw %>%
-    filter(
-      practice == "false" | practice == FALSE | is.na(practice),
-      str_to_lower(modality) == "gaze",
-      !is.na(hover_ms), hover_ms > 0
-    ) %>%
-    mutate(
-      hover_s = hover_ms / 1000,
-      hover_ratio = hover_ms / rt_ms,
-      modality = factor(modality, levels = c("hand", "gaze")),
-      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
-      pressure = factor(pressure)
-    )
-  
-  if (nrow(df_hover) > 0) {
-    # Summary statistics
-    hover_summary <- df_hover %>%
-      group_by(ui_mode, pressure) %>%
-      summarise(
-        N = n(),
-        Mean_Hover = round(mean(hover_s, na.rm = TRUE), 3),
-        SD_Hover = round(sd(hover_s, na.rm = TRUE), 3),
-        Mean_Ratio = round(mean(hover_ratio, na.rm = TRUE), 3),
-        .groups = "drop"
-      )
-    
-    hover_summary %>%
-      kable(caption = "Hover Time for Gaze Modality") %>%
-      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
-    
-    # Visualization - improved faceting and aesthetics
-    p1 <- ggplot(df_hover, aes(x = ui_mode, y = hover_s, fill = ui_mode)) +
-      geom_violin(trim = FALSE, alpha = 0.5, linewidth = 0.8, color = "white", 
-                  show.legend = FALSE) +
-      geom_boxplot(width = 0.15, position = position_dodge(0.9), alpha = 0.9, 
-                   outlier.alpha = 0.4, outlier.size = 1.5, linewidth = 0.5) +
-      stat_summary(fun = mean, geom = "point", shape = 23, size = 3.5, 
-                   position = position_dodge(0.9), color = "black", fill = "white", stroke = 1.2) +
-      facet_wrap(~pressure,
-                 labeller = labeller(
-                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
-      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
-      scale_x_discrete(labels = c("Static", "Adaptive")) +
-      labs(
-        title = "Hover Duration (Gaze Modality)",
-        subtitle = "Dwell time before confirmation. White diamonds indicate means.",
-        x = "UI Mode",
-        y = "Hover Time (s)",
-        fill = "UI Mode"
-      ) +
-      theme_minimal(base_size = 14) +
-      theme(
-        legend.position = "top",
-        strip.text = element_text(face = "bold", size = 12),
-        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5)
-      )
-    
-    print(p1)
-    
-    # Hover vs. Total RT
-    # Check if IDe exists, otherwise use ID
-    if ("IDe" %in% names(df_hover)) {
-      df_hover_id <- df_hover %>%
-        filter(!is.na(IDe)) %>%
-        mutate(difficulty = IDe)
-    } else if ("ID" %in% names(df_hover)) {
-      df_hover_id <- df_hover %>%
-        filter(!is.na(ID)) %>%
-        mutate(difficulty = ID)
-    } else {
-      df_hover_id <- data.frame()
-    }
-    
-    if (nrow(df_hover_id) > 0) {
-      p2 <- ggplot(df_hover_id, aes(x = difficulty, y = hover_s, color = ui_mode)) +
-        geom_point(alpha = 0.3, size = 1) +
-        geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
-        facet_wrap(~pressure, labeller = labeller(
-        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-      )) +
-        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
-        labs(
-          title = "Hover Time vs. Task Difficulty",
-          subtitle = "How dwell duration scales with index of difficulty",
-          x = "Index of Difficulty (bits)",
-          y = "Hover Time (s)",
-          color = "UI Mode"
-        ) +
-        theme_minimal(base_size = 14) +
-        theme(legend.position = "top", strip.text = element_text(face = "bold"))
-      
-      print(p2)
-    }
-  } else {
-    cat("⚠ No valid hover time data available for gaze modality.\n")
-  }
-} else {
-  cat("⚠ hover_ms column not found in dataset.\n")
-}
-```
+<!-- Consolidated: hover time section removed for interim slimness -->
 
 -----
 
-# 16. Advanced Cognitive Models: Linear Ballistic Accumulator (LBA)
+::: {.callout-note collapse=true}
+## Planned advanced analyses (not executed in interim N)
 
-**Research Question:** How do decision verification processes differ across conditions? What caution thresholds do users adopt?
-
-*The Linear Ballistic Accumulator (LBA) model [@brown2008] treats the selection decision as a race between independent accumulators. Unlike Drift Diffusion Models (DDM), LBA is robust to low error rates typical of Fitts' tasks and allows explicit estimation of the "Caution Threshold" (b - A)—the amount of evidence users require before committing to selection. We hypothesize that adaptive interventions reduce the cognitive need for caution, mathematically reflecting a lower estimated threshold b.*
-
-**Status:** ⚠️ **PLACEHOLDER - Analysis not yet implemented**
-
-**Note:** This section is a placeholder for future LBA model fitting. The analysis requires verification phase RTs (time from first target entry to selection), which are available in the `verification_time_ms` column. Implementation will require installing R packages such as `RWiener` or `rtdists` and fitting a **hierarchical LBA model** (not per-condition per-person fits) due to limited trials per condition (~24/cell) and low error rates (3-5%). See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed power analysis and modeling recommendations.
-
-**Power Analysis Summary:**
-- **N=48 is sufficient** for medium main effects (dz≈0.41, power≈0.80)
-- **Interactions will be underpowered** unless large (treat as exploratory)
-- **Key constraint:** Trial count (~24/cell) and error rate (3-5%) limit identifiability
-- **Recommendation:** Use hierarchical LBA with parameters as functions of experimental factors
-
-```{r lba-placeholder}
-# TODO: Implement hierarchical LBA model fitting
-# Required packages: RWiener, rtdists, or custom LBA implementation
-# 
-# IMPORTANT: Use hierarchical LBA (not per-condition per-person fits)
-# Rationale: ~24 trials/cell is too thin for stable per-condition parameters
-#            Low error rates (3-5%) limit identifiability
-#            Hierarchical modeling with partial pooling stabilizes estimation
-# 
-# Steps:
-# 1. Prepare data: Extract verification phase RTs (time from first target entry to selection)
-# 2. Fit hierarchical LBA model with parameters as functions of experimental factors:
-#    - Threshold (b-A) ~ UI mode + pressure + (UI mode × pressure) + (1|pid)
-#    - Drift rate (v) ~ modality + (modality × UI mode) + (1|pid)
-#    - Starting point (A): Fixed or vary by condition if theoretically justified
-#    - Non-decision time (t0): Fixed or vary by condition
-# 3. Early identifiability check: Fit on first ~15-20 participants
-#    - Check for: divergent transitions, extreme posteriors, wide credible intervals
-# 4. Compare parameters across conditions (main effects: N=48 sufficient)
-# 5. Test hypothesis: Adaptive conditions → lower threshold (b)
-# 6. Treat interactions as exploratory (underpowered with N=48)
-# 
-# See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations
-
-cat("⚠️ **LBA Analysis Not Yet Implemented**\n\n")
-cat("This section will analyze decision verification processes using the Linear Ballistic Accumulator model.\n\n")
-cat("**Required Data:**\n")
-cat("- Verification time (time from first target entry to selection)\n")
-cat("- Correct/error outcomes\n")
-cat("- Condition labels (modality, ui_mode, pressure)\n\n")
-
-# Check if required data exists
-if ("verification_time_ms" %in% names(df)) {
-  df_verify_check <- df %>%
-    filter(!is.na(verification_time_ms), verification_time_ms > 0, verification_time_ms <= 6000)
-  
-  if (nrow(df_verify_check) > 0) {
-    cat("✅ Verification time data available:\n")
-    cat("   - N trials with verification time:", nrow(df_verify_check), "\n")
-    cat("   - Mean verification time:", round(mean(df_verify_check$verification_time_ms, na.rm = TRUE), 1), "ms\n")
-    cat("   - Range:", round(min(df_verify_check$verification_time_ms, na.rm = TRUE), 1), "-", 
-        round(max(df_verify_check$verification_time_ms, na.rm = TRUE), 1), "ms\n")
-    cat("\n**Data Quality Check:**\n")
-    
-    # Check for sufficient data per condition
-    verify_by_condition <- df_verify_check %>%
-      group_by(modality, ui_mode, pressure) %>%
-      summarise(n = n(), .groups = "drop")
-    
-    min_trials <- min(verify_by_condition$n, na.rm = TRUE)
-    if (min_trials < 20) {
-      cat("   ⚠️  Some conditions have < 20 trials (minimum:", min_trials, ")\n")
-      cat("      ⚠️  CRITICAL: ~24 trials/cell is too thin for per-condition per-person LBA fits\n")
-      cat("      ✅ Use hierarchical LBA with parameters as functions of factors (recommended)\n")
-    } else {
-      cat("   ✅ Sufficient trials per condition (minimum:", min_trials, ")\n")
-      cat("      ⚠️  Note: ~24 trials/cell still requires hierarchical modeling approach\n")
-    }
-    
-    # Check error rate (LBA needs some errors, but can work with low rates)
-    error_rate <- mean(df_errors$error, na.rm = TRUE)
-    cat("   - Overall error rate:", round(error_rate * 100, 2), "%\n")
-    if (error_rate < 0.15) {
-      cat("   ⚠️  CRITICAL: Low error rate (", round(error_rate * 100, 1), "%) limits LBA identifiability\n")
-      cat("      Recommended range: 15-35% errors for strong identifiability\n")
-      cat("      With low errors + small trial counts, parameters may trade off\n")
-      cat("      ✅ Hierarchical modeling helps but identifiability check is essential\n")
-    } else if (error_rate < 0.01) {
-      cat("   ⚠️  Very low error rate - LBA can still fit but boundary separation may be less constrained\n")
-    } else {
-      cat("   ✅ Error rate sufficient for LBA fitting\n")
-    }
-    
-    cat("\n**Next Steps:**\n")
-    cat("1. Install required packages: `install.packages(c('RWiener', 'rtdists'))`\n")
-    cat("2. Prepare verification phase RTs (correct trials only for now)\n")
-    cat("3. Fit HIERARCHICAL LBA model (NOT per-condition per-person):\n")
-    cat("   - Model parameters as functions of experimental factors\n")
-    cat("   - Use partial pooling to stabilize estimation\n")
-    cat("4. Early identifiability check: Fit on first ~15-20 participants\n")
-    cat("   - Check for: divergent transitions, extreme posteriors, wide CIs\n")
-    cat("5. Compare threshold (b) and drift rate (v) across conditions\n")
-    cat("   - Main effects: N=48 is sufficient (dz≈0.41, power≈0.80)\n")
-    cat("   - Interactions: Underpowered, treat as exploratory\n")
-    cat("6. Test hypothesis: Adaptive UI → lower threshold (less caution needed)\n")
-    cat("\n**See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations**\n")
-  } else {
-    cat("❌ No valid verification time data available\n")
-  }
-} else {
-  cat("❌ verification_time_ms column not found in dataset\n")
-}
-```
-
-```{r lba-data-prep}
-# Placeholder: Data preparation for LBA analysis
-# This chunk will prepare verification phase RTs for LBA fitting
-
-if ("verification_time_ms" %in% names(df)) {
-  df_lba_prep <- df %>%
-    filter(
-      !is.na(verification_time_ms),
-      verification_time_ms > 0,
-      verification_time_ms <= 6000,
-      correct == TRUE | correct == "true" | correct == 1
-    ) %>%
-    mutate(
-      verification_s = verification_time_ms / 1000,
-      modality = factor(modality, levels = c("hand", "gaze")),
-      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
-      pressure = factor(pressure)
-    )
-  
-  if (nrow(df_lba_prep) > 0) {
-    cat("**LBA Data Preparation:**\n")
-    cat("- Valid verification RTs:", nrow(df_lba_prep), "\n")
-    cat("- Conditions:", n_distinct(interaction(df_lba_prep$modality, df_lba_prep$ui_mode, df_lba_prep$pressure)), "\n")
-    cat("\n**Verification RT Summary by Condition:**\n")
-    
-    lba_summary <- df_lba_prep %>%
-      group_by(modality, ui_mode, pressure) %>%
-      summarise(
-        N = n(),
-        Mean = round(mean(verification_s, na.rm = TRUE), 3),
-        SD = round(sd(verification_s, na.rm = TRUE), 3),
-        Median = round(median(verification_s, na.rm = TRUE), 3),
-        .groups = "drop"
-      )
-    
-    print(knitr::kable(lba_summary, caption = "Verification Phase RTs (for LBA analysis)"))
-    
-    cat("\n⚠️ **LBA Model Fitting Not Yet Implemented**\n")
-    cat("Data is prepared and ready for LBA analysis.\n")
-  }
-}
-```
+- Hierarchical LBA (verification-time RTs); requires more data and packages (RWiener/rtdists).
+- Control-theory kinematics (velocity profiles, submovement decomposition) once trajectories vetted.
+- Identification checks: need ≥2 levels per factor and adequate trial counts per cell (~24+).
+- Error-type breakdowns and spatial heatmaps to remain exploratory/QC until full N.
+- Revisit hover/dwell and path-length efficiency once gaze data are richer.
+:::
 
 **Implementation Notes:**
 - LBA requires RT data from the verification phase (time from target entry to selection)

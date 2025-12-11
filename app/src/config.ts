@@ -24,7 +24,7 @@ export interface AppConfig {
  */
 export const defaultConfig: AppConfig = {
   experimental: {
-    alignmentGate: false, // Off by default (P1 experimental feature)
+    alignmentGate: true, // Enabled for data collection (P1 experimental feature)
   },
 }
 
