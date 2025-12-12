@@ -112,7 +112,8 @@ export function FittsTask({
   // Alignment gate state (P1 experimental feature)
   const alignmentGateEnabled = isAlignmentGateEnabled()
   const [pointerDown, setPointerDown] = useState(false)
-  const [_pointerDownTime, setPointerDownTime] = useState<number | null>(null)
+  const [pointerDownTime, setPointerDownTime] = useState<number | null>(null)
+  const [pointerUpTime, setPointerUpTime] = useState<number | null>(null)
   const [hoverStartTime, setHoverStartTime] = useState<number | null>(null)
   const [_isHoveringTarget, setIsHoveringTarget] = useState(false)
   
@@ -987,6 +988,12 @@ export function FittsTask({
       // Reset trial completion guard for new trial
       trialCompletedRef.current = false
       
+      // Reset pointer state for alignment gate
+      setPointerDown(false)
+      setPointerDownTime(null)
+      setPointerUpTime(null)
+      setHoverStartTime(null)
+      
       // Reset FPS tracking
       fpsTrackingRef.current = {
         frameTimes: [],
@@ -1648,8 +1655,14 @@ export function FittsTask({
 
       if (!targetPos) return false
 
-      // Check if pointer is down (hand input detected)
-      if (!pointerDown) {
+      // Check if pointer is down OR if click happened recently after pointer up
+      // (clicks fire after pointerup, so we need to allow a short window)
+      const now = performance.now()
+      const CLICK_WINDOW_MS = 100 // Allow clicks within 100ms of pointer up
+      const wasPointerDown = pointerDown || 
+        (pointerUpTime !== null && (now - pointerUpTime) < CLICK_WINDOW_MS)
+      
+      if (!wasPointerDown) {
         // False trigger: attempted selection without pointer down
         alignmentGateRef.current.falseTriggers++
         setFalseTriggerCount((prev) => prev + 1)
@@ -1674,7 +1687,6 @@ export function FittsTask({
       }
 
       // Check if hovering for ≥80ms
-      const now = performance.now()
       const hoverDuration = hoverStartTime ? now - hoverStartTime : 0
       if (hoverDuration < 80) {
         // False trigger: hover duration insufficient
@@ -1704,6 +1716,7 @@ export function FittsTask({
       modalityConfig.modality,
       targetPos,
       pointerDown,
+      pointerUpTime,
       hoverStartTime,
       effectiveWidth,
       recoveryStartTime,
@@ -1724,6 +1737,7 @@ export function FittsTask({
     const handlePointerUp = (event: PointerEvent) => {
       if (!canvasRef.current?.contains(event.target as Node)) return
       setPointerDown(false)
+      setPointerUpTime(performance.now())
       setPointerDownTime(null)
     }
 
