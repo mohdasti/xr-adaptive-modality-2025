@@ -112,7 +112,7 @@ export function FittsTask({
   // Alignment gate state (P1 experimental feature)
   const alignmentGateEnabled = isAlignmentGateEnabled()
   const [pointerDown, setPointerDown] = useState(false)
-  const [pointerDownTime, setPointerDownTime] = useState<number | null>(null)
+  const [_pointerDownTime, setPointerDownTime] = useState<number | null>(null)
   const [pointerUpTime, setPointerUpTime] = useState<number | null>(null)
   const [hoverStartTime, setHoverStartTime] = useState<number | null>(null)
   const [_isHoveringTarget, setIsHoveringTarget] = useState(false)
