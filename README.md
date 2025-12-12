@@ -483,7 +483,14 @@ The analysis pipeline follows the pre-registered plan:
    - Flags: error rate >40%, completion <80%, zoom/fullscreen violations
    - Exports exclusion report CSV
 
-4. **Visualizations** (`visualizations.R`) - Optional
+4. **Report Generation** (`Report.qmd`)
+   - Comprehensive Quarto report with all analyses and visualizations
+   - **Dynamic sample size reporting**: Sample sizes automatically computed and displayed in section headers, figure captions, and table captions
+   - **Raincloud plots**: Enhanced with thick black mean connecting lines showing trends between conditions
+   - Sample sizes update automatically when new participants are added
+   - See `DYNAMIC_SAMPLE_SIZE_SUMMARY.md` for implementation details
+
+5. **Visualizations** (`visualizations.R`) - Optional
    - Combined figure panel: MT, Error Rate, Throughput, TLX
    - Uses EMMs from primary models
    - Saves to `results/figures/summary_panel.png`
@@ -499,7 +506,12 @@ Rscript analysis/visualizations.R         # optional
 
 # Python decision models (LBA)
 python analysis/py/lba.py --input data/clean/ --output results/
+
+# Generate comprehensive report (Quarto)
+quarto render Report.qmd
 ```
+
+**Note:** The `Report.qmd` file generates a comprehensive HTML report with all analyses, visualizations, and dynamic sample size reporting. Simply re-render after adding new participant data to automatically update all sample sizes throughout the report.
 
 **Outputs:**
 - `results/tables/effective_metrics_by_condition.csv`
@@ -573,6 +585,8 @@ Lightweight pub/sub system for inter-component communication:
 ## Recent Updates
 
 **Latest improvements (2025):**
+- ✅ **Dynamic Sample Size Reporting**: Report.qmd now includes automatic sample size reporting throughout all sections and figure captions. Sample sizes update dynamically when new participants are added, ensuring transparency about data availability for each analysis.
+- ✅ **Raincloud Plot Enhancements**: All raincloud plots now include thick black lines connecting mean values between static and adaptive conditions, making trends immediately visible. Lines are computed separately for each facet (modality × pressure combinations).
 - ✅ **Debrief Page**: Complete debriefing page with study explanation, gaze simulation disclosure, strategy questions, and data download/delete options
 - ✅ **Automatic Email Submission**: EmailJS integration for automatic data submission (trials, blocks, debrief responses) when participants reach debrief page
 - ✅ **EmailJS Size Limit Handling**: Automatic CSV download fallback when data exceeds 50KB limit (EmailJS free tier limitation)

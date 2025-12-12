@@ -911,6 +911,27 @@ p_tp <- ggplot(df_tp_plot, aes(x = ui_mode, y = tp_mean, fill = ui_mode, color =
     position = position_dodge(width = 0),
     show.legend = FALSE
   ) +
+  # Thick black line connecting mean values between conditions
+  {
+    mean_data <- df_tp_plot %>%
+      group_by(modality, pressure, ui_mode) %>%
+      summarise(mean_value = mean(tp_mean, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+      filter(!is.na(mean_static), !is.na(mean_adaptive))
+    
+    if (nrow(mean_data) > 0) {
+      geom_segment(
+        data = mean_data,
+        aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+        inherit.aes = FALSE,
+        color = "black",
+        linewidth = 0.9,
+        alpha = 0.9
+      )
+    } else {
+      NULL
+    }
+  } +
   facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -1139,6 +1160,27 @@ p_rt <- ggplot(df_rt_plot, aes(x = ui_mode, y = rt_mean, fill = ui_mode, color =
     position = position_dodge(width = 0),
     show.legend = FALSE
   ) +
+  # Thick black line connecting mean values between conditions
+  {
+    mean_data <- df_rt_plot %>%
+      group_by(modality, pressure, ui_mode) %>%
+      summarise(mean_value = mean(rt_mean, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+      filter(!is.na(mean_static), !is.na(mean_adaptive))
+    
+    if (nrow(mean_data) > 0) {
+      geom_segment(
+        data = mean_data,
+        aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+        inherit.aes = FALSE,
+        color = "black",
+        linewidth = 0.9,
+        alpha = 0.9
+      )
+    } else {
+      NULL
+    }
+  } +
   facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -1416,6 +1458,27 @@ p_err <- ggplot(df_err_plot, aes(x = ui_mode, y = Error_Rate, fill = ui_mode, co
     position = position_dodge(width = 0),
     show.legend = FALSE
   ) +
+  # Thick black line connecting mean values between conditions
+  {
+    mean_data <- df_err_plot %>%
+      group_by(modality, pressure, ui_mode) %>%
+      summarise(mean_value = mean(Error_Rate, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+      filter(!is.na(mean_static), !is.na(mean_adaptive))
+    
+    if (nrow(mean_data) > 0) {
+      geom_segment(
+        data = mean_data,
+        aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+        inherit.aes = FALSE,
+        color = "black",
+        linewidth = 0.9,
+        alpha = 0.9
+      )
+    } else {
+      NULL
+    }
+  } +
   facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -1602,6 +1665,27 @@ ggplot(df_we_plot, aes(x = ui_mode, y = We_mean, fill = ui_mode, color = ui_mode
     position = position_dodge(width = 0),
     show.legend = FALSE
   ) +
+  # Thick black line connecting mean values between conditions
+  {
+    mean_data <- df_we_plot %>%
+      group_by(modality, pressure, ui_mode) %>%
+      summarise(mean_value = mean(We_mean, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+      filter(!is.na(mean_static), !is.na(mean_adaptive))
+    
+    if (nrow(mean_data) > 0) {
+      geom_segment(
+        data = mean_data,
+        aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+        inherit.aes = FALSE,
+        color = "black",
+        linewidth = 0.9,
+        alpha = 0.9
+      )
+    } else {
+      NULL
+    }
+  } +
   facet_grid(modality ~ pressure, labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -1837,6 +1921,27 @@ ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, col
     position = position_dodge(width = 0),
     show.legend = FALSE
   ) +
+  # Thick black line connecting mean values between conditions
+  {
+    mean_data <- df_reentry_plot %>%
+      group_by(modality, pressure, ui_mode) %>%
+      summarise(mean_value = mean(reentries_mean, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+      filter(!is.na(mean_static), !is.na(mean_adaptive))
+    
+    if (nrow(mean_data) > 0) {
+      geom_segment(
+        data = mean_data,
+        aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+        inherit.aes = FALSE,
+        color = "black",
+        linewidth = 0.9,
+        alpha = 0.9
+      )
+    } else {
+      NULL
+    }
+  } +
   facet_grid(modality ~ pressure, labeller = labeller(
     modality = function(x) paste("Modality:", str_to_title(x)),
     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -1910,6 +2015,27 @@ if(all(tlx_cols %in% names(df_raw))) {
   p1 <- ggplot(df_tlx, aes(x = ui_mode, y = Score, color = ui_mode, group = pid)) +
     geom_line(alpha = 0.25) +
     geom_point(alpha = 0.6, size = 1.8) +
+    # Thick black line connecting mean values between conditions
+    {
+      mean_data <- df_tlx %>%
+        group_by(modality, Scale, ui_mode) %>%
+        summarise(mean_value = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+        pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+        filter(!is.na(mean_static), !is.na(mean_adaptive))
+      
+      if (nrow(mean_data) > 0) {
+        geom_segment(
+          data = mean_data,
+          aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+          inherit.aes = FALSE,
+          color = "black",
+          linewidth = 0.9,
+          alpha = 0.9
+        )
+      } else {
+        NULL
+      }
+    } +
     facet_grid(modality ~ Scale,
                labeller = labeller(
                  modality = function(x) paste("Modality:", str_to_title(x)),
@@ -2402,6 +2528,27 @@ if (!is.null(submov_col)) {
         position = position_dodge(width = 0),
         show.legend = FALSE
       ) +
+      # Thick black line connecting mean values between conditions
+      {
+        mean_data <- df_submov_plot %>%
+          group_by(modality, pressure, ui_mode) %>%
+          summarise(mean_value = mean(submov_mean, na.rm = TRUE), .groups = "drop") %>%
+          pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+          filter(!is.na(mean_static), !is.na(mean_adaptive))
+        
+        if (nrow(mean_data) > 0) {
+          geom_segment(
+            data = mean_data,
+            aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+            inherit.aes = FALSE,
+            color = "black",
+            linewidth = 0.9,
+            alpha = 0.9
+          )
+        } else {
+          NULL
+        }
+      } +
       facet_grid(modality ~ pressure, labeller = labeller(
         modality = function(x) paste("Modality:", str_to_title(x)),
         pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -2611,6 +2758,27 @@ if ("verification_time_ms" %in% names(df)) {
         position = position_dodge(width = 0),
         show.legend = FALSE
       ) +
+      # Thick black line connecting mean values between conditions
+      {
+        mean_data <- df_verify_plot %>%
+          group_by(modality, pressure, ui_mode) %>%
+          summarise(mean_value = mean(verification_s_mean, na.rm = TRUE), .groups = "drop") %>%
+          pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+          filter(!is.na(mean_static), !is.na(mean_adaptive))
+        
+        if (nrow(mean_data) > 0) {
+          geom_segment(
+            data = mean_data,
+            aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+            inherit.aes = FALSE,
+            color = "black",
+            linewidth = 0.9,
+            alpha = 0.9
+          )
+        } else {
+          NULL
+        }
+      } +
       facet_grid(modality ~ pressure, labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -2704,6 +2872,27 @@ if ("verification_time_ms" %in% names(df)) {
         position = position_dodge(width = 0),
         show.legend = FALSE
       ) +
+      # Thick black line connecting mean values between conditions
+      {
+        mean_data <- df_verify_ratio_plot %>%
+          group_by(modality, pressure, ui_mode) %>%
+          summarise(mean_value = mean(verify_ratio_mean, na.rm = TRUE), .groups = "drop") %>%
+          pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+          filter(!is.na(mean_static), !is.na(mean_adaptive))
+        
+        if (nrow(mean_data) > 0) {
+          geom_segment(
+            data = mean_data,
+            aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+            inherit.aes = FALSE,
+            color = "black",
+            linewidth = 0.9,
+            alpha = 0.9
+          )
+        } else {
+          NULL
+        }
+      } +
       facet_grid(modality ~ pressure, labeller = labeller(
         modality = function(x) paste("Modality:", str_to_title(x)),
         pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -3376,6 +3565,27 @@ if (exists("df_width") && nrow(df_width) > 0) {
       position = position_dodge(width = 0),
       show.legend = FALSE
     ) +
+    # Thick black line connecting mean values between conditions
+    {
+      mean_data <- df_width_plot %>%
+        group_by(modality, pressure, ui_mode) %>%
+        summarise(mean_value = mean(width_scale_factor_mean, na.rm = TRUE), .groups = "drop") %>%
+        pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+        filter(!is.na(mean_static), !is.na(mean_adaptive))
+      
+      if (nrow(mean_data) > 0) {
+        geom_segment(
+          data = mean_data,
+          aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+          inherit.aes = FALSE,
+          color = "black",
+          linewidth = 0.9,
+          alpha = 0.9
+        )
+      } else {
+        NULL
+      }
+    } +
     facet_grid(modality ~ pressure, labeller = labeller(
       modality = function(x) paste("Modality:", str_to_title(x)),
       pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -3650,6 +3860,27 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         position = position_dodge(width = 0),
         show.legend = FALSE
       ) +
+      # Thick black line connecting mean values between conditions
+      {
+        mean_data <- df_gate_plot %>%
+          group_by(modality, pressure, ui_mode) %>%
+          summarise(mean_value = mean(false_triggers_mean, na.rm = TRUE), .groups = "drop") %>%
+          pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+          filter(!is.na(mean_static), !is.na(mean_adaptive))
+        
+        if (nrow(mean_data) > 0) {
+          geom_segment(
+            data = mean_data,
+            aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+            inherit.aes = FALSE,
+            color = "black",
+            linewidth = 0.9,
+            alpha = 0.9
+          )
+        } else {
+          NULL
+        }
+      } +
       facet_grid(modality ~ pressure, labeller = labeller(
         modality = function(x) paste("Modality:", str_to_title(x)),
         pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -3757,6 +3988,27 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
           position = position_dodge(width = 0),
           show.legend = FALSE
         ) +
+        # Thick black line connecting mean values between conditions
+        {
+          mean_data <- df_gate_recovery_plot %>%
+            group_by(modality, pressure, ui_mode) %>%
+            summarise(mean_value = mean(recovery_time_mean, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+            filter(!is.na(mean_static), !is.na(mean_adaptive))
+          
+          if (nrow(mean_data) > 0) {
+            geom_segment(
+              data = mean_data,
+              aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+              inherit.aes = FALSE,
+              color = "black",
+              linewidth = 0.9,
+              alpha = 0.9
+            )
+          } else {
+            NULL
+          }
+        } +
         facet_grid(modality ~ pressure, labeller = labeller(
           modality = function(x) paste("Modality:", str_to_title(x)),
           pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
@@ -3865,6 +4117,27 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
           position = position_dodge(width = 0),
           show.legend = FALSE
         ) +
+        # Thick black line connecting mean values between conditions
+        {
+          mean_data <- df_gate_mean_recovery_plot %>%
+            group_by(modality, pressure, ui_mode) %>%
+            summarise(mean_value = mean(mean_recovery_time_mean, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+            filter(!is.na(mean_static), !is.na(mean_adaptive))
+          
+          if (nrow(mean_data) > 0) {
+            geom_segment(
+              data = mean_data,
+              aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+              inherit.aes = FALSE,
+              color = "black",
+              linewidth = 0.9,
+              alpha = 0.9
+            )
+          } else {
+            NULL
+          }
+        } +
         facet_grid(modality ~ pressure, labeller = labeller(
           modality = function(x) paste("Modality:", str_to_title(x)),
           pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
