@@ -1674,6 +1674,11 @@ export function FittsTask({
   // Alignment gate: check if selection is allowed
   const checkAlignmentGate = useCallback(
     (clickPos: Position): boolean => {
+      // Skip alignment gate for practice trials - allow all clicks to register
+      if (isPractice) {
+        return true
+      }
+      
       if (!alignmentGateEnabled || modalityConfig.modality !== Modality.HAND) {
         return true // Gate disabled or not hand mode - allow selection
       }
@@ -1737,6 +1742,7 @@ export function FittsTask({
       return true
     },
     [
+      isPractice,
       alignmentGateEnabled,
       modalityConfig.modality,
       targetPos,
@@ -1841,13 +1847,13 @@ export function FittsTask({
         }
       } else if (targetPos) {
         if (modalityConfig.modality === Modality.HAND) {
-          // Check alignment gate if enabled
+          // Check alignment gate if enabled (skipped for practice trials)
           if (!checkAlignmentGate(clickPos)) {
-            // Gate failed - selection blocked
+            // Gate failed - selection blocked (only for non-practice trials)
             return
           }
 
-          // Hand mode: direct click (gate passed)
+          // Hand mode: direct click (gate passed or practice trial)
           completeSelection(clickPos, true)
         } else {
           // Gaze mode: clicking should not work (only dwell or space)
