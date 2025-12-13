@@ -134,6 +134,19 @@ export function LoggerPane() {
         }
         
         const row = createRowFromTrial(payload, blockNumber, adaptationState)
+        
+        // Validation: Verify practice flag is correctly set in logged row
+        const expectedPractice = payload.practice === true || payload.practice === 'true'
+        if (row.practice !== expectedPractice) {
+          console.warn('[LoggerPane] Practice flag mismatch in CSV row:', {
+            expected: expectedPractice,
+            actual: row.practice,
+            payloadPractice: payload.practice,
+            trialId: payload.trialId,
+            eventName,
+          })
+        }
+        
         logger.pushRow(row)
         setCsvRowCount(logger.getRowCount())
       }

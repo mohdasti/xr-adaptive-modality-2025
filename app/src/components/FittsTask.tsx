@@ -725,6 +725,15 @@ export function FittsTask({
       'timeout'
     )
 
+    // Validation: Ensure practice flag is correctly set for timeout errors
+    if (isPractice !== trialData.practice) {
+      console.warn('[FittsTask] Practice flag mismatch in timeout:', {
+        isPractice,
+        trialDataPractice: trialData.practice,
+        trialId: trialData.trialId,
+      })
+    }
+    
     bus.emit('trial:error', {
       trialId: trialData.trialId,
       trial: trialData.trialNumber,
@@ -1434,6 +1443,15 @@ export function FittsTask({
               alignment_gate_mean_recovery_time_ms: null,
             }
 
+        // Validation: Ensure practice flag is correctly set
+        if (isPractice !== trialData.practice) {
+          console.warn('[FittsTask] Practice flag mismatch:', {
+            isPractice,
+            trialDataPractice: trialData.practice,
+            trialId: trialData.trialId,
+          })
+        }
+        
         bus.emit('trial:end', {
           trialId: trialData.trialId,
           trial: trialData.trialNumber,
@@ -1543,6 +1561,16 @@ export function FittsTask({
         const avgFPS = calculateAverageFPS()
         const conditionData = getConditionData()
 
+        // Validation: Ensure practice flag is correctly set for errors
+        if (isPractice !== trialData.practice) {
+          console.warn('[FittsTask] Practice flag mismatch in error:', {
+            isPractice,
+            trialDataPractice: trialData.practice,
+            errorType,
+            trialId: trialData.trialId,
+          })
+        }
+        
         bus.emit('trial:error', {
           trialId: trialData.trialId,
           trial: trialData.trialNumber,
@@ -2190,6 +2218,15 @@ export function FittsTask({
             const metrics = getSpatialMetrics(cursorPos)
             const avgFPS = calculateAverageFPS()
             const conditionData = getConditionData()
+
+            // Validation: Ensure practice flag is correctly set for slip errors
+            if (isPractice !== trialData.practice) {
+              console.warn('[FittsTask] Practice flag mismatch in slip error:', {
+                isPractice,
+                trialDataPractice: trialData.practice,
+                trialId: trialData.trialId,
+              })
+            }
 
             bus.emit('trial:error', {
               trialId: trialData.trialId,

@@ -984,7 +984,18 @@ export function createRowFromTrial(
     focus_blur_count: payload.focus_blur_count ?? null,
     tab_hidden_ms: payload.tab_hidden_ms ?? null,
     user_agent: displayMeta?.user_agent ?? payload.user_agent ?? null,
-    practice: payload.practice ?? false,
+    practice: (() => {
+      // Normalize practice flag: handle boolean, string, and null/undefined
+      const practiceValue = payload.practice
+      if (practiceValue === true || practiceValue === 'true' || practiceValue === 1 || practiceValue === '1') {
+        return true
+      }
+      if (practiceValue === false || practiceValue === 'false' || practiceValue === 0 || practiceValue === '0') {
+        return false
+      }
+      // Default to false if not explicitly set
+      return false
+    })(),
     avg_fps: payload.avg_fps ?? null,
     // Submovement analysis (all optional - safe defaults)
     submovement_count_legacy: payload.submovement_count_legacy ?? payload.submovement_count ?? null,

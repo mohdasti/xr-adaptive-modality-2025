@@ -2593,16 +2593,27 @@ if (!is.null(submov_col)) {
     filter(!is.na(.data[[submov_col]]), .data[[submov_col]] >= 0)
   
   if (nrow(df_submov) > 0) {
+    # Check which modalities have data
+    modalities_with_data <- unique(df_submov$modality)
+    
     # Check if hand modality has any non-zero values
-    hand_has_data <- df_submov %>%
+    hand_has_nonzero <- df_submov %>%
       filter(modality == "hand") %>%
       summarise(has_nonzero = any(.data[[submov_col]] > 0)) %>%
       pull(has_nonzero)
     
-    if (!hand_has_data && submov_col == "submovement_count") {
+    # Check if hand modality has any data at all (including zeros)
+    hand_has_any_data <- "hand" %in% modalities_with_data
+    
+    if (!hand_has_any_data) {
+      cat("ℹ **Note:** No submovement data for Hand modality.\n\n")
+    } else if (!hand_has_nonzero && submov_col == "submovement_count") {
       cat("⚠ **Note:** Hand modality shows zero submovements because the legacy `submovement_count`\n")
       cat("   was only computed for gaze. Future data will use `submovement_count_recomputed`\n")
       cat("   computed from trajectory for both modalities.\n\n")
+    } else if (!hand_has_nonzero && submov_col == "submovement_count_recomputed") {
+      cat("ℹ **Note:** Hand modality shows zero submovements, indicating very smooth movements\n")
+      cat("   with no detected velocity peaks (submovements). This is valid data.\n\n")
     }
     
     # Submovements vs. Difficulty
@@ -3492,11 +3503,22 @@ if (exists("df_width") && nrow(df_width) > 0) {
   # Check if any scaling occurred
   has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
+  # Check which modalities have data
+  modalities_with_data <- unique(df_width$modality)
+  
   # Aggregate to participant-level means for raincloud plot
   df_width_plot <- df_width %>%
     group_by(pid, modality, ui_mode, pressure) %>%
     summarise(width_scale_factor_mean = mean(width_scale_factor, na.rm = TRUE), .groups = "drop") %>%
     filter(!is.na(width_scale_factor_mean))
+  
+  # Ensure all modalities are represented in the plot data (even if empty)
+  all_modalities <- c("hand", "gaze")
+  missing_modalities <- setdiff(all_modalities, modalities_with_data)
+  
+  if (length(missing_modalities) > 0 && length(modalities_with_data) > 0) {
+    cat("ℹ **Note:** No width scaling data for", paste(missing_modalities, collapse = ", "), "modality.\n\n")
+  }
   
   # Show plot even if no scaling occurred - it's still informative
   # Raincloud plot for width scale factor
@@ -3912,9 +3934,22 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
 
 if (exists("df_gate") && nrow(df_gate) > 0) {
   # Visualization - recovery time
-  if (sum(!is.na(df_gate$alignment_gate_recovery_time_ms)) > 0) {
+  # Check if any modality has recovery time data
+  has_recovery_data <- sum(!is.na(df_gate$alignment_gate_recovery_time_ms)) > 0
+  
+  if (has_recovery_data) {
     df_gate_recovery <- df_gate %>%
       filter(!is.na(alignment_gate_recovery_time_ms), alignment_gate_recovery_time_ms > 0)
+    
+    # Check which modalities have data
+    modalities_with_data <- unique(df_gate_recovery$modality)
+    all_modalities <- unique(df_gate$modality)
+    missing_modalities <- setdiff(all_modalities, modalities_with_data)
+    
+    if (length(missing_modalities) > 0) {
+      cat("ℹ **Note:** No recovery time data for", paste(missing_modalities, collapse = ", "), "modality.\n")
+      cat("   This indicates the alignment gate always passed (no false triggers) for these trials.\n\n")
+    }
     
     if (nrow(df_gate_recovery) > 0) {
       # Aggregate to participant-level means
@@ -4041,9 +4076,22 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
 
 if (exists("df_gate") && nrow(df_gate) > 0) {
   # Visualization - mean recovery time (averaged across all recoveries in trial)
-  if (sum(!is.na(df_gate$alignment_gate_mean_recovery_time_ms)) > 0) {
+  # Check if any modality has mean recovery time data
+  has_mean_recovery_data <- sum(!is.na(df_gate$alignment_gate_mean_recovery_time_ms)) > 0
+  
+  if (has_mean_recovery_data) {
     df_gate_mean_recovery <- df_gate %>%
       filter(!is.na(alignment_gate_mean_recovery_time_ms), alignment_gate_mean_recovery_time_ms > 0)
+    
+    # Check which modalities have data
+    modalities_with_data <- unique(df_gate_mean_recovery$modality)
+    all_modalities <- unique(df_gate$modality)
+    missing_modalities <- setdiff(all_modalities, modalities_with_data)
+    
+    if (length(missing_modalities) > 0) {
+      cat("ℹ **Note:** No mean recovery time data for", paste(missing_modalities, collapse = ", "), "modality.\n")
+      cat("   This indicates the alignment gate always passed (no false triggers) for these trials.\n\n")
+    }
     
     if (nrow(df_gate_mean_recovery) > 0) {
       # Aggregate to participant-level means
