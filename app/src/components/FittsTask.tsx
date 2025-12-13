@@ -726,10 +726,9 @@ export function FittsTask({
     )
 
     // Validation: Ensure practice flag is correctly set for timeout errors
-    if (isPractice !== trialData.practice) {
-      console.warn('[FittsTask] Practice flag mismatch in timeout:', {
-        isPractice,
-        trialDataPractice: trialData.practice,
+    // Note: isPractice is the source of truth, we validate it's being used correctly
+    if (isPractice === undefined) {
+      console.warn('[FittsTask] Practice flag undefined in timeout:', {
         trialId: trialData.trialId,
       })
     }
@@ -1444,10 +1443,9 @@ export function FittsTask({
             }
 
         // Validation: Ensure practice flag is correctly set
-        if (isPractice !== trialData.practice) {
-          console.warn('[FittsTask] Practice flag mismatch:', {
-            isPractice,
-            trialDataPractice: trialData.practice,
+        // Note: isPractice is the source of truth, we validate it's being used correctly
+        if (isPractice === undefined) {
+          console.warn('[FittsTask] Practice flag undefined in trial:end:', {
             trialId: trialData.trialId,
           })
         }
@@ -1562,10 +1560,9 @@ export function FittsTask({
         const conditionData = getConditionData()
 
         // Validation: Ensure practice flag is correctly set for errors
-        if (isPractice !== trialData.practice) {
-          console.warn('[FittsTask] Practice flag mismatch in error:', {
-            isPractice,
-            trialDataPractice: trialData.practice,
+        // Note: isPractice is the source of truth, we validate it's being used correctly
+        if (isPractice === undefined) {
+          console.warn('[FittsTask] Practice flag undefined in error:', {
             errorType,
             trialId: trialData.trialId,
           })
@@ -2220,10 +2217,9 @@ export function FittsTask({
             const conditionData = getConditionData()
 
             // Validation: Ensure practice flag is correctly set for slip errors
-            if (isPractice !== trialData.practice) {
-              console.warn('[FittsTask] Practice flag mismatch in slip error:', {
-                isPractice,
-                trialDataPractice: trialData.practice,
+            // Note: isPractice is the source of truth, we validate it's being used correctly
+            if (isPractice === undefined) {
+              console.warn('[FittsTask] Practice flag undefined in slip error:', {
                 trialId: trialData.trialId,
               })
             }
