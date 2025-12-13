@@ -2549,10 +2549,12 @@ if (!is.null(submov_col)) {
           NULL
         }
       } +
-      facet_grid(modality ~ pressure, labeller = labeller(
-        modality = function(x) paste("Modality:", str_to_title(x)),
-        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-      )) +
+      facet_grid(modality ~ pressure, 
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 ),
+                 drop = FALSE) +
       scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -2904,10 +2906,12 @@ if ("verification_time_ms" %in% names(df)) {
           NULL
         }
       } +
-      facet_grid(modality ~ pressure, labeller = labeller(
-        modality = function(x) paste("Modality:", str_to_title(x)),
-        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-      )) +
+      facet_grid(modality ~ pressure, 
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 ),
+                 drop = FALSE) +
       scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -3818,13 +3822,34 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
       summarise(false_triggers_mean = mean(alignment_gate_false_triggers, na.rm = TRUE), .groups = "drop") %>%
       filter(!is.na(false_triggers_mean))
     
+    # Ensure all modality/pressure combinations are represented (even if empty)
+    # This ensures all facets are shown in the plot
+    all_combinations <- expand_grid(
+      modality = unique(df_gate$modality),
+      pressure = unique(df_gate$pressure),
+      ui_mode = c("static", "adaptive")
+    )
+    
+    # Left join to ensure all combinations are present (missing ones will have NA values)
+    # This ensures facet_grid shows all facets, even if some are empty
+    df_gate_plot_complete <- all_combinations %>%
+      left_join(df_gate_plot, by = c("modality", "pressure", "ui_mode")) %>%
+      mutate(
+        modality = factor(modality, levels = levels(df_gate$modality)),
+        pressure = factor(pressure, levels = levels(df_gate$pressure)),
+        ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+      )
+    
+    # Use complete data for plotting (will show empty facets for missing combinations)
+    df_gate_plot <- df_gate_plot_complete
+    
     p1 <- ggplot(df_gate_plot, aes(x = ui_mode, y = false_triggers_mean, fill = ui_mode, color = ui_mode)) +
       # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
       {
         if (has_ggdist) {
           list(
             ggdist::stat_halfeye(
-              data = df_gate_plot %>% filter(ui_mode == "static"),
+              data = df_gate_plot %>% filter(ui_mode == "static", !is.na(false_triggers_mean)),
               aes(fill = ui_mode),
               side = "left",
               alpha = 0.4,
@@ -3834,7 +3859,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
               point_colour = NA
             ),
             ggdist::stat_halfeye(
-              data = df_gate_plot %>% filter(ui_mode == "adaptive"),
+              data = df_gate_plot %>% filter(ui_mode == "adaptive", !is.na(false_triggers_mean)),
               aes(fill = ui_mode),
               side = "right",
               alpha = 0.4,
@@ -3884,7 +3909,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
       ) +
       # Thick black line connecting mean values between conditions
       {
-        mean_data <- df_gate_plot %>%
+        mean_data <- df_gate_plot %>% filter(!is.na(false_triggers_mean)) %>%
           group_by(modality, pressure, ui_mode) %>%
           summarise(mean_value = mean(false_triggers_mean, na.rm = TRUE), .groups = "drop") %>%
           pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
@@ -3903,10 +3928,12 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
           NULL
         }
       } +
-      facet_grid(modality ~ pressure, labeller = labeller(
-        modality = function(x) paste("Modality:", str_to_title(x)),
-        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-      )) +
+      facet_grid(modality ~ pressure, 
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 ),
+                 drop = FALSE) +
       scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -3958,6 +3985,27 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         summarise(recovery_time_mean = mean(alignment_gate_recovery_time_ms, na.rm = TRUE), .groups = "drop") %>%
         filter(!is.na(recovery_time_mean))
       
+      # Ensure all modality/pressure combinations are represented
+      # Create complete grid of all combinations to ensure all facets are shown
+      all_combinations <- expand_grid(
+        modality = unique(df_gate$modality),
+        pressure = unique(df_gate$pressure),
+        ui_mode = c("static", "adaptive")
+      )
+      
+      # Left join to ensure all combinations are present (missing ones will have NA values)
+      # This ensures facet_grid shows all facets, even if some are empty
+      df_gate_recovery_plot_complete <- all_combinations %>%
+        left_join(df_gate_recovery_plot, by = c("modality", "pressure", "ui_mode")) %>%
+        mutate(
+          modality = factor(modality, levels = levels(df_gate$modality)),
+          pressure = factor(pressure, levels = levels(df_gate$pressure)),
+          ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+        )
+      
+      # Use complete data for plotting (will show empty facets for missing combinations)
+      df_gate_recovery_plot <- df_gate_recovery_plot_complete
+      
       p2 <- ggplot(df_gate_recovery_plot, 
                    aes(x = ui_mode, y = recovery_time_mean, fill = ui_mode, color = ui_mode)) +
         # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
@@ -3965,7 +4013,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
           if (has_ggdist) {
             list(
               ggdist::stat_halfeye(
-                data = df_gate_recovery_plot %>% filter(ui_mode == "static"),
+                data = df_gate_recovery_plot %>% filter(ui_mode == "static", !is.na(recovery_time_mean)),
                 aes(fill = ui_mode),
                 side = "left",
                 alpha = 0.4,
@@ -3975,7 +4023,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
                 point_colour = NA
               ),
               ggdist::stat_halfeye(
-                data = df_gate_recovery_plot %>% filter(ui_mode == "adaptive"),
+                data = df_gate_recovery_plot %>% filter(ui_mode == "adaptive", !is.na(recovery_time_mean)),
                 aes(fill = ui_mode),
                 side = "right",
                 alpha = 0.4,
@@ -4025,7 +4073,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         ) +
         # Thick black line connecting mean values between conditions
         {
-          mean_data <- df_gate_recovery_plot %>%
+          mean_data <- df_gate_recovery_plot %>% filter(!is.na(recovery_time_mean)) %>%
             group_by(modality, pressure, ui_mode) %>%
             summarise(mean_value = mean(recovery_time_mean, na.rm = TRUE), .groups = "drop") %>%
             pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
@@ -4044,10 +4092,12 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
             NULL
           }
         } +
-        facet_grid(modality ~ pressure, labeller = labeller(
-          modality = function(x) paste("Modality:", str_to_title(x)),
-          pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-        )) +
+        facet_grid(modality ~ pressure, 
+                   labeller = labeller(
+                     modality = function(x) paste("Modality:", str_to_title(x)),
+                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                   ),
+                   drop = FALSE) +
         scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -4100,6 +4150,27 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         summarise(mean_recovery_time_mean = mean(alignment_gate_mean_recovery_time_ms, na.rm = TRUE), .groups = "drop") %>%
         filter(!is.na(mean_recovery_time_mean))
       
+      # Ensure all modality/pressure combinations are represented
+      # Create complete grid of all combinations to ensure all facets are shown
+      all_combinations <- expand_grid(
+        modality = unique(df_gate$modality),
+        pressure = unique(df_gate$pressure),
+        ui_mode = c("static", "adaptive")
+      )
+      
+      # Left join to ensure all combinations are present (missing ones will have NA values)
+      # This ensures facet_grid shows all facets, even if some are empty
+      df_gate_mean_recovery_plot_complete <- all_combinations %>%
+        left_join(df_gate_mean_recovery_plot, by = c("modality", "pressure", "ui_mode")) %>%
+        mutate(
+          modality = factor(modality, levels = levels(df_gate$modality)),
+          pressure = factor(pressure, levels = levels(df_gate$pressure)),
+          ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+        )
+      
+      # Use complete data for plotting (will show empty facets for missing combinations)
+      df_gate_mean_recovery_plot <- df_gate_mean_recovery_plot_complete
+      
       p3 <- ggplot(df_gate_mean_recovery_plot, 
                    aes(x = ui_mode, y = mean_recovery_time_mean, fill = ui_mode, color = ui_mode)) +
         # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
@@ -4107,7 +4178,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
           if (has_ggdist) {
             list(
               ggdist::stat_halfeye(
-                data = df_gate_mean_recovery_plot %>% filter(ui_mode == "static"),
+                data = df_gate_mean_recovery_plot %>% filter(ui_mode == "static", !is.na(mean_recovery_time_mean)),
                 aes(fill = ui_mode),
                 side = "left",
                 alpha = 0.4,
@@ -4117,7 +4188,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
                 point_colour = NA
               ),
               ggdist::stat_halfeye(
-                data = df_gate_mean_recovery_plot %>% filter(ui_mode == "adaptive"),
+                data = df_gate_mean_recovery_plot %>% filter(ui_mode == "adaptive", !is.na(mean_recovery_time_mean)),
                 aes(fill = ui_mode),
                 side = "right",
                 alpha = 0.4,
@@ -4167,7 +4238,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         ) +
         # Thick black line connecting mean values between conditions
         {
-          mean_data <- df_gate_mean_recovery_plot %>%
+          mean_data <- df_gate_mean_recovery_plot %>% filter(!is.na(mean_recovery_time_mean)) %>%
             group_by(modality, pressure, ui_mode) %>%
             summarise(mean_value = mean(mean_recovery_time_mean, na.rm = TRUE), .groups = "drop") %>%
             pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
@@ -4186,10 +4257,12 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
             NULL
           }
         } +
-        facet_grid(modality ~ pressure, labeller = labeller(
-          modality = function(x) paste("Modality:", str_to_title(x)),
-          pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-        )) +
+        facet_grid(modality ~ pressure, 
+                   labeller = labeller(
+                     modality = function(x) paste("Modality:", str_to_title(x)),
+                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                   ),
+                   drop = FALSE) +
         scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_x_discrete(labels = c("Static", "Adaptive")) +
