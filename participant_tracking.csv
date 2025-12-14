@@ -2,55 +2,72 @@ participant_id,session_number,completed_blocks,block_sequence,status,timestamp,d
 P001,1,0/8,,Not started,,,
 P002,1,7/8,"HaA_P0, HaS_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0, GaA_P1",Partial,2025-12-07 22:11:16,P002_2025-12-07T22-11-16_merged.csv,Mahdi D
 P003,1,8/8,"HaS_P0, HaA_P1, GaS_P0, HaS_P1, GaS_P1, GaA_P0, GaA_P1, HaS_P0",Completed,2025-12-08 01:13:34,P003_2025-12-08T01-13-34_merged.csv,Ali D
-P004,1,0/8,,Not started,,,Melika D
+P004,1,8/8,"HaS_P0, HaS_P1, HaA_P0, GaS_P1, GaA_P0, GaA_P1, HaS_P0, GaS_P0",Completed,2025-12-14 00:11:27,P004_2025-12-14T00-11-27_merged.csv,Melika D
 P005,1,0/8,,Not started,,,Ali A
-P006,1,0/8,,Not started,,,Arash M
+P006,1,8/8,"GaS_P1, GaA_P0, HaS_P1, GaA_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1",Completed,2025-12-09 18:24:00,P006_2025-12-09T18-24-00_merged.csv,Arash M
 P007,1,8/8,"HaS_P0, GaA_P1, GaS_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1",Completed,2025-12-07 19:01:51,P007_2025-12-07T19-01-51_merged.csv,Mehdi S
 P008,1,8/8,"HaS_P0, HaS_P0, GaA_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1, GaS_P1",Completed,2025-12-08 01:40:57,P008_2025-12-08T01-40-57_merged.csv,Amin G
-P009,1,0/8,,Not started,,,Friend of Sepasi!
-P010,1,0/8,,Not started,,,Friend of Sepasi! 2
-P011,1,0/8,,Not started,,,Friend of Ghaffari 1
+P009,1,8/8,"HaS_P0, GaS_P0, GaA_P1, HaA_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0",Completed,2025-12-09 00:18:49,P009_2025-12-09T00-18-49_merged.csv,Arghavan R
+P010,1,8/8,"HaS_P0, HaA_P0, HaS_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0, GaA_P1",Completed,2025-12-08 22:28:24,P010_2025-12-08T22-28-24_merged.csv,Sina R
+P011,1,8/8,"HaS_P0, HaA_P1, GaS_P0, HaS_P1, GaS_P1, GaA_P0, GaA_P1, HaS_P0",Completed,2025-12-09 20:28:14,P011_2025-12-09T20-28-14_merged.csv,Narges E
 P012,1,0/8,,Not started,,,Friend of Ghaffari 2
 P013,1,0/8,,Not started,,,Farrokh D
-P014,1,0/8,,Not started,,,Mohsen K
+P014,1,8/8,"HaS_P0, GaA_P0, HaS_P1, GaA_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1",Completed,2025-12-12 20:04:03,P014_2025-12-12T20-04-03_merged.csv,Mohsen K
 P015,1,8/8,"HaS_P0, GaA_P1, GaS_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1",Completed,2025-12-08 12:42:54,P015_2025-12-08T12-42-54_merged.csv,Jalil S
 P016,1,0/8,,Not started,,,Ladan D
 P017,1,0/8,,Not started,,,Saeed R
-P018,1,0/8,,Not started,,,
-P019,1,0/8,,Not started,,,
-P020,1,0/8,,Not started,,,
-P021,1,0/8,,Not started,,,
-P022,1,0/8,,Not started,,,
-P023,1,0/8,,Not started,,,
-P024,1,0/8,,Not started,,,
-P025,1,0/8,,Not started,,,
-P026,1,0/8,,Not started,,,
-P027,1,0/8,,Not started,,,
-P028,1,0/8,,Not started,,,
-P029,1,0/8,,Not started,,,
-P030,1,0/8,,Not started,,,
-P031,1,0/8,,Not started,,,
-P032,1,0/8,,Not started,,,
-P033,1,0/8,,Not started,,,
-P034,1,0/8,,Not started,,,
-P035,1,0/8,,Not started,,,
-P036,1,0/8,,Not started,,,
-P037,1,0/8,,Not started,,,
-P038,1,0/8,,Not started,,,
+P018,1,8/8,"HaS_P0, HaA_P0, HaS_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0, GaA_P1",Completed,2025-12-08 20:22:39,P018_2025-12-08T20-22-39_merged.csv,MohammadReza R
+P019,1,8/8,"HaS_P0, HaA_P1, GaS_P0, HaS_P1, GaS_P1, GaA_P0, GaA_P1, HaS_P0",Completed,2025-12-09 09:11:19,P019_2025-12-09T09-11-19_merged.csv,Hossein R
+P020,1,8/8,"HaS_P0, HaS_P1, HaA_P0, GaS_P1, GaA_P0, GaA_P1, HaS_P0, GaS_P0",Completed,2025-12-12 17:26:03,P020_2025-12-12T17-26-03_merged.csv,Reza H
+P021,1,0/8,,Not started,,,Khanoom Reza H
+P022,1,8/8,"HaS_P0, GaA_P0, HaS_P1, GaA_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1",Completed,2025-12-09 12:25:16,P022_2025-12-09T12-25-16_merged.csv,Narjes S
+P023,1,8/8,"GaA_P0, GaA_P1, GaS_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1",Completed,2025-12-09 23:17:45,P023_2025-12-09T23-17-45_merged.csv,Bethany T
+P024,1,8/8,"HaS_P0, HaS_P0, GaA_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1, GaS_P1",Completed,2025-12-10 16:32:31,P024_2025-12-10T16-32-31_merged.csv,Hanieh K
+P025,1,8/8,"HaS_P0, GaS_P0, GaA_P1, HaA_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0",Completed,2025-12-10 16:17:32,P025_2025-12-10T16-17-32_merged.csv,Mohammad Sh
+P026,1,0/8,,Not started,,,Edwyn L
+P027,1,0/8,,Not started,,,Carol L
+P028,1,0/8,,Not started,,,Bethany 1
+P029,1,8/8,"HaS_P0, GaS_P1, HaA_P1, GaA_P0, GaA_P1, HaS_P0, GaS_P0, HaA_P0",Completed,2025-12-09 20:01:59,P029_2025-12-09T20-01-59_merged.csv,Bethany 2
+P030,1,0/8,,Not started,,,Bethany 3
+P031,1,0/8,,Not started,,,Bethany 4
+P032,1,0/8,,Not started,,,Bethany 5
+P033,1,0/8,,Not started,,,Narjes 1
+P034,1,0/8,,Not started,,,Narjes 2
+P035,1,0/8,,Not started,,,Narjes 3
+P036,1,0/8,,Not started,,,Narjes 4
+P037,1,4/8,"HaS_P0, GaS_P1, HaA_P1, GaA_P0",Partial,2025-12-09 20:26:37,experiment_P037_session1_1765340797477.csv,Friends of Sepasi
+P038,1,8/8,"HaS_P0, GaA_P0, HaS_P1, GaA_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1",Completed,2025-12-13 09:35:43,P038_2025-12-13T09-35-43_merged.csv,Mehrdad FP
 P039,1,8/8,"HaS_P0, GaA_P1, GaS_P1, HaS_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1",Completed,2025-12-06 08:07:48,P039_2025-12-06T08-07-48_merged.csv,Fatemeh P
 P040,1,8/8,"HaS_P0, HaS_P0, GaA_P0, GaS_P0, HaA_P0, HaA_P1, HaS_P1, GaS_P1",Completed,2025-12-05 07:57:03,P040_2025-12-05T07-57-03_merged.csv,Mohammad D
-P041,1,0/8,,Not started,,,
-P042,1,0/8,,Not started,,,
-P043,1,0/8,,Not started,,,
-P044,1,0/8,,Not started,,,
-P045,1,0/8,,Not started,,,
-P046,1,0/8,,Not started,,,
-P047,1,0/8,,Not started,,,
-P048,1,0/8,,Not started,,,
-P049,1,0/8,,Not started,,,
-P050,1,0/8,,Not started,,,
-P051,1,0/8,,Not started,,,
+P041,1,8/8,"HaS_P0, HaA_P0, HaS_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0, GaA_P1",Completed,2025-12-11 17:39:10,P041_2025-12-11T17-39-10_merged.csv,Amirhossein A
+P042,1,8/8,"HaS_P0, HaA_P0, HaS_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0, GaA_P1",Completed,2025-12-11 17:41:16,P042_2025-12-11T17-41-16_merged.csv,Zeinab AK
+P043,1,0/8,,Not started,,,Friend of Ghaffari 3
+P044,1,0/8,,Not started,,,Amir A
+P045,1,0/8,,Not started,,,Nikta T
+P046,1,0/8,,Not started,,,Maryam Irvine
+P047,1,0/8,,Not started,,,Rabia
+P048,1,0/8,,Not started,,,Sojung
+P049,1,8/8,"HaS_P0, GaS_P0, GaA_P1, HaA_P0, HaA_P1, HaS_P1, GaS_P1, GaA_P0",Completed,2025-12-14 01:13:50,P049_2025-12-14T01-13-50_merged.csv,Friends of Sepasi 4
+P050,1,0/8,,Not started,,,Negin
+P051,1,0/8,,Not started,,,Negin’s husband
 P052,1,0/8,,Not started,,,
 P053,1,0/8,,Not started,,,
 P054,1,0/8,,Not started,,,
 P055,1,0/8,,Not started,,,
+P056,1,0/8,,Not started,,,
+P057,1,0/8,,Not started,,,
+P058,1,0/8,,Not started,,,
+P059,1,0/8,,Not started,,,
+P060,1,0/8,,Not started,,,
+P061,1,0/8,,Not started,,,
+P062,1,0/8,,Not started,,,
+P063,1,0/8,,Not started,,,
+P064,1,0/8,,Not started,,,
+P065,1,0/8,,Not started,,,
+P066,1,0/8,,Not started,,,
+P067,1,0/8,,Not started,,,
+P068,1,0/8,,Not started,,,
+P069,1,0/8,,Not started,,,
+P070,1,0/8,,Not started,,,
+P071,1,0/8,,Not started,,,
+P072,1,0/8,,Not started,,,

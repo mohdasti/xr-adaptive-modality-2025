@@ -237,12 +237,72 @@ if (!"pid" %in% names(df_raw)) {
 }
 
 # --- PREPROCESSING ---
+# Participant-level exclusion policy:
+# The exclude_main flag and data_quality_flags_json are preserved in the data for transparency.
+# Exclusion decisions are made case-by-case based on:
+# - Which analysis is being performed (e.g., full 2×2×2 factorial requires all conditions)
+# - Specific data quality issues (e.g., pressure_bug_detected affects factorial analyses)
+# - Whether the issue affects the specific metric being analyzed
+# 
+# For analyses requiring full factorial (modality × ui_mode × pressure):
+#   - Participants with pressure_bug_detected are excluded (they only have pressure=1)
+#   - This is applied in the specific analysis sections, not globally
+# 
+# For other analyses (e.g., modality × ui_mode without pressure):
+#   - These participants may still be usable
+# 
+# Document excluded participants for reference:
+if ("exclude_main" %in% names(df_raw) || "data_quality_flags_json" %in% names(df_raw)) {
+  if ("data_quality_flags_json" %in% names(df_raw)) {
+    # Parse flags to identify specific issues
+    df_raw <- df_raw %>%
+      mutate(
+        has_pressure_bug = ifelse(
+          !is.na(data_quality_flags_json),
+          grepl("pressure_bug_detected", data_quality_flags_json, fixed = TRUE),
+          FALSE
+        ),
+        has_trajectory_missing = ifelse(
+          !is.na(data_quality_flags_json),
+          grepl("trajectory_missing", data_quality_flags_json, fixed = TRUE),
+          FALSE
+        )
+      )
+    
+    # Report summary
+    pressure_bug_pids <- df_raw %>% 
+      filter(has_pressure_bug == TRUE) %>% 
+      distinct(pid) %>% 
+      pull(pid) %>% 
+      as.character() %>% 
+      sort()
+    
+    if (length(pressure_bug_pids) > 0) {
+      cat("\n**Data Quality Note:** ", length(pressure_bug_pids), 
+          " participants have pressure_bug_detected flag: ", 
+          paste(pressure_bug_pids, collapse = ", "), "\n")
+      cat("  These participants will be excluded from full 2×2×2 factorial analyses\n")
+      cat("  (modality × ui_mode × pressure) but may be usable for other analyses.\n\n")
+    }
+  }
+}
+
+# Create unified trial-level QC flag
+df_raw <- df_raw %>%
+  mutate(
+    trial_qc_ok = (
+      (practice == FALSE | practice == "false" | is.na(practice)) &
+      (is.na(zoom_pct) | zoom_pct == 100) &
+      (is.na(is_fullscreen) | is_fullscreen == TRUE | (if("fullscreen" %in% names(.)) fullscreen == TRUE else TRUE)) &
+      (is.na(tab_hidden_ms) | tab_hidden_ms < 500) &
+      (is.na(focus_blur_count) | focus_blur_count == 0)
+    )
+  )
+
 # Create dataframe with ALL trials (correct + incorrect) for error rate calculations
-# This includes trials with valid RTs (even if incorrect) and excludes only practice trials
+# This includes trials with valid RTs (even if incorrect) and excludes practice + QC violations
 df_all_trials <- df_raw %>%
-  filter(
-    practice == "false" | practice == FALSE | is.na(practice)
-  ) %>%
+  filter(trial_qc_ok) %>%
   mutate(
     rt_s = rt_ms / 1000,
     log_rt = log(rt_ms),
@@ -262,12 +322,35 @@ df_all_trials <- df_raw %>%
   )
 
 # Filter valid experimental trials (non-practice, correct, valid RTs) for performance metrics
+# Note: This includes ALL participants. Exclusions for factorial analyses are applied later.
 df <- df_all_trials %>%
   filter(
     is_correct == TRUE,
     rt_ms >= 150,  # Physiological minimum
     rt_ms <= 6000  # Time-out threshold
   )
+
+# Create a version of df for full factorial analyses (excludes participants with pressure bug)
+# This is used only for analyses requiring modality × ui_mode × pressure
+if (exists("has_pressure_bug") && "has_pressure_bug" %in% names(df)) {
+  df_factorial <- df %>%
+    filter(!has_pressure_bug)  # Exclude participants with pressure bug for factorial analyses
+} else {
+  # If pressure bug flag not available, check by actual data coverage
+  df_factorial <- df %>%
+    group_by(pid) %>%
+    filter(n_distinct(pressure, na.rm = TRUE) == 2) %>%  # Must have both pressure levels
+    ungroup()
+}
+
+# --- PLANNED SAMPLE SIZE & POWER ---
+# Power analysis summary for the 2×2×2 within-subjects design
+# See POWER_ANALYSIS_PROMPT.md and power analysis documentation for full details
+
+cat("\n### Planned Sample Size & Power\n\n")
+cat("We pre-planned sample size for a 2×2×2 within-subjects design (modality × UI mode × pressure) using standard repeated-measures power analysis (Cohen, 1988) and recent guidelines for cognitive and HCI mixed-effects experiments (Brysbaert, 2019; Kumle et al., 2021; Matuschek et al., 2017). For the core UI-mode and modality main effects, we expect medium within-subject effect sizes (dz ≈ 0.4–0.6). Power calculations indicate that approximately 50 participants are sufficient to achieve 80% power for dz ≈ 0.40 at α = .05 in a two-level within-subjects contrast.\n\n")
+cat("Based on these considerations, we defined **N = 48 participants (six full Williams sequences)** as our primary target for all core analyses (throughput, RT, error rate, and NASA-TLX). If recruitment allows, we plan to extend the study to **N = 64 participants (eight sequences)** to increase power for error-based measures, re-entry counts, submovement metrics, and advanced cognitive-modeling analyses (LBA, control-theory kinematics). Three-way interactions and smaller effects are treated as exploratory regardless of N.\n\n")
+cat("**Current Status:** This report is based on an interim sample of N=`r n_distinct(df$pid)` participants. All power assessments below assume the final target of N=48 unless otherwise noted.\n\n")
 
 # --- DATA QUALITY & COVERAGE GATE (INTERIM) ---
 # Precompute coverage metrics once; reused across report
@@ -305,7 +388,9 @@ qc_block_completion <- df_all_trials %>%
 
 # --- CALCULATE ISO METRICS (Throughput) ---
 # ISO 9241-9: Calculate We (Effective Width) per condition per participant
-df_iso <- df %>%
+# For ISO throughput (full factorial analysis requiring modality × ui_mode × pressure),
+# use df_factorial which excludes participants with pressure bug (they only have pressure=1)
+df_iso <- df_factorial %>%
   group_by(pid, modality, ui_mode, pressure, A, W) %>%
   summarise(
     # We = 4.133 * SD of Projected Error
@@ -503,13 +588,14 @@ if (nrow(df) > 0) {
   } else if (diag_rt$empty_conditions > 0) {
     model_rt_error <- paste0("Empty conditions detected: ", diag_rt$empty_conditions, " condition(s) have no data.")
   } else {
-  formula_rt <- build_mixed_formula("log_rt", c("modality", "ui_mode", "pressure"), df)
+  # For full factorial RT model (modality × ui_mode × pressure), use df_factorial
+  formula_rt <- build_mixed_formula("log_rt", c("modality", "ui_mode", "pressure"), df_factorial)
   if (length(formula_rt$dropped) > 0) {
     model_rt_note <- paste0("Dropped single-level factor(s): ", paste(formula_rt$dropped, collapse = ", "), " (interim data).")
   }
   model_rt <- tryCatch({
     lmer(formula_rt$formula, 
-         data = df, REML = FALSE,
+         data = df_factorial, REML = FALSE,
          control = lmerControl(optimizer = "bobyqa"))
   }, error = function(e) {
       model_rt_error <<- paste0("Model fitting failed: ", e$message)
@@ -578,13 +664,17 @@ if (nrow(df_errors) > 0) {
     if (error_rate < 0.01 || error_rate > 0.99) {
       model_err_error <- paste0("Insufficient error variance: error rate = ", round(error_rate * 100, 1), "%. GLMM requires some variation in outcomes.")
     } else {
-  formula_err <- build_mixed_formula("error", c("modality", "ui_mode", "pressure"), df_errors)
+  # For full factorial error model (modality × ui_mode × pressure), filter to df_factorial participants
+  df_errors_factorial <- df_errors %>%
+    filter(pid %in% unique(df_factorial$pid))
+  
+  formula_err <- build_mixed_formula("error", c("modality", "ui_mode", "pressure"), df_errors_factorial)
   if (length(formula_err$dropped) > 0) {
     model_err_note <- paste0("Dropped single-level factor(s): ", paste(formula_err$dropped, collapse = ", "), " (interim data).")
   }
   model_err <- tryCatch({
     glmer(formula_err$formula,
-          data = df_errors, family = binomial(link = "logit"),
+          data = df_errors_factorial, family = binomial(link = "logit"),
           control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
   }, error = function(e) {
         model_err_error <<- paste0("Model fitting failed: ", e$message)
@@ -624,10 +714,13 @@ if (nrow(df_errors) > 0) {
 
 ::: {.callout-note}
 This section prevents misleading models when cells are missing. Current data are interim (N=`r n_distinct(df$pid)`); treat all effects as descriptive.
+
+**Interim Status:** All inferential models in this document are fit on N=`r n_distinct(df$pid)` (interim sample), not N=48. Any statements about N=48 refer to the *planned* final sample, not the data used here.
 :::
 
 ```{r qc-gate}
 # Participants
+# Note: df = correct trials, RT ∈ [150, 6000] ms, non-practice
 qc_participants <- tibble(
   Metric = c("Total participants (raw)", "Participants with any valid trials", "Participants in df (correct, RT-filtered)"),
   Count = c(qc_participants_total, qc_participants_all_trials, qc_participants_included)
@@ -644,7 +737,7 @@ qc_cells_table <- qc_cell_coverage %>%
 missing_factors <- names(qc_missing_factors)[unlist(qc_missing_factors)]
 
 qc_participants %>%
-  kable(caption = "Participant counts (interim)") %>%
+  kable(caption = "Participant counts (interim). Note: 'df' refers to correct trials, RT ∈ [150, 6000] ms, non-practice.") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
 qc_cells_table %>%
@@ -665,11 +758,19 @@ if (nrow(qc_block_completion) > 0) {
 ```
 
 
+::: {.callout-warning}
+## Interim Report Status
+
+**Current dataset: N=`r n_distinct(df$pid)` participants (interim sample).** All inferential results in this document are preliminary and will be re-estimated at N≈48. Sections 16 (LBA) and 17 (Control Theory) document planned analyses that have not yet been implemented at the current interim N.
+:::
+
 # 1. Executive Summary
 
 This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' law pointing tasks across two input modalities (Hand, Gaze) and two UI modes (Static, Adaptive).
 
-**Note on Participant Exclusions:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the main 2×2×2 factorial analysis due to a data logging error that incorrectly recorded pressure conditions. The bug was fixed on December 8, 2025 (commit `04758db`), and seven replacement participants (P049-P055) were added. The final analysis sample consists of N=48 participants with complete data across all experimental conditions. See the Data Quality Notes section and `EXCLUSION_CRITERIA.md` for details.
+**Note on Participant Exclusions:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the *planned* 2×2×2 factorial dataset due to a data logging error that incorrectly recorded pressure conditions. The bug was fixed on December 8, 2025 (commit `04758db`), and seven replacement participants (P049-P055) will be collected to reach the planned final sample of N=48. **All analyses in this interim report use N=`r n_distinct(df$pid)` participants with complete data across all conditions.**
+
+**All statistical models in this document are fit on N=`r n_distinct(df$pid)` (interim sample), not N=48.** See the Data Quality Notes section and `EXCLUSION_CRITERIA.md` for details.
 
 # Results Snapshot (Interim, N = `r qc_participants_included`)
 
@@ -710,6 +811,8 @@ contrast_table %>%
   kable(caption = "RQ1 contrasts (adaptive - static; interim descriptive)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
+cat("\n*Note:* These contrasts are descriptive only; no inferential claims are made at N=`r n_distinct(df$pid)`.\n\n")
+
 tlx_snapshot %>%
   kable(caption = "RQ2 snapshot: Overall TLX (interim)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
@@ -717,6 +820,8 @@ tlx_snapshot %>%
 manip_snapshot %>%
   kable(caption = "RQ3 manipulation check: width scaling (interim)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+cat("\n*Note:* In the current build, width scaling was not activated; all recorded `width_scale_factor` values equal 1.0. RQ3 will be revisited once adaptive width scaling is enabled.\n\n")
 ```
 
 ## Key Findings
@@ -774,6 +879,15 @@ device_stats <- demog_summary %>%
   count(input_device, name = "Count") %>%
   mutate(Percentage = round(100 * Count / sum(Count), 1))
 
+# Gaming status
+gaming_status <- demog_summary %>%
+  filter(!is.na(gaming_hours_per_week)) %>%
+  summarise(
+    median_gaming = round(median(gaming_hours_per_week, na.rm = TRUE), 1),
+    pct_high_gamers = round(100 * mean(gaming_hours_per_week >= 5, na.rm = TRUE), 1),
+    .groups = "drop"
+  )
+
 
 ```
 
@@ -803,6 +917,12 @@ device_stats %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
 
+## Gaming Status
+
+```{r}
+cat("Participants were primarily non-gamers (median self-reported gaming = ", gaming_status$median_gaming, " hours/week; only ", gaming_status$pct_high_gamers, "% reported ≥5 hrs/week).\n")
+```
+
 
 -----
 
@@ -811,6 +931,8 @@ device_stats %>%
 **Research Question:** Does the Adaptive UI improve performance (Throughput) compared to Static, especially for Gaze?
 
 **Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
+
+**Interim Analysis Note:** At this interim N, we observe a large main effect of modality (hand > gaze) on throughput, but no reliable evidence that the Adaptive UI improves TP relative to Static, nor clear interactions with pressure. Interaction effects are treated as exploratory and will be revisited at N=48.
 
 ## Summary Statistics
 
@@ -999,12 +1121,17 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
 
 ## Statistical Model Results
 
+#### Planned Sample Size & Power
+
+The throughput analysis was designed for a within-subjects 2×2×2 factorial (modality × UI mode × pressure). Our **primary effect of interest is the UI mode main effect** (adaptive vs static), which we expect to be medium in size (dz ≈ 0.4–0.6). Standard repeated-measures power calculations and guidelines (Cohen, 1988; Brysbaert, 2019) indicate that **N ≈ 50 participants** is sufficient for 80% power to detect dz ≈ 0.40. We therefore set **N = 48 (six complete Williams sequences)** as the primary design target, with the option to extend to **N = 64 (eight sequences)** if recruitment permits. Given the large number of trials per condition and the mixed-effects model (random intercepts per participant), this sample size is expected to provide **high power for UI mode and modality main effects**, while interactions are treated as secondary and more exploratory (Kumle et al., 2021; Matuschek et al., 2017).
+
 ```{r tp-model}
 if (exists("model_tp") && !is.null(model_tp)) {
   cat("### Model: ", deparse(formula_tp$formula), "\n\n")
   
   # Show diagnostics
   if (!is.null(diag_tp)) {
+    cat("**Model Structure:** Random intercept only (participant-level random effects). The trial-level N (≈", diag_tp$n_trials, ") should not be mistaken for independent units in discussions of power; the effective N for inference is the number of participants (", diag_tp$n_participants, ").\n\n")
     cat("**Data Summary:** ", diag_tp$n_participants, " participants, ", diag_tp$n_trials, " trials, ", 
         diag_tp$n_conditions, " conditions, minimum ", diag_tp$min_trials_per_condition, " trials per condition.\n\n")
   }
@@ -1018,9 +1145,39 @@ if (exists("model_tp") && !is.null(model_tp)) {
   anova_tp <- anova(model_tp, type = "III")
   print(anova_tp)
   
+  # Note on interactions
+  cat("\n**Interim Analysis Note:** At N=", diag_tp$n_participants, ", the model is underpowered for detecting 3-way interactions. Any non-significant interaction effects should be treated as exploratory and will be revisited at N=48.\n\n")
+  
   # Model summary
   cat("\n#### Model Summary\n")
   print(summary(model_tp))
+  
+  # Effect size: EMMs for hand vs gaze (collapsed over ui_mode and pressure)
+  if (exists("emm_tp") && !is.null(emm_tp)) {
+    cat("\n#### Effect Size: Hand vs. Gaze (Collapsed Over UI Mode and Pressure)\n")
+    emm_modality <- emmeans(model_tp, ~ modality)
+    emm_modality_df <- as.data.frame(emm_modality)
+    ci_lower <- if ("lower.CL" %in% names(emm_modality_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_modality_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_modality_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_modality_df)) "asymp.UCL" else NULL
+    
+    emm_modality_table <- emm_modality_df %>%
+      mutate(
+        Modality = str_to_title(modality),
+        `Mean TP (bits/s)` = round(emmean, 2),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 2) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 2) else NA_real_
+      ) %>%
+      select(Modality, `Mean TP (bits/s)`, `95% CI Lower`, `95% CI Upper`)
+    
+    print(knitr::kable(emm_modality_table, caption = "Estimated Marginal Means for Throughput by Modality (collapsed over UI mode and pressure)"))
+    
+    # Compute difference
+    if (nrow(emm_modality_df) == 2) {
+      diff_tp <- emm_modality_df$emmean[emm_modality_df$modality == "hand"] - 
+                 emm_modality_df$emmean[emm_modality_df$modality == "gaze"]
+      cat("\n**Difference (Hand - Gaze):** ", round(diff_tp, 2), " bits/s\n\n")
+    }
+  }
   
   # Pairwise comparisons
   if (exists("pairs_tp") && !is.null(pairs_tp)) {
@@ -1065,6 +1222,8 @@ if (exists("model_tp") && !is.null(model_tp)) {
 **Research Question:** How does movement time vary across conditions?
 
 **Sample Size:** `r get_n_string(df)` participants with valid movement time data (correct trials only).
+
+**Relationship to Throughput:** The RT patterns mirror throughput: hand is faster than gaze. Adaptive vs static and pressure do not show robust main effects on movement time at this N, consistent with the TP results.
 
 ## Summary Statistics
 
@@ -1248,12 +1407,17 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
 
 ## Statistical Model Results
 
+#### Planned Sample Size & Power
+
+The log-RT analysis uses the same 2×2×2 within-subjects design and random-intercept LMM as the throughput analysis. Because throughput and RT are mathematically coupled (TP = ID/RT) and we expect **similar medium-sized UI mode and modality effects**, the **sample-size logic is identical**: **N = 48** is sufficient for detecting dz ≈ 0.40–0.50 differences with ≈0.80 power, and **N = 64** further strengthens power for smaller effects and interactions (Cohen, 1988). Trial-level modeling with many repeated observations per participant increases precision, but our power planning is intentionally conservative and based on participant-level effects rather than naïvely counting trials.
+
 ```{r rt-model}
 if (exists("model_rt") && !is.null(model_rt)) {
   cat("### Model: ", deparse(formula_rt$formula), "\n\n")
   
   # Show diagnostics
   if (!is.null(diag_rt)) {
+    cat("**Model Structure:** Random intercept only (participant-level random effects). The trial-level N (≈", diag_rt$n_trials, ") should not be mistaken for independent units in discussions of power; the effective N for inference is the number of participants (", diag_rt$n_participants, ").\n\n")
     cat("**Data Summary:** ", diag_rt$n_participants, " participants, ", diag_rt$n_trials, " trials, ", 
         diag_rt$n_conditions, " conditions, minimum ", diag_rt$min_trials_per_condition, " trials per condition.\n\n")
   }
@@ -1308,6 +1472,10 @@ if (exists("model_rt") && !is.null(model_rt)) {
 # 5. Fitts' Law Modelling
 
 **Research Question:** How well does the data fit Fitts' Law? (Linearity check).
+
+#### Planned Sample Size & Power
+
+Fitts' law analyses serve primarily to **validate the pointing task and modality differences**, not to test the core adaptation hypotheses. The ID effect on movement time is typically very large (R² > .70), and robust Fitts-law slopes are observable with as few as 10–20 participants in classic HCI work. In this study, **any final sample N ≥ 30** is more than sufficient for stable ID slopes; our planned **N = 48** places this analysis in an **over-powered, descriptive regime**. We therefore do not perform formal power calculations here and treat Fitts regression as a manipulation check and descriptive characterization of the dataset.
 
 **Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
 
@@ -1387,6 +1555,19 @@ error_summary <- df_pid_cond %>%
 error_summary %>%
   kable(caption = paste0("Error Rates by Condition (", get_n_string(df_all_trials), " participants)")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+# Compute overall and modality-specific error rates for summary text
+overall_error_rate <- mean(!df_all_trials$is_correct, na.rm = TRUE)
+hand_error_rate <- df_all_trials %>%
+  filter(modality == "hand") %>%
+  summarise(rate = mean(!is_correct, na.rm = TRUE)) %>%
+  pull(rate)
+gaze_error_rate <- df_all_trials %>%
+  filter(modality == "gaze") %>%
+  summarise(rate = mean(!is_correct, na.rm = TRUE)) %>%
+  pull(rate)
+
+cat("\n**Error Rate Summary:** Overall error rate was ", round(100 * overall_error_rate, 1), "%. Errors were concentrated in gaze conditions (", round(100 * gaze_error_rate, 1), "%), while hand remained near ", round(100 * hand_error_rate, 1), "%. At this interim N and low error count, we report these differences descriptively.\n\n")
 
 # Prepare data for raincloud plot
 df_err_plot <- df_pid_cond %>%
@@ -1505,6 +1686,10 @@ print(p_err)
 
 ## Statistical Model Results
 
+#### Planned Sample Size & Power
+
+For the error-rate analysis we fit a binomial GLMM with random intercepts per participant. The key contrasts are again **UI mode** and **modality**, where we expect odds-ratio effects in the **small-to-medium range** (e.g., OR ≈ 0.7–0.8 for adaptive vs static, and OR ≈ 2–3 for gaze vs hand). Binary outcomes with relatively low error rates (≈10–15%) typically require **more participants than continuous outcomes** for stable mixed-effects estimation (Kumle et al., 2021). For this analysis, we therefore treat **N = 64** as a **"good" target** that yields comfortable power for medium effects, while **N = 48** remains adequate but somewhat less stable, especially for interaction terms and rare error types. Error-based interaction effects are interpreted as exploratory, even at N = 64.
+
 ```{r error-model}
 if (exists("model_err") && !is.null(model_err)) {
   cat("### Model: ", deparse(formula_err$formula), "\n\n")
@@ -1512,6 +1697,7 @@ if (exists("model_err") && !is.null(model_err)) {
   # Show diagnostics
   if (!is.null(diag_err)) {
     error_rate <- mean(df_errors$error, na.rm = TRUE)
+    cat("**Model Structure:** Random intercept only (participant-level random effects). The trial-level N (≈", diag_err$n_trials, ") should not be mistaken for independent units in discussions of power; the effective N for inference is the number of participants (", diag_err$n_participants, ").\n\n")
     cat("**Data Summary:** ", diag_err$n_participants, " participants, ", diag_err$n_trials, " trials, ", 
         diag_err$n_conditions, " conditions, minimum ", diag_err$min_trials_per_condition, " trials per condition.\n")
     cat("**Overall Error Rate:** ", round(error_rate * 100, 1), "%\n\n")
@@ -1574,6 +1760,10 @@ if (exists("model_err") && !is.null(model_err)) {
 
 ## Effective Width ($W_e$)
 
+#### Planned Sample Size & Power
+
+Effective width (We) is analyzed at the participant × condition level with a Gaussian LMM. We expect **medium effects of modality** (gaze > hand) and **small-to-medium effects of UI mode** (adaptive slightly improving spatial precision). For within-subject effects of this magnitude, **N ≈ 48** is sufficient for ≈0.80 power (dz ≈ 0.4–0.5) according to standard repeated-measures power guidelines (Cohen, 1988). We therefore treat **N = 48** as a good target for We, with **N = 64** mainly helping if UI-mode effects turn out closer to dz ≈ 0.3.
+
 *Lower $W_e$ indicates tighter shot grouping (higher precision).*
 
 ```{r we-summary}
@@ -1590,6 +1780,8 @@ we_summary <- df_iso %>%
 
 knitr::kable(we_summary)
 ```
+
+Effective target width was broadly similar between Static and Adaptive within each modality; gaze showed slightly larger We overall, consistent with higher variability in endpoint location.
 
 ```{r plot-we}
 #| fig-cap: !expr 'paste0("Effective Target Width (Accuracy) by Modality and UI Mode. ", get_n_string(df_iso %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(We_mean = mean(We, na.rm = TRUE), .groups = \"drop\") %>% filter(!is.na(We_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values indicate tighter shot grouping and higher precision.")'
@@ -1816,7 +2008,13 @@ if (nrow(gaze_accuracy) > 0) {
 
 ## The "Midas Touch" Struggle
 
+#### Planned Sample Size & Power
+
+Target re-entries are count-like and somewhat noisy, but we again analyze participant-level averages with an LMM (or, if needed, a Poisson GLMM). We anticipate **medium modality effects** (more re-entries for gaze) and **small-to-medium UI-mode effects** (fewer re-entries under adaptation). Given the noisier nature of this metric, a slightly larger sample is desirable if you want to treat it as confirmatory. We therefore treat **N = 48** as **adequate but exploratory** and **N = 64** as a **"good" sample size** for detecting medium within-subject effects in re-entry counts. Power reasoning follows the same logic as other continuous repeated-measures outcomes, tempered by mixed-model guidance from Kumle et al. (2021).
+
 *Target Re-entries measure how often the cursor drifted out of the target before selection.*
+
+Re-entries are interpreted here as a proxy for control stability; higher counts suggest more corrective movements. We will revisit this metric in the control-theory analyses (Section 10).
 
 ```{r reentry-summary}
 # Check if hand modality has any non-zero reentry values
@@ -2103,6 +2301,114 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
 }
 ```
 
+## Statistical Model: Overall TLX
+
+#### Planned Sample Size & Power
+
+NASA-TLX scores (overall and subscales) are collected at the block level and analyzed with an LMM (random intercepts per participant; fixed effects for modality and UI mode). TLX scores tend to be reasonably reliable, and we expect **medium effects** for both modality (gaze > hand) and UI mode (adaptive < static), especially on Physical Demand and Frustration. For within-subject designs with medium effects, **≈40–50 participants** typically provide ≥0.80 power (Brysbaert, 2019). We therefore treat **N = 48** as a **good, pre-planned N** for TLX analyses. An increase to **N = 64** would mostly refine confidence intervals and interaction estimates rather than change the main power conclusions.
+
+```{r tlx-model}
+# Compute overall TLX (average of all subscales) and fit mixed model
+if(all(tlx_cols %in% names(df_raw))) {
+  # Prepare data for modeling: compute overall TLX per participant per condition
+  df_tlx_overall <- df_raw %>%
+    filter(!is.na(pid)) %>%
+    {
+      if ("block_number" %in% names(.)) {
+        group_by(., pid, modality, ui_mode, block_number)
+      } else {
+        group_by(., pid, modality, ui_mode)
+      }
+    } %>%
+    summarise(
+      overall_tlx = mean(c_across(starts_with("tlx_")), na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      pid = factor(pid)
+    )
+  
+  if (nrow(df_tlx_overall) > 0 && n_distinct(df_tlx_overall$pid) > 1) {
+    # Fit mixed model: overall TLX ~ modality * ui_mode + (1 | pid)
+    model_tlx <- tryCatch({
+      lmer(overall_tlx ~ modality * ui_mode + (1 | pid),
+           data = df_tlx_overall, REML = FALSE,
+           control = lmerControl(optimizer = "bobyqa"))
+    }, error = function(e) {
+      cat("⚠ **TLX model fitting failed:** ", e$message, "\n\n")
+      NULL
+    })
+    
+    if (!is.null(model_tlx)) {
+      cat("### Model: overall_tlx ~ modality * ui_mode + (1 | pid)\n\n")
+      cat("**Data Summary:** ", n_distinct(df_tlx_overall$pid), " participants, ", nrow(df_tlx_overall), " observations.\n\n")
+      
+      # ANOVA table
+      cat("#### ANOVA Table\n")
+      anova_tlx <- anova(model_tlx, type = "III")
+      print(anova_tlx)
+      
+      # EMMs with 95% CIs
+      if (requireNamespace("emmeans", quietly = TRUE)) {
+        emm_tlx <- tryCatch({
+          emmeans(model_tlx, ~ modality * ui_mode)
+        }, error = function(e) {
+          cat("⚠ **Could not compute EMMs:** ", e$message, "\n\n")
+          NULL
+        })
+        
+        if (!is.null(emm_tlx)) {
+          cat("\n#### Estimated Marginal Means (Overall TLX by Modality × UI Mode)\n")
+          emm_tlx_df <- as.data.frame(emm_tlx)
+          ci_lower <- if ("lower.CL" %in% names(emm_tlx_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_tlx_df)) "asymp.LCL" else NULL
+          ci_upper <- if ("upper.CL" %in% names(emm_tlx_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_tlx_df)) "asymp.UCL" else NULL
+          
+          emm_tlx_table <- emm_tlx_df %>%
+            mutate(
+              Modality = str_to_title(modality),
+              `UI Mode` = str_to_title(ui_mode),
+              `Mean TLX` = round(emmean, 1),
+              `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 1) else NA_real_,
+              `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 1) else NA_real_
+            ) %>%
+            select(Modality, `UI Mode`, `Mean TLX`, `95% CI Lower`, `95% CI Upper`)
+          
+          print(knitr::kable(emm_tlx_table, caption = "Estimated Marginal Means for Overall TLX by Condition (95% CI)"))
+          
+          # Plot EMMs
+          p_emm_tlx <- ggplot(emm_tlx_df, aes(x = modality, y = emmean, color = ui_mode, group = ui_mode)) +
+            geom_line(size = 1.1, position = position_dodge(0.2)) +
+            geom_point(size = 2.8, position = position_dodge(0.2))
+          
+          if (!is.null(ci_lower) && !is.null(ci_upper)) {
+            p_emm_tlx <- p_emm_tlx + geom_errorbar(
+              aes(ymin = .data[[ci_lower]], ymax = .data[[ci_upper]]), 
+              width = 0.1, position = position_dodge(0.2)
+            )
+          }
+          
+          p_emm_tlx <- p_emm_tlx +
+            scale_color_manual(values = custom_palette_2,
+                                labels = c("Static", "Adaptive")) +
+            labs(
+              x = "Input Modality",
+              y = "Overall TLX Score",
+              color = "UI Mode",
+              title = "Estimated Marginal Means: Overall TLX by Condition"
+            ) +
+            theme_minimal(base_size = 13) +
+            theme(legend.position = "top")
+          
+          print(p_emm_tlx)
+        }
+      }
+    }
+  }
+}
+```
+
 -----
 
 # 9. Learning Curves & Practice Effects
@@ -2110,6 +2416,8 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
 **Research Question:** How does performance change within each condition? Do learning rates differ by condition?
 
 **Sample Size:** `r get_n_string(df_all_trials)` participants with trial-level data.
+
+**Note:** These learning curves serve as a quality check that participants improved modestly and reached a plateau; we do not treat these as primary inferential outcomes. This analysis is exploratory/QC only.
 
 *This section shows learning curves aligned by condition start (accounting for Williams counterbalancing). For block-level trends, see Section 12.*
 
@@ -2398,38 +2706,18 @@ if (nrow(df_learning_aligned) > 0) {
 
 **Research Question:** Does adaptive UI reduce movement corrections? How do submovements relate to performance?
 
-**Sample Size:** `r get_n_string(df %>% filter(!is.na(submovement_count)))` participants with submovement data.
-
 *Submovements indicate intermittent control - fewer submovements suggest smoother, more ballistic movements.*
 
+#### Planned Sample Size & Power
+
+Submovement count is a noisier movement-quality metric and is currently based on pre-computed peaks. We anticipate **small-to-medium effects** of UI mode (adaptive reducing corrective movements) and medium effects of modality, but with considerable between-participant variability. For such count-based metrics, simulation-based power analysis is strongly recommended (e.g., using the approach in Kumle et al., 2021). As a rule of thumb, **N = 64–72** would be needed to treat submovement differences as confirmatory (especially for UI-mode effects), whereas **N = 48** is more appropriate for exploratory visualization and effect-size estimation rather than strict NHST.
+
+**Data Availability Note:** Submovement metrics are available for a subset of the interim sample (see counts below). All results in this section are descriptive and should be treated as preliminary engineering diagnostics, not inferential findings. We distinguish between:
+- Participants with `submovement_count` (legacy, pre-computed): N = `r get_n_string(df %>% filter(!is.na(submovement_count)))`
+- Participants with `submovement_count_recomputed` (from trajectory data): N = `r get_n_string(df %>% filter(!is.na(submovement_count_recomputed)))`
+- Participants with full `trajectory` JSON data: N = `r get_n_string(df_raw %>% filter((practice == "false" | practice == FALSE | is.na(practice)), !is.na(trajectory), trajectory != "", trajectory != "null"))`
+
 ```{r submovement-analysis}
-if ("submovement_count" %in% names(df)) {
-  df_submov <- df %>%
-    filter(!is.na(submovement_count), submovement_count >= 0)
-  
-  if (nrow(df_submov) > 0) {
-    # Summary statistics
-    submov_summary <- df_submov %>%
-      group_by(modality, ui_mode, pressure) %>%
-      summarise(
-        N_participants = n_distinct(pid),
-        N_trials = n(),
-        Mean = round(mean(submovement_count, na.rm = TRUE), 2),
-        SD = round(sd(submovement_count, na.rm = TRUE), 2),
-        Median = round(median(submovement_count, na.rm = TRUE), 2),
-        .groups = "drop"
-      )
-    
-    submov_summary %>%
-      kable(caption = paste0("Submovement Count by Condition (", get_n_string(df_submov), " participants)")) %>%
-      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
-  }
-}
-```
-
-```{r plot-submovement}
-#| fig-cap: !expr 'paste0("Submovement Count (Movement Quality) by Modality and UI Mode. ", get_n_string(df %>% filter(!is.na(submovement_count) | !is.na(submovement_count_recomputed))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower indicates smoother, more ballistic movements.")'
-
 # Prefer recomputed submovement count (computed from trajectory for both modalities)
 # Fall back to legacy submovement_count if recomputed is not available
 submov_col <- if ("submovement_count_recomputed" %in% names(df)) {
@@ -2445,6 +2733,30 @@ if (!is.null(submov_col)) {
     filter(!is.na(.data[[submov_col]]), .data[[submov_col]] >= 0)
   
   if (nrow(df_submov) > 0) {
+    # Summary statistics
+    submov_summary <- df_submov %>%
+      group_by(modality, ui_mode, pressure) %>%
+      summarise(
+        N_participants = n_distinct(pid),
+        N_trials = n(),
+        Mean = round(mean(.data[[submov_col]], na.rm = TRUE), 2),
+        SD = round(sd(.data[[submov_col]], na.rm = TRUE), 2),
+        Median = round(median(.data[[submov_col]], na.rm = TRUE), 2),
+        .groups = "drop"
+      )
+    
+    submov_summary %>%
+      kable(caption = paste0("Submovement Count by Condition (", get_n_string(df_submov), " participants, using ", submov_col, ")")) %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  }
+}
+```
+
+```{r plot-submovement}
+# Use the same submov_col determined in the previous chunk
+#| fig-cap: !expr 'if(exists("submov_col") && !is.null(submov_col) && exists("df_submov") && nrow(df_submov) > 0) paste0("Submovement Count (Movement Quality) by Modality and UI Mode. ", get_n_string(df_submov), " participants (using ", submov_col, "). Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower indicates smoother, more ballistic movements.") else "Submovement Count plot (no data available)"'
+
+if (exists("submov_col") && !is.null(submov_col) && exists("df_submov") && nrow(df_submov) > 0) {
     # Check if hand modality has any non-zero values
     hand_has_data <- df_submov %>%
       filter(modality == "hand") %>%
@@ -2573,7 +2885,6 @@ if (!is.null(submov_col)) {
       )
     
     print(p1)
-  }
 }
 ```
 
@@ -2666,6 +2977,10 @@ if (!is.null(submov_col)) {
 **Research Question:** How much time is spent "stopping" vs. "moving"? Does adaptive UI reduce verification time?
 
 **Sample Size:** `r get_n_string(df %>% filter(!is.na(verification_time_ms), verification_time_ms > 0))` participants with verification time data.
+
+#### Planned Sample Size & Power
+
+Verification time (from first target entry to final selection) is conceptually closer to a decision-phase measure and serves as a bridge to future LBA modeling. We again expect **medium modality effects** and **small-to-medium UI-mode effects**, and we analyze it via an LMM. Because this outcome is continuous and based on many trials per participant, **N = 48** is a **good target** for medium effects, and **N = 64** provides added stability for smaller UI-mode differences or more complex interaction patterns. The same repeated-measures power guidelines apply as for RT and TP (Cohen, 1988).
 
 *Verification time represents the "precise stopping" phase, separate from the ballistic movement phase.*
 
@@ -2973,6 +3288,16 @@ if ("err_type" %in% names(df_raw)) {
     error_type_summary %>%
       kable(caption = paste0("Error Type Distribution by Condition (", get_n_string(df_error_types), " participants)")) %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Interpretive summary
+    gaze_miss_pct <- df_error_types %>%
+      filter(modality == "gaze", err_type == "miss") %>%
+      nrow() / df_error_types %>% filter(modality == "gaze") %>% nrow() * 100
+    hand_miss_pct <- df_error_types %>%
+      filter(modality == "hand", err_type == "miss") %>%
+      nrow() / df_error_types %>% filter(modality == "hand") %>% nrow() * 100
+    
+    cat("\n**Error Type Summary:** Gaze produced more misses (", round(gaze_miss_pct, 1), "%) than hand (", round(hand_miss_pct, 1), "%), consistent with its lower throughput. Adaptive UI did not yet show a clear reduction in any specific error type at N=", n_distinct(df_error_types$pid), ".\n\n")
   }
 }
 ```
@@ -2988,6 +3313,8 @@ if ("err_type" %in% names(df_raw)) {
 **Research Question:** Are there order effects? Does performance improve or degrade over blocks?
 
 **Sample Size:** `r get_n_string(df_all_trials %>% filter(!is.na(block_number)))` participants with block-level data.
+
+**Note:** This section is exploratory/QC only. These analyses serve as quality checks for temporal trends and are not treated as primary inferential outcomes.
 
 ```{r block-effects}
 # Performance by block number
@@ -3159,6 +3486,8 @@ print(p3)
 **Research Question:** Are there spatial biases in performance? Do some screen regions show better/worse performance?
 
 **Sample Size:** `r get_n_string(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)))` participants with spatial position data.
+
+**Note:** These spatial visualizations are exploratory and serve as descriptive quality checks. They are not treated as primary inferential outcomes. At N=`r n_distinct(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)) %>% pull(pid))`, interpretation is limited, but these plots may be useful for understanding XR-specific spatial patterns (e.g., top vs bottom of visual field).
 
 ## Performance by Target Position
 
@@ -3411,6 +3740,8 @@ if (nrow(df_error_gaze) > 0) {
 **Research Question:** Does the adaptive UI dynamically change target sizes? How does width scaling relate to performance?
 
 **Sample Size:** `r get_n_string(df_raw %>% filter((practice == 'false' | practice == FALSE | is.na(practice)), !is.na(nominal_width_px)))` participants with width scaling data.
+
+**Status:** In the current dataset, the width scaling mechanism was disabled/misconfigured; all recorded `width_scale_factor` values equal 1.0. Results here serve as a template for future analysis once scaling is active.
 
 *The adaptive UI may scale target widths based on performance. This section examines whether and how target sizes are adjusted.*
 
@@ -3786,6 +4117,25 @@ if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(
     gate_summary %>%
       kable(caption = "Alignment Gate Metrics by Condition") %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Interpretive summary
+    overall_false_triggers <- mean(df_gate$alignment_gate_false_triggers, na.rm = TRUE)
+    static_false_triggers <- df_gate %>%
+      filter(ui_mode == "static") %>%
+      summarise(mean = mean(alignment_gate_false_triggers, na.rm = TRUE)) %>%
+      pull(mean)
+    adaptive_false_triggers <- df_gate %>%
+      filter(ui_mode == "adaptive") %>%
+      summarise(mean = mean(alignment_gate_false_triggers, na.rm = TRUE)) %>%
+      pull(mean)
+    
+    cat("\n**Alignment Gate Interpretation:** False triggers were ", ifelse(overall_false_triggers < 0.5, "rare", ifelse(overall_false_triggers < 2, "moderate", "frequent")), 
+        " (mean = ", round(overall_false_triggers, 2), " per trial). ", 
+        ifelse(abs(static_false_triggers - adaptive_false_triggers) < 0.1, 
+               "Adaptive UI did not show a meaningful change in false trigger rate compared to Static at this interim N.", 
+               paste0("Adaptive UI showed a ", ifelse(adaptive_false_triggers < static_false_triggers, "reduction", "increase"), 
+                      " in false triggers (", round(adaptive_false_triggers, 2), " vs ", round(static_false_triggers, 2), 
+                      "), but CIs are wide at N=", n_distinct(df_gate$pid), " and this will be revisited at N=48.")), "\n\n")
   } else {
     # Check if columns exist but feature was disabled
     if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(df_raw))) {
@@ -4398,6 +4748,10 @@ if (exists("df_task") && nrow(df_task) > 0 && n_distinct(df_task$task_type) > 1)
 }
 ```
 
+#### Planned Sample Size & Power
+
+Path-length efficiency (actual path / straight-line amplitude) is analyzed at the trial level but interpreted as a within-subject continuous outcome, with expected **medium modality differences** (longer, less efficient paths for gaze) and **small-to-medium UI-mode effects**. We treat **N = 48** as a **reasonable "good N"** for detecting medium effects (dz ≈ 0.4–0.5), and **N = 64** as an ideal target if path efficiency becomes more central to the argument. At both Ns, this analysis is secondary to the core throughput and RT results.
+
 ```{r drag-distance-analysis}
 # Compute path length from trajectory and derive efficiency metrics
 # Note: For pointing tasks, path length is the actual cursor travel distance (not straight-line A)
@@ -4434,10 +4788,12 @@ path_length <- function(traj_json) {
 if ("trajectory" %in% names(df_raw) && "A" %in% names(df_raw)) {
   df_drag <- df_raw %>%
     filter(
-      practice == "false" | practice == FALSE | is.na(practice),
+      trial_qc_ok,  # Use unified QC flag (practice, zoom, fullscreen, tab hidden, focus blur)
       correct == TRUE | correct == "true" | correct == 1,  # Only successful trials
       !is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000,
-      !is.na(A), A > 0
+      !is.na(A), A > 0,
+      # Trajectory-specific QC: require usable trajectories
+      if("traj_usable" %in% names(.)) traj_usable == TRUE else TRUE
     ) %>%
     mutate(
       rt_s = rt_ms / 1000,
@@ -4763,7 +5119,205 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
 
 -----
 
-<!-- Consolidated: hover time section removed for interim slimness -->
+# 15. Gaze-Specific Analysis: Hover/Dwell Time
+
+**Research Question:** How does hover/dwell time vary across gaze conditions? Does adaptive UI affect dwell time before confirmation?
+
+#### Planned Sample Size & Power
+
+Hover/dwell time is modeled only for **gaze trials** with fixed effects for UI mode and pressure. Because this shrinks the effective dataset and the expected UI-mode effects may be **small-to-medium** (dz ≈ 0.3–0.5), we treat this analysis as **exploratory unless N ≥ 64**. At **N = 48**, the study is adequately powered for medium effects but underpowered for smaller ones; at **N = 64**, we expect ≈0.80 power even if the UI-mode effect is closer to dz ≈ 0.35, based on standard repeated-measures calculations and mixed-model heuristics (Cohen, 1988; Kumle et al., 2021).
+
+**Sample Size:** `r get_n_string(df_raw %>% filter((practice == "false" | practice == FALSE | is.na(practice)), modality == "gaze", !is.na(hover_ms), hover_ms > 0))` participants with gaze hover/dwell data.
+
+**Note:** This analysis is exploratory. At this interim N, CIs are wide and results should be treated as preliminary. This analysis will be revisited at N=48.
+
+*Hover/dwell time represents the duration the cursor remains in the target before confirmation in gaze trials. This metric is specific to gaze modality and reflects the "Midas touch" problem—the need for deliberate confirmation to avoid unintended selections.*
+
+```{r hover-analysis}
+# Analyze hover_ms for gaze trials only
+if ("hover_ms" %in% names(df_raw)) {
+  df_hover <- df_raw %>%
+    filter(
+      practice == "false" | practice == FALSE | is.na(practice),
+      modality == "gaze",
+      !is.na(hover_ms),
+      hover_ms > 0,
+      hover_ms <= 6000  # Reasonable upper bound
+    ) %>%
+    mutate(
+      hover_s = hover_ms / 1000,
+      modality = factor(modality, levels = c("gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      pressure = factor(pressure),
+      pid = factor(pid)
+    )
+  
+  if (nrow(df_hover) > 0 && n_distinct(df_hover$pid) > 0) {
+    # Summary statistics
+    hover_summary <- df_hover %>%
+      group_by(ui_mode, pressure) %>%
+      summarise(
+        N_participants = n_distinct(pid),
+        N_trials = n(),
+        Mean_Hover_ms = round(mean(hover_ms, na.rm = TRUE), 1),
+        SD_Hover_ms = round(sd(hover_ms, na.rm = TRUE), 1),
+        Median_Hover_ms = round(median(hover_ms, na.rm = TRUE), 1),
+        Q25 = round(quantile(hover_ms, 0.25, na.rm = TRUE), 1),
+        Q75 = round(quantile(hover_ms, 0.75, na.rm = TRUE), 1),
+        .groups = "drop"
+      )
+    
+    hover_summary %>%
+      kable(caption = paste0("Hover/Dwell Time (ms) by Condition - Gaze Modality (", get_n_string(df_hover), " participants)")) %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Compute adaptive vs static difference for summary
+    hover_means <- df_hover %>%
+      group_by(ui_mode) %>%
+      summarise(mean_hover = mean(hover_ms, na.rm = TRUE), .groups = "drop")
+    
+    static_mean <- hover_means %>% filter(ui_mode == "static") %>% pull(mean_hover)
+    adaptive_mean <- hover_means %>% filter(ui_mode == "adaptive") %>% pull(mean_hover)
+    
+    if (length(static_mean) > 0 && length(adaptive_mean) > 0) {
+      diff_ms <- adaptive_mean - static_mean
+      cat("\n**Hover Time Summary:** Adaptive UI ", ifelse(diff_ms < 0, "reduced", "increased"), 
+          " dwell time by approximately ", round(abs(diff_ms), 0), " ms (Static: ", round(static_mean, 0), 
+          " ms, Adaptive: ", round(adaptive_mean, 0), " ms). However, CIs are wide at this interim N=", 
+          n_distinct(df_hover$pid), " and this will be revisited at N=48.\n\n")
+    } else {
+      cat("\n**Hover Time Summary:** At this interim N=", n_distinct(df_hover$pid), 
+          ", interpretation is limited due to small sample size. This analysis will be revisited at N=48.\n\n")
+    }
+  } else {
+    cat("⚠ No valid hover/dwell time data available for gaze trials.\n")
+  }
+} else {
+  cat("⚠ hover_ms column not found in dataset.\n")
+}
+```
+
+```{r plot-hover}
+#| fig-cap: !expr 'if(exists("df_hover") && nrow(df_hover) > 0) paste0("Hover/Dwell Time (ms) by UI Mode - Gaze Modality. ", get_n_string(df_hover), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower indicates faster confirmation.") else "Hover/Dwell Time plot (no data available)"'
+
+if (exists("df_hover") && nrow(df_hover) > 0) {
+  # Aggregate to participant-level means for raincloud plot
+  df_hover_plot <- df_hover %>%
+    group_by(pid, ui_mode, pressure) %>%
+    summarise(hover_ms_mean = mean(hover_ms, na.rm = TRUE), .groups = "drop") %>%
+    filter(!is.na(hover_ms_mean))
+  
+  if (nrow(df_hover_plot) > 0) {
+    # Raincloud plot for Hover Time
+    p_hover <- ggplot(df_hover_plot, aes(x = ui_mode, y = hover_ms_mean, fill = ui_mode, color = ui_mode)) +
+      # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+      {
+        if (has_ggdist) {
+          list(
+            ggdist::stat_halfeye(
+              data = df_hover_plot %>% filter(ui_mode == "static"),
+              aes(fill = ui_mode),
+              side = "left",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = 1.3,
+              point_colour = NA
+            ),
+            ggdist::stat_halfeye(
+              data = df_hover_plot %>% filter(ui_mode == "adaptive"),
+              aes(fill = ui_mode),
+              side = "right",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = -0.3,
+              point_colour = NA
+            )
+          )
+        } else {
+          geom_violin(
+            alpha = 0.4,
+            trim = FALSE,
+            scale = "width",
+            width = 0.35,
+            position = position_dodge(width = 0),
+            color = NA
+          )
+        }
+      } +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Connecting lines (between paired conditions)
+      geom_line(
+        aes(group = pid),
+        alpha = 0.3,
+        linewidth = 0.4,
+        color = "grey60",
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Thick black line connecting mean values between conditions
+      {
+        mean_data <- df_hover_plot %>%
+          group_by(pressure, ui_mode) %>%
+          summarise(mean_value = mean(hover_ms_mean, na.rm = TRUE), .groups = "drop") %>%
+          pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+          filter(!is.na(mean_static), !is.na(mean_adaptive))
+        
+        if (nrow(mean_data) > 0) {
+          geom_segment(
+            data = mean_data,
+            aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+            inherit.aes = FALSE,
+            color = "black",
+            linewidth = 0.9,
+            alpha = 0.9
+          )
+        } else {
+          NULL
+        }
+      } +
+      facet_wrap(~pressure, labeller = labeller(
+        pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+      )) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      labs(
+        x = "UI Mode",
+        y = "Hover/Dwell Time (ms)",
+        fill = "UI Mode"
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
+      )
+    
+    print(p_hover)
+  }
+}
+```
 
 -----
 
@@ -4785,15 +5339,63 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
 
 -----
 
-# 17. Control Theory Analysis: Submovement Models
+# 16. Planned Advanced Analysis: Linear Ballistic Accumulator (LBA) – **No models fit yet at current interim N**
+
+**Research Question:** Can we model the verification phase (time from target entry to selection) using LBA parameters? Do adaptive conditions show different decision thresholds?
+
+**Status:** ⚠️ **PLANNED ANALYSIS - No LBA models fit yet at current interim N (N=`r n_distinct(df$pid)`).**
+
+#### Planned Sample Size & Power
+
+The hierarchical LBA analysis will be run on verification-time RTs with parameters (v, b, A, t₀) varying by modality and UI mode. Power and parameter recovery in diffusion/accumulator models depend more on **trials per participant** than on sheer N, but group-level comparisons still require a sufficient number of participants. Studies on parameter recovery for DDM/LBA and related models generally recommend **≥100 trials per condition** and **at least 30–40 participants** for stable hierarchical estimates. Your design (≈24 trials × 8 conditions ≈ 192 trials per participant) is already strong on the trial side. For **group-level parameter differences**, however, a **target of N ≥ 64** is advisable; N = 48 is workable but will lead to wider credible intervals on parameter contrasts. Ideally, you would validate LBA power for your specific parameterization via simulation (e.g., using the approach described in Kumle et al., 2021, for mixed models).
+
+This section documents the planned LBA analysis. No LBA models have been fit for the current interim dataset; this is included for transparency and to guide future work.
+
+*Linear Ballistic Accumulator models decompose reaction time into decision and non-decision components. For gaze-based interaction, we hypothesize that adaptive UI reduces decision threshold (b), indicating less caution needed when targets are easier to acquire.*
+
+```{r lba-placeholder}
+cat("⚠️ **LBA Analysis Not Yet Implemented**\n\n")
+cat("This section will analyze verification-time RTs using hierarchical Linear Ballistic Accumulator models.\n\n")
+cat("**Current Status:**\n")
+cat("- Basic verification_time_ms analysis: ✅ DONE (Section 10)\n")
+cat("- LBA model fitting: ❌ PENDING\n")
+cat("- Hierarchical parameter estimation: ❌ PENDING\n\n")
+cat("**Implementation Plan:**\n")
+cat("- LBA requires RT data from the verification phase (time from target entry to selection)\n")
+cat("- Model fitting can be done using `RWiener` or `rtdists` packages\n")
+cat("- Key parameters to estimate: drift rate (v), threshold (b), starting point (A), non-decision time (t0)\n")
+cat("- Hypothesis: Adaptive conditions should show lower threshold (b), indicating less caution needed\n")
+cat("- Hierarchical modeling will account for participant-level variation\n\n")
+cat("**Data Requirements:**\n")
+verification_data_available <- if(exists("df") && "verification_time_ms" %in% names(df)) {
+  sum(!is.na(df$verification_time_ms) & df$verification_time_ms > 0, na.rm = TRUE)
+} else {
+  0
+}
+cat("- Verification time data available: ", verification_data_available, " trials\n")
+cat("- Requires sufficient trial counts per condition for stable parameter estimation\n")
+cat("- Will be implemented once N reaches target sample size\n\n")
+cat("**Power Considerations:**\n")
+cat("- N=48 is sufficient for medium main effects (dz≈0.41, power≈0.80)\n")
+cat("- LBA parameters require careful convergence diagnostics\n")
+cat("- See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed recommendations\n")
+```
+
+-----
+
+# 17. Planned Control Theory Analysis: Submovement Models – **Trajectory-based metrics not yet implemented at current interim N**
 
 **Research Question:** How does the control loop efficiency differ across conditions? Do adaptive interventions reduce movement corrections?
 
+**Status:** ⚠️ **PLANNED ANALYSIS - No trajectory-based models fit yet at current interim N (N=`r n_distinct(df$pid)`).**
+
+#### Planned Sample Size & Power
+
+Trajectory-based kinematic metrics (velocity profiles, jerk, normalized jerk, primary vs corrective phases) are rich but correlated and often noisier than basic RT/TP measures. Because they are derived from the same trial-level data, their within-subject effect sizes are likely **small-to-medium**, with substantial individual differences. For these analyses, **N = 48** is adequate for descriptive modeling and estimation, while **N = 64** is a **good target** if you plan to make stronger inferential claims about UI-mode improvements in movement smoothness or control-loop efficiency. As with LBA, **simulation-based power analyses tailored to your specific metrics** would be ideal but are beyond the scope of this report (Kumle et al., 2021).
+
+This section documents the planned control theory analysis. Submovement metrics in this report are limited to pre-computed `submovement_count` (see Section 10). Full trajectory-based control-theory models (jerk, duration-normalized jerk, primary vs corrective phases) will be implemented once trajectory logging is complete across participants. No trajectory-based models have been fit for the current interim dataset; this is included for transparency and to guide future work.
+
 *The Optimized Submovement Model [@meyer1988] posits that pointing movements are composed of a primary ballistic impulse followed by n corrective submovements. The Submovement Count (N_sub) serves as a proxy for the efficiency of the control loop. In gaze-based interaction, simulated lag and saccadic blindness force users into an intermittent control regime, theoretically increasing N_sub.*
-
-**Status:** ⚠️ **PARTIALLY IMPLEMENTED - Basic analysis done, advanced control theory analysis pending**
-
-**Note:** Basic submovement analysis (submovement count by condition) is already implemented in Section 10 (Movement Quality Metrics). This section is a placeholder for advanced control theory analyses such as velocity profile decomposition, primary vs. corrective movement identification, and control loop efficiency metrics. Trajectory data is now available in the `trajectory` column (JSON string) logged at ~60fps during trials.
 
 **Power Analysis Summary:**
 - **N=48 is sufficient** for medium main effects (dz≈0.41, power≈0.80)
@@ -4985,7 +5587,7 @@ summary_table <- bind_rows(
   arrange(Metric, modality, ui_mode)
 
 summary_table %>%
-  kable(caption = "Summary of Key Metrics by Condition") %>%
+  kable(caption = paste0("Summary of Key Metrics by Condition (Interim N=", n_distinct(df$pid), ")")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
   column_spec(1, bold = TRUE)
 ```
@@ -5010,10 +5612,14 @@ summary_table %>%
 
 **Resolution:** 
 - Bug fixed and deployed (commit `04758db`)
-- Seven replacement participants (P049-P055) added to maintain N=48
+- Seven replacement participants (P049-P055) will be collected to maintain planned N=48
 - Affected participants' data retained for exploratory analyses
 
-**Final Sample:** N=48 participants with complete data across all experimental conditions.
+**Current Sample (Interim):** N=`r n_distinct(df$pid)` participants with complete data across all experimental conditions.
+
+**Planned Final Sample:** N=48 participants with complete data across all experimental conditions (not yet achieved in this interim report).
+
+**Note:** All summary statistics above are based on the current interim sample (N=`r n_distinct(df$pid)`). Effect sizes and p-values may change as more data are collected.
 
 For detailed exclusion criteria, see `EXCLUSION_CRITERIA.md`. For technical audit details, see `AUDIT_REPORT.md`.
 

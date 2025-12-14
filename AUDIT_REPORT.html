@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.33">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>audit_report</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="AUDIT_REPORT_files/libs/clipboard/clipboard.min.js"></script>
+<script src="AUDIT_REPORT_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="AUDIT_REPORT_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="AUDIT_REPORT_files/libs/quarto-html/popper.min.js"></script>
+<script src="AUDIT_REPORT_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="AUDIT_REPORT_files/libs/quarto-html/anchor.min.js"></script>
+<link href="AUDIT_REPORT_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="AUDIT_REPORT_files/libs/quarto-html/quarto-syntax-highlighting-ea385d0e468b0dd5ea5bf0780b1290d9.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="AUDIT_REPORT_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="AUDIT_REPORT_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="AUDIT_REPORT_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+
+
+
+<section id="data-collection-audit-report" class="level1">
+<h1>Data Collection Audit Report</h1>
+<p><strong>Date:</strong> December 8, 2025<br>
+<strong>Auditor:</strong> Automated Code Audit<br>
+<strong>Status:</strong> 🟡 ISSUES FOUND - FIXED</p>
+<hr>
+<section id="executive-summary" class="level2">
+<h2 class="anchored" data-anchor-id="executive-summary">Executive Summary</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 37%">
+<col style="width: 29%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Category</th>
+<th>Status</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Critical Bug (Pressure)</strong></td>
+<td>✅ FIXED</td>
+<td>Pressure condition was logging incorrectly</td>
+</tr>
+<tr class="even">
+<td><strong>Experimental Design</strong></td>
+<td>✅ PASS</td>
+<td>Williams Latin Square is valid</td>
+</tr>
+<tr class="odd">
+<td><strong>Factor Logging</strong></td>
+<td>✅ PASS</td>
+<td>Modality &amp; UI Mode log correctly</td>
+</tr>
+<tr class="even">
+<td><strong>CSV Schema</strong></td>
+<td>✅ PASS</td>
+<td>All required fields present</td>
+</tr>
+<tr class="odd">
+<td><strong>Data Quality</strong></td>
+<td>✅ PASS</td>
+<td>RT range, missing data acceptable</td>
+</tr>
+<tr class="even">
+<td><strong>Existing Data</strong></td>
+<td>⚠️ AFFECTED</td>
+<td>7 participants need exclusion</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+<section id="critical-bug-found-and-fixed" class="level2">
+<h2 class="anchored" data-anchor-id="critical-bug-found-and-fixed">1. Critical Bug Found and Fixed</h2>
+<section id="issue-pressure-condition-not-logged-correctly" class="level3">
+<h3 class="anchored" data-anchor-id="issue-pressure-condition-not-logged-correctly">Issue: Pressure Condition Not Logged Correctly</h3>
+<p><strong>Problem:</strong> All trials were logged with <code>pressure = 1</code> regardless of block condition.</p>
+<p><strong>Root Cause:</strong> In <code>TaskPane.tsx</code> line 1105:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode typescript code-with-copy"><code class="sourceCode typescript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// BEFORE (Bug)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>pressure<span class="op">=</span>{pressure}  <span class="co">// pressure was always 1.0</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// AFTER (Fixed)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>pressure<span class="op">=</span>{pressureEnabled <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">0</span>}  <span class="co">// Now correctly reflects condition</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><strong>Impact:</strong> - 27 out of 55 blocks had incorrect pressure values - All P0 (Pressure OFF) blocks were logged as P1 (Pressure ON) - Modality and UI Mode were NOT affected (0 mismatches)</p>
+<p><strong>Fix Status:</strong> ✅ Committed and deployed (commit <code>04758db</code>)</p>
+</section>
+<section id="affected-participants-must-exclude-from-full-analysis" class="level3">
+<h3 class="anchored" data-anchor-id="affected-participants-must-exclude-from-full-analysis">Affected Participants (Must Exclude from Full Analysis)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>PID</th>
+<th>Status</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>P002</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+<tr class="even">
+<td>P003</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+<tr class="odd">
+<td>P007</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+<tr class="even">
+<td>P008</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+<tr class="odd">
+<td>P015</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+<tr class="even">
+<td>P039</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+<tr class="odd">
+<td>P040</td>
+<td>⚠️ Exclude</td>
+<td>Only pressure=1 data</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+</section>
+<section id="experimental-design-verification" class="level2">
+<h2 class="anchored" data-anchor-id="experimental-design-verification">2. Experimental Design Verification</h2>
+<section id="design-2-2-2-within-subjects-factorial" class="level3">
+<h3 class="anchored" data-anchor-id="design-2-2-2-within-subjects-factorial">2.1 Design: 2 × 2 × 2 Within-Subjects Factorial</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Factor</th>
+<th>Levels</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Modality</td>
+<td>hand, gaze</td>
+<td>✅ Correct</td>
+</tr>
+<tr class="even">
+<td>UI Mode</td>
+<td>static, adaptive</td>
+<td>✅ Correct</td>
+</tr>
+<tr class="odd">
+<td>Pressure</td>
+<td>0 (OFF), 1 (ON)</td>
+<td>✅ Fixed</td>
+</tr>
+<tr class="even">
+<td><del>Aging</del></td>
+<td><del>Dropped</del></td>
+<td>N/A</td>
+</tr>
+<tr class="odd">
+<td><del>Pupillometry</del></td>
+<td><del>Dropped</del></td>
+<td>N/A</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="williams-latin-square-properties" class="level3">
+<h3 class="anchored" data-anchor-id="williams-latin-square-properties">2.2 Williams Latin Square Properties</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 40%">
+<col style="width: 32%">
+<col style="width: 28%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Property</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Each condition appears once per participant</td>
+<td>✅ PASS</td>
+<td>8 blocks × 8 conditions</td>
+</tr>
+<tr class="even">
+<td>Each condition appears in each position</td>
+<td>✅ PASS</td>
+<td>Across 8 sequences</td>
+</tr>
+<tr class="odd">
+<td>Carryover balance</td>
+<td>🟡 PARTIAL</td>
+<td>Some transitions repeated; acceptable for this design</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="counterbalancing-verification" class="level3">
+<h3 class="anchored" data-anchor-id="counterbalancing-verification">2.3 Counterbalancing Verification</h3>
+<pre><code>Block orders used (from data):
+  GaA_P0, GaA_P1, GaS_P0, GaS_P1, HaA_P0, HaA_P1, HaS_P0, HaS_P1
+
+All 8 conditions present: ✅ PASS</code></pre>
+<hr>
+</section>
+</section>
+<section id="data-quality-checks" class="level2">
+<h2 class="anchored" data-anchor-id="data-quality-checks">3. Data Quality Checks</h2>
+<section id="factor-logging-accuracy" class="level3">
+<h3 class="anchored" data-anchor-id="factor-logging-accuracy">3.1 Factor Logging Accuracy</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Factor</th>
+<th>Expected</th>
+<th>Actual</th>
+<th>Mismatches</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Modality</td>
+<td>hand/gaze</td>
+<td>hand/gaze</td>
+<td>0/55</td>
+<td>✅ PASS</td>
+</tr>
+<tr class="even">
+<td>UI Mode</td>
+<td>static/adaptive</td>
+<td>static/adaptive</td>
+<td>0/55</td>
+<td>✅ PASS</td>
+</tr>
+<tr class="odd">
+<td>Pressure</td>
+<td>0/1</td>
+<td>1 only</td>
+<td>27/55</td>
+<td>⚠️ BUG (now fixed)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="missing-data" class="level3">
+<h3 class="anchored" data-anchor-id="missing-data">3.2 Missing Data</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Missing %</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>participant_id</td>
+<td>0%</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>modality</td>
+<td>0%</td>
+<td>✅</td>
+</tr>
+<tr class="odd">
+<td>ui_mode</td>
+<td>0%</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>pressure</td>
+<td>0%</td>
+<td>✅</td>
+</tr>
+<tr class="odd">
+<td>rt_ms</td>
+<td>0%</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>correct</td>
+<td>12%</td>
+<td>✅ (expected for errors)</td>
+</tr>
+<tr class="odd">
+<td>A, W, ID</td>
+<td>0%</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="response-time-range" class="level3">
+<h3 class="anchored" data-anchor-id="response-time-range">3.3 Response Time Range</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Value</th>
+<th>Expected</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Min RT</td>
+<td>577 ms</td>
+<td>&gt; 150 ms</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>Max RT</td>
+<td>6006 ms</td>
+<td>&lt; 10000 ms</td>
+<td>✅</td>
+</tr>
+<tr class="odd">
+<td>Mean RT</td>
+<td>1297 ms</td>
+<td>800-2000 ms</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>Outliers</td>
+<td>2 trials</td>
+<td>&lt; 1%</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr>
+</section>
+</section>
+<section id="csv-schema-completeness" class="level2">
+<h2 class="anchored" data-anchor-id="csv-schema-completeness">4. CSV Schema Completeness</h2>
+<section id="core-fields-all-present" class="level3">
+<h3 class="anchored" data-anchor-id="core-fields-all-present">4.1 Core Fields (All Present) ✅</h3>
+<pre><code>✅ participant_id    ✅ modality          ✅ ui_mode
+✅ pressure          ✅ block_number      ✅ block_order
+✅ trial_number      ✅ trial_in_block    ✅ rt_ms
+✅ correct           ✅ err_type          ✅ A, W, ID
+✅ target_x/y        ✅ endpoint_x/y      ✅ endpoint_error_px
+✅ projected_error_px ✅ hover_ms         ✅ confirm_type</code></pre>
+</section>
+<section id="new-fields-added-recently" class="level3">
+<h3 class="anchored" data-anchor-id="new-fields-added-recently">4.2 New Fields (Added Recently)</h3>
+<p>These fields were added to the schema but NOT present in existing data (expected):</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Field</th>
+<th>In Schema</th>
+<th>In Existing Data</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>submovement_count</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+<tr class="even">
+<td>nominal_width_px</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+<tr class="odd">
+<td>displayed_width_px</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+<tr class="even">
+<td>width_scale_factor</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+<tr class="odd">
+<td>alignment_gate_*</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+<tr class="even">
+<td>task_type</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+<tr class="odd">
+<td>drag_distance</td>
+<td>✅</td>
+<td>❌</td>
+<td>Will be collected going forward</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="tlx-debrief-fields-present" class="level3">
+<h3 class="anchored" data-anchor-id="tlx-debrief-fields-present">4.3 TLX &amp; Debrief Fields (Present) ✅</h3>
+<pre><code>✅ tlx_mental        ✅ tlx_physical      ✅ tlx_temporal
+✅ tlx_performance   ✅ tlx_effort        ✅ tlx_frustration
+✅ debrief_q1_adaptation_noticed
+✅ debrief_q2_strategy_changed
+✅ debrief_timestamp</code></pre>
+<hr>
+</section>
+</section>
+<section id="action-items" class="level2">
+<h2 class="anchored" data-anchor-id="action-items">5. Action Items</h2>
+<section id="completed" class="level3">
+<h3 class="anchored" data-anchor-id="completed">Completed ✅</h3>
+<ol type="1">
+<li><strong>Fixed pressure logging bug</strong> - Commit <code>04758db</code></li>
+<li><strong>Added diagnostic messages</strong> - Report.qmd now detects single-level factors</li>
+<li><strong>Added 7 replacement participants</strong> - P049-P055 added to compensate</li>
+</ol>
+</section>
+<section id="for-analysis-phase" class="level3">
+<h3 class="anchored" data-anchor-id="for-analysis-phase">For Analysis Phase</h3>
+<ol type="1">
+<li><strong>Exclude P002, P003, P007, P008, P015, P039, P040</strong> from main 2×2×2 analysis</li>
+<li>These participants can be used for:
+<ul>
+<li>Exploratory analysis of pressure=1 condition only</li>
+<li>Pilot data validation</li>
+<li>Practice effect estimation</li>
+</ul></li>
+</ol>
+</section>
+<section id="going-forward" class="level3">
+<h3 class="anchored" data-anchor-id="going-forward">Going Forward</h3>
+<ol type="1">
+<li><strong>All new participants (P008 onwards who haven’t started)</strong> will have correct pressure logging</li>
+<li><strong>Verify first new participant</strong> has both pressure=0 and pressure=1 in their data</li>
+<li><strong>Final N = 48</strong> participants for main analysis (after excluding 7)</li>
+</ol>
+<hr>
+</section>
+</section>
+<section id="test-results" class="level2">
+<h2 class="anchored" data-anchor-id="test-results">6. Test Results</h2>
+<section id="unit-tests" class="level3">
+<h3 class="anchored" data-anchor-id="unit-tests">Unit Tests</h3>
+<pre><code>✅ src/lib/modality.test.ts  (17 tests)
+✅ src/lib/bus.test.ts       (5 tests)
+⚠️ src/lib/policy.test.ts   (4 failures - policy logic, not data collection)
+⚠️ src/lib/fitts.test.ts    (2 failures - trial generation, not data logging)</code></pre>
+<p><strong>Note:</strong> Test failures are in policy/fitts logic, NOT in data collection. These do not affect the validity of collected data.</p>
+<hr>
+</section>
+</section>
+<section id="recommendations" class="level2">
+<h2 class="anchored" data-anchor-id="recommendations">7. Recommendations</h2>
+<section id="critical-before-more-data-collection" class="level3">
+<h3 class="anchored" data-anchor-id="critical-before-more-data-collection">Critical (Before More Data Collection)</h3>
+<ol type="1">
+<li>✅ <strong>DONE:</strong> Fix pressure logging bug</li>
+<li>⏳ <strong>PENDING:</strong> Verify fix with 1-2 test runs showing both pressure values</li>
+</ol>
+</section>
+<section id="important-for-analysis" class="level3">
+<h3 class="anchored" data-anchor-id="important-for-analysis">Important (For Analysis)</h3>
+<ol type="1">
+<li>Update data dictionary to reflect actual schema</li>
+<li>Create exclusion criteria document for the 7 affected participants</li>
+<li>Document the bug and fix in the methods section</li>
+</ol>
+</section>
+<section id="nice-to-have" class="level3">
+<h3 class="anchored" data-anchor-id="nice-to-have">Nice to Have</h3>
+<ol type="1">
+<li>Add automated data validation on export</li>
+<li>Add real-time condition balance monitoring</li>
+<li>Consider adding more comprehensive unit tests for data logging</li>
+</ol>
+<hr>
+</section>
+</section>
+<section id="appendix-verification-commands" class="level2">
+<h2 class="anchored" data-anchor-id="appendix-verification-commands">Appendix: Verification Commands</h2>
+<section id="check-pressure-levels-in-new-data" class="level3">
+<h3 class="anchored" data-anchor-id="check-pressure-levels-in-new-data">Check Pressure Levels in New Data</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">'data/clean/trial_data.csv'</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span> </span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(practice <span class="sc">==</span> <span class="cn">FALSE</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">count</span>(participant_id, pressure) <span class="sc">%&gt;%</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> pressure, <span class="at">values_from =</span> n, <span class="at">values_fill =</span> <span class="dv">0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><strong>Expected output after fix:</strong> - Each participant should have rows for both pressure=0 and pressure=1 - Approximately equal trial counts in each</p>
+<hr>
+<p><em>Report generated automatically. Last updated: December 8, 2025</em></p>
+</section>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

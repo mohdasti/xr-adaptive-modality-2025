@@ -147,6 +147,18 @@ def merge_raw_data(
     print()
     print("Cleaning data...")
     
+    # Note: exclude_main flag is preserved in the data for transparency
+    # Exclusion decisions should be made case-by-case in the analysis scripts
+    # based on the specific analysis needs and data_quality_flags_json
+    if 'exclude_main' in merged_df.columns:
+        excluded_count = (merged_df['exclude_main'] == True).sum()
+        if excluded_count > 0:
+            excluded_pids = merged_df[merged_df['exclude_main'] == True]['participant_id'].unique() if 'participant_id' in merged_df.columns else merged_df[merged_df['exclude_main'] == True]['pid'].unique()
+            print(f"  ℹ Found {excluded_count} rows with exclude_main=TRUE from {len(excluded_pids)} participants")
+            print(f"    Participant IDs: {', '.join(map(str, excluded_pids))}")
+            print(f"    Note: These are preserved in the data. Exclusion decisions should be made")
+            print(f"    case-by-case in analysis scripts based on data_quality_flags_json and analysis needs.")
+    
     # Remove source_file column if it exists (internal use only)
     if 'source_file' in merged_df.columns:
         merged_df = merged_df.drop(columns=['source_file'])

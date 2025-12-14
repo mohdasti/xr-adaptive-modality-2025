@@ -30,8 +30,11 @@ def main():
     tracking_df = pd.read_csv(tracking_file)
     print(f"Loaded {len(tracking_df)} participants from {tracking_file}")
     
-    # Find all raw CSV files
-    raw_files = glob.glob(f'{raw_dir}/*_merged.csv')
+    # Find all raw CSV files (both naming conventions)
+    merged_files = glob.glob(f'{raw_dir}/*_merged.csv')
+    experiment_files = glob.glob(f'{raw_dir}/experiment_*.csv')
+    raw_files = merged_files + experiment_files
+    
     print(f'\nFound {len(raw_files)} raw CSV files:')
     for f in sorted(raw_files):
         print(f'  {os.path.basename(f)}')
@@ -44,20 +47,42 @@ def main():
     file_info = {}
     for filepath in raw_files:
         filename = os.path.basename(filepath)
-        # Format: PXXX_YYYY-MM-DDTHH-MM-SS_merged.csv
-        parts = filename.replace('_merged.csv', '').split('_')
-        if len(parts) >= 2:
-            pid = parts[0]
-            date_str = '_'.join(parts[1:])
-            try:
-                # Parse: 2025-12-07T22-11-16
-                file_time = datetime.strptime(date_str, '%Y-%m-%dT%H-%M-%S')
-                file_info[pid] = {
-                    'filename': filename,
-                    'file_time': file_time
-                }
-            except ValueError as e:
-                print(f'Warning: Could not parse date from {filename}: {e}')
+        
+        # Handle two naming conventions:
+        # 1. PXXX_YYYY-MM-DDTHH-MM-SS_merged.csv
+        # 2. experiment_PXXX_sessionX_TIMESTAMP.csv
+        if filename.endswith('_merged.csv'):
+            # Format: PXXX_YYYY-MM-DDTHH-MM-SS_merged.csv
+            parts = filename.replace('_merged.csv', '').split('_')
+            if len(parts) >= 2:
+                pid = parts[0]
+                date_str = '_'.join(parts[1:])
+                try:
+                    # Parse: 2025-12-07T22-11-16
+                    file_time = datetime.strptime(date_str, '%Y-%m-%dT%H-%M-%S')
+                    file_info[pid] = {
+                        'filename': filename,
+                        'file_time': file_time
+                    }
+                except ValueError as e:
+                    print(f'Warning: Could not parse date from {filename}: {e}')
+        elif filename.startswith('experiment_'):
+            # Format: experiment_PXXX_sessionX_TIMESTAMP.csv
+            # Extract: experiment_P037_session1_1765340797477.csv
+            parts = filename.replace('.csv', '').split('_')
+            if len(parts) >= 3 and parts[0] == 'experiment':
+                pid = parts[1]  # P037
+                timestamp_str = parts[-1]  # 1765340797477 (milliseconds since epoch)
+                try:
+                    # Convert milliseconds timestamp to datetime
+                    timestamp_ms = int(timestamp_str)
+                    file_time = datetime.fromtimestamp(timestamp_ms / 1000)
+                    file_info[pid] = {
+                        'filename': filename,
+                        'file_time': file_time
+                    }
+                except (ValueError, OSError) as e:
+                    print(f'Warning: Could not parse timestamp from {filename}: {e}')
     
     print(f'\nExtracted info for {len(file_info)} participants')
     
@@ -132,4 +157,9 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
 
