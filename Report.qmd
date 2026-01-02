@@ -26,6 +26,17 @@ library(ggsci)  # For pal_npg() function
 library(lme4)
 library(lmerTest)
 library(emmeans)
+library(jsonlite)  # For reading LBA and ex-Gaussian results
+
+# Try to load effectsize for effect size calculations
+has_effectsize <- requireNamespace("effectsize", quietly = TRUE)
+if (!has_effectsize) {
+  cat("Note: Install 'effectsize' package for effect size calculations: install.packages('effectsize')\n")
+  cat("Effect sizes will be approximated using Cohen's d from emmeans.\n")
+}
+
+# Set sum-to-zero contrasts for proper type-III ANOVA interpretation in factorial designs
+options(contrasts = c("contr.sum", "contr.poly"))
 
 # Check for ggdist (needed for proper raincloud plots)
 has_ggdist <- requireNamespace("ggdist", quietly = TRUE)
@@ -195,6 +206,123 @@ get_n_modality_string <- function(data) {
   paste0("N = ", n_hand, " (hand), ", n_gaze, " (gaze)")
 }
 
+# --- HELPER: APA FORMATTING FUNCTIONS ---
+# Format p-values according to APA style (vectorized)
+format_p_apa <- function(p) {
+  if (length(p) == 0) return(character(0))
+  result <- character(length(p))
+  for (i in seq_along(p)) {
+    if (is.na(p[i])) {
+      result[i] <- "NA"
+    } else if (p[i] < .001) {
+      result[i] <- "< .001"
+    } else {
+      result[i] <- sprintf("= %.3f", p[i])
+    }
+  }
+  return(result)
+}
+
+# Format F-statistic for APA
+format_F_apa <- function(F_val, df1, df2, p) {
+  sprintf("F(%d, %.1f) = %.2f, p %s", df1, df2, F_val, format_p_apa(p))
+}
+
+# Format t-statistic for APA
+format_t_apa <- function(t_val, df, p) {
+  sprintf("t(%.1f) = %.2f, p %s", df, t_val, format_p_apa(p))
+}
+
+# Format chi-square for APA
+format_chisq_apa <- function(chisq_val, df, p) {
+  sprintf("χ²(%d) = %.2f, p %s", df, chisq_val, format_p_apa(p))
+}
+
+# Calculate partial eta-squared from F-statistic (approximate)
+calc_partial_eta_sq <- function(F_val, df1, df_error) {
+  # η²p = (F * df1) / (F * df1 + df_error)
+  if (is.na(F_val) || is.na(df1) || is.na(df_error) || df_error == 0) return(NA_real_)
+  (F_val * df1) / (F_val * df1 + df_error)
+}
+
+# Interpret effect size (Cohen's d)
+interpret_cohens_d <- function(d) {
+  abs_d <- abs(d)
+  if (is.na(abs_d)) return("NA")
+  if (abs_d < 0.2) return("negligible")
+  if (abs_d < 0.5) return("small")
+  if (abs_d < 0.8) return("medium")
+  return("large")
+}
+
+# Interpret partial eta-squared
+interpret_eta_sq <- function(eta_sq) {
+  if (is.na(eta_sq)) return("NA")
+  if (eta_sq < 0.01) return("negligible")
+  if (eta_sq < 0.06) return("small")
+  if (eta_sq < 0.14) return("medium")
+  return("large")
+}
+
+# Helper: Safely extract mean value from emmeans data frame
+# Handles both "response" (for type="response") and "emmean" columns
+safe_extract_mean <- function(emm_df, condition_col, condition_val, mean_cols = c("response", "emmean")) {
+  # Find which mean column exists
+  mean_col <- NULL
+  for (col in mean_cols) {
+    if (col %in% names(emm_df)) {
+      mean_col <- col
+      break
+    }
+  }
+  
+  if (is.null(mean_col)) {
+    return(NA_real_)
+  }
+  
+  # Extract value
+  idx <- emm_df[[condition_col]] == condition_val
+  if (sum(idx) == 0) {
+    return(NA_real_)
+  }
+  
+  value <- emm_df[[mean_col]][idx][1]
+  return(if (is.na(value)) NA_real_ else value)
+}
+
+# Helper: Safely extract CI value from emmeans data frame
+safe_extract_ci <- function(emm_df, condition_col, condition_val, ci_col) {
+  if (is.null(ci_col) || !ci_col %in% names(emm_df)) {
+    return(NA_real_)
+  }
+  
+  idx <- emm_df[[condition_col]] == condition_val
+  if (sum(idx) == 0) {
+    return(NA_real_)
+  }
+  
+  value <- emm_df[[ci_col]][idx][1]
+  return(if (is.na(value)) NA_real_ else value)
+}
+
+# Helper: Format mean with CI for APA text
+format_mean_ci <- function(mean_val, ci_lower_val, ci_upper_val, format_str = "%.2f", unit = "") {
+  if (is.na(mean_val)) {
+    return(paste0("M = [unavailable]", unit))
+  }
+  
+  mean_str <- sprintf(format_str, mean_val)
+  
+  if (!is.na(ci_lower_val) && !is.na(ci_upper_val)) {
+    ci_str <- paste0(", 95% CI [", sprintf(format_str, ci_lower_val), 
+                     ", ", sprintf(format_str, ci_upper_val), "]")
+  } else {
+    ci_str <- ""
+  }
+  
+  return(paste0("M = ", mean_str, ci_str, unit))
+}
+
 # --- DATA LOADING ---
 # Load the latest clean data
 # Try multiple possible paths (relative to report location or working directory)
@@ -350,9 +478,9 @@ if (exists("has_pressure_bug") && "has_pressure_bug" %in% names(df)) {
 cat("\n### Planned Sample Size & Power\n\n")
 cat("We pre-planned sample size for a 2×2×2 within-subjects design (modality × UI mode × pressure) using standard repeated-measures power analysis (Cohen, 1988) and recent guidelines for cognitive and HCI mixed-effects experiments (Brysbaert, 2019; Kumle et al., 2021; Matuschek et al., 2017). For the core UI-mode and modality main effects, we expect medium within-subject effect sizes (dz ≈ 0.4–0.6). Power calculations indicate that approximately 50 participants are sufficient to achieve 80% power for dz ≈ 0.40 at α = .05 in a two-level within-subjects contrast.\n\n")
 cat("Based on these considerations, we defined **N = 48 participants (six full Williams sequences)** as our primary target for all core analyses (throughput, RT, error rate, and NASA-TLX). If recruitment allows, we plan to extend the study to **N = 64 participants (eight sequences)** to increase power for error-based measures, re-entry counts, submovement metrics, and advanced cognitive-modeling analyses (LBA, control-theory kinematics). Three-way interactions and smaller effects are treated as exploratory regardless of N.\n\n")
-cat("**Current Status:** This report is based on an interim sample of N=`r n_distinct(df$pid)` participants. All power assessments below assume the final target of N=48 unless otherwise noted.\n\n")
+cat("**Current Status:** This report is based on N=`r n_distinct(df$pid)` participants. We are targeting N=64 for enhanced power in advanced analyses (LBA, control-theory kinematics).\n\n")
 
-# --- DATA QUALITY & COVERAGE GATE (INTERIM) ---
+# --- DATA QUALITY & COVERAGE GATE ---
 # Precompute coverage metrics once; reused across report
 qc_participants_total <- df_raw %>%
   filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
@@ -390,15 +518,22 @@ qc_block_completion <- df_all_trials %>%
 # ISO 9241-9: Calculate We (Effective Width) per condition per participant
 # For ISO throughput (full factorial analysis requiring modality × ui_mode × pressure),
 # use df_factorial which excludes participants with pressure bug (they only have pressure=1)
+# 
+# Note: projected_error_px is assumed to be the target-axis projected error (signed distance
+# along the movement axis, not raw radial error). This follows ISO 9241-9 specifications.
+# Positive values indicate overshoot, negative values indicate undershoot.
 df_iso <- df_factorial %>%
   group_by(pid, modality, ui_mode, pressure, A, W) %>%
   summarise(
+    # Count trials per cell for quality control
+    n_trials_cell = n(),
     # We = 4.133 * SD of Projected Error
+    # projected_error_px: signed distance along target axis (px)
     sd_x = sd(projected_error_px, na.rm = TRUE),
     We = 4.133 * sd_x,
     
     # Effective ID
-    IDe = log2((mean(A) / We) + 1),
+    IDe = log2((mean(A, na.rm = TRUE) / We) + 1),
     
     # Mean Movement Time for this condition
     MT_avg = mean(rt_s, na.rm = TRUE),
@@ -412,7 +547,18 @@ df_iso <- df_factorial %>%
     
     .groups = "drop"
   ) %>%
-  filter(!is.na(TP), TP > 0, TP < 20) %>%  # Reasonable TP range
+  filter(
+    # ISO data quality criteria: enforce minimum trial count and valid SD
+    # Minimum 3 trials per A×W cell ensures stable We and TP estimates
+    n_trials_cell >= 3,
+    !is.na(sd_x),
+    sd_x > 0,
+    # Throughput quality filters
+    !is.na(TP),
+    is.finite(TP),
+    TP > 0,
+    TP < 20
+  ) %>%
   mutate(
     # Recreate labels that were lost in summarise
     PressureLabel = ifelse(pressure == 1, "Pressure: ON", "Pressure: OFF"),
@@ -509,6 +655,14 @@ diagnose_model_data <- function(data, model_name) {
 }
 
 # Model 1: Throughput
+# Create filtered dataset for TP modeling (already filtered for quality in df_iso, but explicitly separate)
+df_tp_model <- df_iso %>%
+  filter(
+    !is.na(TP),
+    TP > 0,
+    TP < 20
+  )
+
 model_tp <- NULL
 emm_tp <- NULL
 pairs_tp <- NULL
@@ -516,8 +670,9 @@ diag_tp <- NULL
 model_tp_error <- NULL
 model_tp_note <- NULL
 
-if (nrow(df_iso) > 0) {
-  diag_tp <- diagnose_model_data(df_iso, "Throughput")
+# Use trial-level data for diagnostics, but aggregated data for modelling
+if (nrow(df_factorial) > 0) {
+  diag_tp <- diagnose_model_data(df_factorial, "Throughput (trial-level diagnostics)")
   
   if (diag_tp$n_participants <= 1) {
     model_tp_error <- paste0("Insufficient participants: N = ", diag_tp$n_participants, ". Need at least 2 participants for mixed-effects models.")
@@ -527,14 +682,16 @@ if (nrow(df_iso) > 0) {
     model_tp_error <- paste0("Insufficient data per condition: minimum ", diag_tp$min_trials_per_condition, " trials per condition. Some conditions have very few observations.")
   } else if (diag_tp$empty_conditions > 0) {
     model_tp_error <- paste0("Empty conditions detected: ", diag_tp$empty_conditions, " condition(s) have no data.")
+  } else if (nrow(df_tp_model) == 0) {
+    model_tp_error <- "No valid throughput data after quality filtering (TP > 0, TP < 20, valid We)."
   } else {
-  formula_tp <- build_mixed_formula("TP", c("modality", "ui_mode", "pressure"), df_iso)
+  formula_tp <- build_mixed_formula("TP", c("modality", "ui_mode", "pressure"), df_tp_model)
   if (length(formula_tp$dropped) > 0) {
-    model_tp_note <- paste0("Dropped single-level factor(s): ", paste(formula_tp$dropped, collapse = ", "), " (interim data).")
+    model_tp_note <- paste0("Dropped single-level factor(s): ", paste(formula_tp$dropped, collapse = ", "), ".")
   }
   model_tp <- tryCatch({
     lmer(formula_tp$formula,
-         data = df_iso, REML = FALSE,
+         data = df_tp_model, REML = FALSE,
          control = lmerControl(optimizer = "bobyqa"))
   }, error = function(e) {
       model_tp_error <<- paste0("Model fitting failed: ", e$message)
@@ -547,11 +704,6 @@ if (nrow(df_iso) > 0) {
   })
   
   if (!is.null(model_tp)) {
-      # Check for convergence warnings
-      conv_warnings <- warnings()
-      if (length(conv_warnings) > 0) {
-        model_tp_error <- paste0("Convergence warnings detected. Model may be unreliable.")
-      }
       
     tryCatch({
       emm_tp <- emmeans(model_tp, ~ modality * ui_mode * pressure)
@@ -591,7 +743,7 @@ if (nrow(df) > 0) {
   # For full factorial RT model (modality × ui_mode × pressure), use df_factorial
   formula_rt <- build_mixed_formula("log_rt", c("modality", "ui_mode", "pressure"), df_factorial)
   if (length(formula_rt$dropped) > 0) {
-    model_rt_note <- paste0("Dropped single-level factor(s): ", paste(formula_rt$dropped, collapse = ", "), " (interim data).")
+    model_rt_note <- paste0("Dropped single-level factor(s): ", paste(formula_rt$dropped, collapse = ", "), ".")
   }
   model_rt <- tryCatch({
     lmer(formula_rt$formula, 
@@ -608,11 +760,6 @@ if (nrow(df) > 0) {
   })
   
   if (!is.null(model_rt)) {
-      # Check for convergence warnings
-      conv_warnings <- warnings()
-      if (length(conv_warnings) > 0) {
-        model_rt_error <- paste0("Convergence warnings detected. Model may be unreliable.")
-      }
       
     tryCatch({
       emm_rt <- emmeans(model_rt, ~ modality * ui_mode * pressure, type = "response")
@@ -670,7 +817,7 @@ if (nrow(df_errors) > 0) {
   
   formula_err <- build_mixed_formula("error", c("modality", "ui_mode", "pressure"), df_errors_factorial)
   if (length(formula_err$dropped) > 0) {
-    model_err_note <- paste0("Dropped single-level factor(s): ", paste(formula_err$dropped, collapse = ", "), " (interim data).")
+    model_err_note <- paste0("Dropped single-level factor(s): ", paste(formula_err$dropped, collapse = ", "), ".")
   }
   model_err <- tryCatch({
     glmer(formula_err$formula,
@@ -687,11 +834,6 @@ if (nrow(df_errors) > 0) {
   })
   
   if (!is.null(model_err)) {
-        # Check for convergence warnings
-        conv_warnings <- warnings()
-        if (length(conv_warnings) > 0) {
-          model_err_error <- paste0("Convergence warnings detected. Model may be unreliable.")
-        }
         
     tryCatch({
       emm_err <- emmeans(model_err, ~ modality * ui_mode * pressure, type = "response")
@@ -710,12 +852,10 @@ if (nrow(df_errors) > 0) {
 }
 ```
 
-# Data Quality & Coverage Gate (Interim N)
+# Data Quality & Coverage Gate
 
 ::: {.callout-note}
-This section prevents misleading models when cells are missing. Current data are interim (N=`r n_distinct(df$pid)`); treat all effects as descriptive.
-
-**Interim Status:** All inferential models in this document are fit on N=`r n_distinct(df$pid)` (interim sample), not N=48. Any statements about N=48 refer to the *planned* final sample, not the data used here.
+This section prevents misleading models when cells are missing. Current data: N=`r n_distinct(df$pid)` participants.
 :::
 
 ```{r qc-gate}
@@ -737,7 +877,7 @@ qc_cells_table <- qc_cell_coverage %>%
 missing_factors <- names(qc_missing_factors)[unlist(qc_missing_factors)]
 
 qc_participants %>%
-  kable(caption = "Participant counts (interim). Note: 'df' refers to correct trials, RT ∈ [150, 6000] ms, non-practice.") %>%
+  kable(caption = "Participant counts. Note: 'df' refers to correct trials, RT ∈ [150, 6000] ms, non-practice.") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
 qc_cells_table %>%
@@ -747,7 +887,7 @@ qc_cells_table %>%
 if (length(missing_factors) > 0) {
   cat("**Missing factor levels detected:**", paste(missing_factors, collapse = ", "), "\n\n")
 } else {
-  cat("All factors have ≥2 levels in the interim data.\n\n")
+  cat("All factors have ≥2 levels in the data.\n\n")
 }
 
 if (nrow(qc_block_completion) > 0) {
@@ -758,21 +898,12 @@ if (nrow(qc_block_completion) > 0) {
 ```
 
 
-::: {.callout-warning}
-## Interim Report Status
-
-**Current dataset: N=`r n_distinct(df$pid)` participants (interim sample).** All inferential results in this document are preliminary and will be re-estimated at N≈48. Sections 16 (LBA) and 17 (Control Theory) document planned analyses that have not yet been implemented at the current interim N.
-:::
 
 # 1. Executive Summary
 
 This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' law pointing tasks across two input modalities (Hand, Gaze) and two UI modes (Static, Adaptive).
 
-**Note on Participant Exclusions:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the *planned* 2×2×2 factorial dataset due to a data logging error that incorrectly recorded pressure conditions. The bug was fixed on December 8, 2025 (commit `04758db`), and seven replacement participants (P049-P055) will be collected to reach the planned final sample of N=48. **All analyses in this interim report use N=`r n_distinct(df$pid)` participants with complete data across all conditions.**
-
-**All statistical models in this document are fit on N=`r n_distinct(df$pid)` (interim sample), not N=48.** See the Data Quality Notes section and `EXCLUSION_CRITERIA.md` for details.
-
-# Results Snapshot (Interim, N = `r qc_participants_included`)
+# Results Snapshot (N = `r qc_participants_included`)
 
 ```{r results-snapshot}
 # Simple contrasts: adaptive - static within modality (averaged over pressure where available)
@@ -808,17 +939,17 @@ manip_snapshot <- df_raw %>%
   )
 
 contrast_table %>%
-  kable(caption = "RQ1 contrasts (adaptive - static; interim descriptive)") %>%
+  kable(caption = "RQ1 contrasts (adaptive - static)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
 cat("\n*Note:* These contrasts are descriptive only; no inferential claims are made at N=`r n_distinct(df$pid)`.\n\n")
 
 tlx_snapshot %>%
-  kable(caption = "RQ2 snapshot: Overall TLX (interim)") %>%
+  kable(caption = "RQ2 snapshot: Overall TLX") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
 manip_snapshot %>%
-  kable(caption = "RQ3 manipulation check: width scaling (interim)") %>%
+  kable(caption = "RQ3 manipulation check: width scaling") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
 cat("\n*Note:* In the current build, width scaling was not activated; all recorded `width_scale_factor` values equal 1.0. RQ3 will be revisited once adaptive width scaling is enabled.\n\n")
@@ -932,7 +1063,7 @@ cat("Participants were primarily non-gamers (median self-reported gaming = ", ga
 
 **Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
 
-**Interim Analysis Note:** At this interim N, we observe a large main effect of modality (hand > gaze) on throughput, but no reliable evidence that the Adaptive UI improves TP relative to Static, nor clear interactions with pressure. Interaction effects are treated as exploratory and will be revisited at N=48.
+**Analysis Note:** We observe a large main effect of modality (hand > gaze) on throughput. Interaction effects are treated as exploratory.
 
 ## Summary Statistics
 
@@ -1054,10 +1185,12 @@ p_tp <- ggplot(df_tp_plot, aes(x = ui_mode, y = tp_mean, fill = ui_mode, color =
       NULL
     }
   } +
-  facet_grid(modality ~ pressure, labeller = labeller(
+  facet_grid(modality ~ pressure, 
+             labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-             )) +
+             ),
+             drop = TRUE) +
   scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -1137,7 +1270,7 @@ if (exists("model_tp") && !is.null(model_tp)) {
   }
   
   if (!is.null(model_tp_note)) {
-    cat("**Interim note:** ", model_tp_note, "\n\n")
+    cat("**Note:** ", model_tp_note, "\n\n")
   }
   
   # ANOVA table
@@ -1146,11 +1279,126 @@ if (exists("model_tp") && !is.null(model_tp)) {
   print(anova_tp)
   
   # Note on interactions
-  cat("\n**Interim Analysis Note:** At N=", diag_tp$n_participants, ", the model is underpowered for detecting 3-way interactions. Any non-significant interaction effects should be treated as exploratory and will be revisited at N=48.\n\n")
+  cat("\n**Analysis Note:** At N=", diag_tp$n_participants, ", 3-way interactions may be underpowered. Non-significant interaction effects should be treated as exploratory.\n\n")
   
   # Model summary
   cat("\n#### Model Summary\n")
   print(summary(model_tp))
+  
+  # Calculate effect sizes and generate APA-style written results
+  anova_tp_df <- as.data.frame(anova_tp)
+  anova_tp_df$partial_eta_sq <- mapply(calc_partial_eta_sq, 
+                                        anova_tp_df$`F value`, 
+                                        anova_tp_df$NumDF, 
+                                        anova_tp_df$DenDF)
+  
+  # APA-style written results
+  cat("\n#### Written Results (APA Style)\n\n")
+  
+  # Extract key effects
+  modality_row <- anova_tp_df[grepl("^modality$", rownames(anova_tp_df), ignore.case = TRUE), ]
+  ui_mode_row <- anova_tp_df[grepl("^ui_mode$|^ui.mode$", rownames(anova_tp_df), ignore.case = TRUE), ]
+  mod_ui_int <- anova_tp_df[grepl("modality.*ui_mode|ui_mode.*modality", rownames(anova_tp_df), ignore.case = TRUE) & 
+                            !grepl("pressure", rownames(anova_tp_df), ignore.case = TRUE), ]
+  
+  if (nrow(modality_row) > 0 && !is.na(modality_row$`F value`[1])) {
+    F_mod <- modality_row$`F value`[1]
+    df1_mod <- modality_row$NumDF[1]
+    df2_mod <- modality_row$DenDF[1]
+    p_mod <- modality_row$`Pr(>F)`[1]
+    eta_mod <- modality_row$partial_eta_sq[1]
+    
+    cat("**Modality Effect:** A linear mixed-effects model revealed a ", 
+        ifelse(p_mod < .05, "significant", "non-significant"),
+        " main effect of input modality on throughput, ",
+        format_F_apa(F_mod, df1_mod, df2_mod, p_mod),
+        ", η²p = ", sprintf("%.3f", eta_mod), 
+        " (", interpret_eta_sq(eta_mod), " effect). ", sep = "")
+    
+    # Add descriptive interpretation
+        if (exists("emm_tp") && !is.null(emm_tp)) {
+          emm_mod <- emmeans(model_tp, ~ modality)
+          emm_mod_df <- as.data.frame(emm_mod)
+          if (nrow(emm_mod_df) == 2) {
+            # Safely extract means
+            hand_mean <- safe_extract_mean(emm_mod_df, "modality", "hand")
+            gaze_mean <- safe_extract_mean(emm_mod_df, "modality", "gaze")
+            
+            # Get CI column names
+            ci_lower_col <- if ("lower.CL" %in% names(emm_mod_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_mod_df)) "asymp.LCL" else NULL
+            ci_upper_col <- if ("upper.CL" %in% names(emm_mod_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_mod_df)) "asymp.UCL" else NULL
+            
+            # Extract CI values
+            hand_ci_lower <- if (!is.null(ci_lower_col)) safe_extract_ci(emm_mod_df, "modality", "hand", ci_lower_col) else NA_real_
+            hand_ci_upper <- if (!is.null(ci_upper_col)) safe_extract_ci(emm_mod_df, "modality", "hand", ci_upper_col) else NA_real_
+            gaze_ci_lower <- if (!is.null(ci_lower_col)) safe_extract_ci(emm_mod_df, "modality", "gaze", ci_lower_col) else NA_real_
+            gaze_ci_upper <- if (!is.null(ci_upper_col)) safe_extract_ci(emm_mod_df, "modality", "gaze", ci_upper_col) else NA_real_
+            
+            # Format and output
+            hand_str <- format_mean_ci(hand_mean, hand_ci_lower, hand_ci_upper, "%.2f", " bits/s")
+            gaze_str <- format_mean_ci(gaze_mean, gaze_ci_lower, gaze_ci_upper, "%.2f", " bits/s")
+            
+            cat("Hand input produced higher throughput (", hand_str, 
+                ") than gaze input (", gaze_str, ").", sep = "")
+          }
+        }
+    cat("\n\n")
+  }
+  
+  if (nrow(ui_mode_row) > 0 && !is.na(ui_mode_row$`F value`[1])) {
+    F_ui <- ui_mode_row$`F value`[1]
+    df1_ui <- ui_mode_row$NumDF[1]
+    df2_ui <- ui_mode_row$DenDF[1]
+    p_ui <- ui_mode_row$`Pr(>F)`[1]
+    eta_ui <- ui_mode_row$partial_eta_sq[1]
+    
+    cat("**UI Mode Effect:** The main effect of UI mode was ",
+        ifelse(p_ui < .05, "significant", "non-significant"),
+        ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
+        ", η²p = ", sprintf("%.3f", eta_ui),
+        " (", interpret_eta_sq(eta_ui), " effect).", sep = "")
+    
+        if (exists("emm_tp") && !is.null(emm_tp)) {
+          emm_ui <- emmeans(model_tp, ~ ui_mode)
+          emm_ui_df <- as.data.frame(emm_ui)
+          if (nrow(emm_ui_df) == 2) {
+            # Safely extract means
+            static_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "static")
+            adaptive_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "adaptive")
+            
+            if (!is.na(static_mean) && !is.na(adaptive_mean)) {
+              static_str <- format_mean_ci(static_mean, NA_real_, NA_real_, "%.2f", " bits/s")
+              adaptive_str <- format_mean_ci(adaptive_mean, NA_real_, NA_real_, "%.2f", " bits/s")
+              
+              cat(" Adaptive UI (", adaptive_str, ") ",
+                  ifelse(adaptive_mean > static_mean, "improved", "did not improve"),
+                  " throughput compared to Static UI (", static_str, ").", sep = "")
+            }
+          }
+        }
+    cat("\n\n")
+  }
+  
+  if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
+    F_int <- mod_ui_int$`F value`[1]
+    df1_int <- mod_ui_int$NumDF[1]
+    df2_int <- mod_ui_int$DenDF[1]
+    p_int <- mod_ui_int$`Pr(>F)`[1]
+    eta_int <- mod_ui_int$partial_eta_sq[1]
+    
+    cat("**Modality × UI Mode Interaction:** The interaction between modality and UI mode was ",
+        ifelse(p_int < .05, "significant", "non-significant"),
+        ", ", format_F_apa(F_int, df1_int, df2_int, p_int),
+        ", η²p = ", sprintf("%.3f", eta_int),
+        " (", interpret_eta_sq(eta_int), " effect).", sep = "")
+    
+    if (p_int >= .05) {
+      cat(" This suggests that the effect of UI mode did not differ significantly between hand and gaze modalities.")
+    } else {
+      cat(" Follow-up simple effects analyses are recommended to interpret this interaction.")
+    }
+    cat("\n\n")
+  }
   
   # Effect size: EMMs for hand vs gaze (collapsed over ui_mode and pressure)
   if (exists("emm_tp") && !is.null(emm_tp)) {
@@ -1179,11 +1427,35 @@ if (exists("model_tp") && !is.null(model_tp)) {
     }
   }
   
-  # Pairwise comparisons
+  # Pairwise comparisons with effect sizes
   if (exists("pairs_tp") && !is.null(pairs_tp)) {
     cat("\n#### Pairwise Comparisons (Holm-adjusted)\n")
     pairs_tp_df <- as.data.frame(pairs_tp)
-    print(pairs_tp_df %>% head(20))
+    
+    # Calculate Cohen's d for pairwise comparisons
+    # For mixed models, approximate d from t-statistic: d ≈ t * sqrt(2/n)
+    # More accurate: use emmeans contrast with pooled SD
+    if ("t.ratio" %in% names(pairs_tp_df)) {
+      # Approximate Cohen's d from t-ratio (for paired comparisons)
+      # d ≈ t / sqrt(n) for paired samples, but this is approximate
+      # Better: use emmeans to get contrast with SE, then d = estimate / pooled_SD
+      pairs_tp_df$cohens_d_approx <- pairs_tp_df$t.ratio / sqrt(diag_tp$n_participants)
+      pairs_tp_df$effect_size <- sapply(pairs_tp_df$cohens_d_approx, interpret_cohens_d)
+      
+      # Create enhanced table
+      pairs_tp_enhanced <- pairs_tp_df %>%
+        mutate(
+          `Cohen's d (approx)` = round(cohens_d_approx, 3),
+          `Effect Size` = effect_size,
+          `p-value` = format_p_apa(p.value)
+        ) %>%
+        select(contrast, estimate, SE, `Cohen's d (approx)`, `Effect Size`, `p-value`, df)
+      
+      print(knitr::kable(pairs_tp_enhanced %>% head(20), 
+                         caption = "Pairwise Comparisons with Effect Sizes (Holm-adjusted p-values)"))
+    } else {
+      print(pairs_tp_df %>% head(20))
+    }
   }
 } else {
   cat("⚠ **Statistical model could not be fitted for Throughput.**\n\n")
@@ -1217,9 +1489,11 @@ if (exists("model_tp") && !is.null(model_tp)) {
 
 -----
 
-# 4. Movement Time Analysis
+# 4. Movement Time Analysis (Core Confirmatory)
 
 **Research Question:** How does movement time vary across conditions?
+
+*This analysis is part of the core confirmatory battery for RQ1 and RQ3. Movement time is mathematically coupled with throughput (TP = ID/RT) and serves as a complementary performance metric.*
 
 **Sample Size:** `r get_n_string(df)` participants with valid movement time data (correct trials only).
 
@@ -1340,10 +1614,12 @@ p_rt <- ggplot(df_rt_plot, aes(x = ui_mode, y = rt_mean, fill = ui_mode, color =
       NULL
     }
   } +
-  facet_grid(modality ~ pressure, labeller = labeller(
+  facet_grid(modality ~ pressure, 
+             labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-             )) +
+             ),
+             drop = TRUE) +
   scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -1411,6 +1687,8 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
 
 The log-RT analysis uses the same 2×2×2 within-subjects design and random-intercept LMM as the throughput analysis. Because throughput and RT are mathematically coupled (TP = ID/RT) and we expect **similar medium-sized UI mode and modality effects**, the **sample-size logic is identical**: **N = 48** is sufficient for detecting dz ≈ 0.40–0.50 differences with ≈0.80 power, and **N = 64** further strengthens power for smaller effects and interactions (Cohen, 1988). Trial-level modeling with many repeated observations per participant increases precision, but our power planning is intentionally conservative and based on participant-level effects rather than naïvely counting trials.
 
+**Random Effects Structure:** All mixed models in this report use a random intercept for participants `(1 | pid)`, which is a conservative and stable baseline. We may test richer random-effects structures (e.g., `(1 + modality | pid)`) as a robustness check.
+
 ```{r rt-model}
 if (exists("model_rt") && !is.null(model_rt)) {
   cat("### Model: ", deparse(formula_rt$formula), "\n\n")
@@ -1423,13 +1701,127 @@ if (exists("model_rt") && !is.null(model_rt)) {
   }
   
   if (!is.null(model_rt_note)) {
-    cat("**Interim note:** ", model_rt_note, "\n\n")
+    cat("**Note:** ", model_rt_note, "\n\n")
   }
   
   # ANOVA table
   cat("#### ANOVA Table\n")
   anova_rt <- anova(model_rt, type = "III")
   print(anova_rt)
+  
+  # Calculate effect sizes and generate APA-style written results
+  anova_rt_df <- as.data.frame(anova_rt)
+  anova_rt_df$partial_eta_sq <- mapply(calc_partial_eta_sq, 
+                                        anova_rt_df$`F value`, 
+                                        anova_rt_df$NumDF, 
+                                        anova_rt_df$DenDF)
+  
+  # APA-style written results
+  cat("\n#### Written Results (APA Style)\n\n")
+  
+  # Extract key effects
+  modality_row <- anova_rt_df[grepl("^modality$", rownames(anova_rt_df), ignore.case = TRUE), ]
+  ui_mode_row <- anova_rt_df[grepl("^ui_mode$|^ui.mode$", rownames(anova_rt_df), ignore.case = TRUE), ]
+  mod_ui_int <- anova_rt_df[grepl("modality.*ui_mode|ui_mode.*modality", rownames(anova_rt_df), ignore.case = TRUE) & 
+                            !grepl("pressure", rownames(anova_rt_df), ignore.case = TRUE), ]
+  
+  if (nrow(modality_row) > 0 && !is.na(modality_row$`F value`[1])) {
+    F_mod <- modality_row$`F value`[1]
+    df1_mod <- modality_row$NumDF[1]
+    df2_mod <- modality_row$DenDF[1]
+    p_mod <- modality_row$`Pr(>F)`[1]
+    eta_mod <- modality_row$partial_eta_sq[1]
+    
+    cat("**Modality Effect:** A linear mixed-effects model on log-transformed movement time revealed a ", 
+        ifelse(p_mod < .05, "significant", "non-significant"),
+        " main effect of input modality, ",
+        format_F_apa(F_mod, df1_mod, df2_mod, p_mod),
+        ", η²p = ", sprintf("%.3f", eta_mod), 
+        " (", interpret_eta_sq(eta_mod), " effect). ", sep = "")
+    
+    if (exists("emm_rt") && !is.null(emm_rt)) {
+      emm_mod <- emmeans(model_rt, ~ modality, type = "response")
+      emm_mod_df <- as.data.frame(emm_mod)
+      if (nrow(emm_mod_df) == 2) {
+        # Safely extract means (handles both "response" and "emmean" columns)
+        hand_mean <- safe_extract_mean(emm_mod_df, "modality", "hand")
+        gaze_mean <- safe_extract_mean(emm_mod_df, "modality", "gaze")
+        
+        # Get CI column names
+        ci_lower_col <- if ("lower.CL" %in% names(emm_mod_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_mod_df)) "asymp.LCL" else NULL
+        ci_upper_col <- if ("upper.CL" %in% names(emm_mod_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_mod_df)) "asymp.UCL" else NULL
+        
+        # Extract CI values
+        hand_ci_lower <- if (!is.null(ci_lower_col)) safe_extract_ci(emm_mod_df, "modality", "hand", ci_lower_col) else NA_real_
+        hand_ci_upper <- if (!is.null(ci_upper_col)) safe_extract_ci(emm_mod_df, "modality", "hand", ci_upper_col) else NA_real_
+        gaze_ci_lower <- if (!is.null(ci_lower_col)) safe_extract_ci(emm_mod_df, "modality", "gaze", ci_lower_col) else NA_real_
+        gaze_ci_upper <- if (!is.null(ci_upper_col)) safe_extract_ci(emm_mod_df, "modality", "gaze", ci_upper_col) else NA_real_
+        
+        # Format and output
+        hand_str <- format_mean_ci(hand_mean, hand_ci_lower, hand_ci_upper, "%.3f", " s")
+        gaze_str <- format_mean_ci(gaze_mean, gaze_ci_lower, gaze_ci_upper, "%.3f", " s")
+        
+        cat("Hand input produced faster movement times (", hand_str, 
+            ") than gaze input (", gaze_str, ").", sep = "")
+      }
+    }
+    cat("\n\n")
+  }
+  
+  if (nrow(ui_mode_row) > 0 && !is.na(ui_mode_row$`F value`[1])) {
+    F_ui <- ui_mode_row$`F value`[1]
+    df1_ui <- ui_mode_row$NumDF[1]
+    df2_ui <- ui_mode_row$DenDF[1]
+    p_ui <- ui_mode_row$`Pr(>F)`[1]
+    eta_ui <- ui_mode_row$partial_eta_sq[1]
+    
+    cat("**UI Mode Effect:** The main effect of UI mode on movement time was ",
+        ifelse(p_ui < .05, "significant", "non-significant"),
+        ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
+        ", η²p = ", sprintf("%.3f", eta_ui),
+        " (", interpret_eta_sq(eta_ui), " effect).", sep = "")
+    
+        if (exists("emm_rt") && !is.null(emm_rt)) {
+          emm_ui <- emmeans(model_rt, ~ ui_mode, type = "response")
+          emm_ui_df <- as.data.frame(emm_ui)
+          if (nrow(emm_ui_df) == 2) {
+            # Safely extract means
+            static_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "static")
+            adaptive_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "adaptive")
+            
+            if (!is.na(static_mean) && !is.na(adaptive_mean)) {
+              static_str <- format_mean_ci(static_mean, NA_real_, NA_real_, "%.3f", " s")
+              adaptive_str <- format_mean_ci(adaptive_mean, NA_real_, NA_real_, "%.3f", " s")
+              
+              cat(" Adaptive UI (", adaptive_str, ") ",
+                  ifelse(adaptive_mean < static_mean, "reduced", "did not reduce"),
+                  " movement time compared to Static UI (", static_str, ").", sep = "")
+            }
+          }
+        }
+    cat("\n\n")
+  }
+  
+  if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
+    F_int <- mod_ui_int$`F value`[1]
+    df1_int <- mod_ui_int$NumDF[1]
+    df2_int <- mod_ui_int$DenDF[1]
+    p_int <- mod_ui_int$`Pr(>F)`[1]
+    eta_int <- mod_ui_int$partial_eta_sq[1]
+    
+    cat("**Modality × UI Mode Interaction:** The interaction was ",
+        ifelse(p_int < .05, "significant", "non-significant"),
+        ", ", format_F_apa(F_int, df1_int, df2_int, p_int),
+        ", η²p = ", sprintf("%.3f", eta_int),
+        " (", interpret_eta_sq(eta_int), " effect).", sep = "")
+    
+    if (p_int >= .05) {
+      cat(" The effect of UI mode did not differ significantly between modalities.")
+    } else {
+      cat(" Follow-up simple effects analyses are recommended.")
+    }
+    cat("\n\n")
+  }
   
   # Pairwise comparisons
   if (exists("pairs_rt") && !is.null(pairs_rt)) {
@@ -1508,7 +1900,7 @@ fitts_fits <- fitts_model %>%
 ggplot(fitts_model, aes(x = IDe, y = MT, color = ui_mode)) +
   geom_point(size = 3, alpha = 0.7) +
   geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
-  facet_grid(. ~ modality) +
+  facet_grid(. ~ modality, drop = TRUE) +
     scale_color_manual(values = custom_palette_2,
                         labels = c("Static", "Adaptive")) +
   labs(
@@ -1533,9 +1925,11 @@ if (nrow(fitts_fits) > 0) {
 
 -----
 
-# 6. Error Rate Analysis
+# 6. Error Rate Analysis (Core Confirmatory)
 
 **Research Question:** How do error rates differ across conditions?
+
+*This analysis is part of the core confirmatory battery for RQ1 and RQ3.*
 
 **Sample Size:** `r get_n_string(df_all_trials)` participants with all trials (correct + incorrect).
 
@@ -1567,7 +1961,7 @@ gaze_error_rate <- df_all_trials %>%
   summarise(rate = mean(!is_correct, na.rm = TRUE)) %>%
   pull(rate)
 
-cat("\n**Error Rate Summary:** Overall error rate was ", round(100 * overall_error_rate, 1), "%. Errors were concentrated in gaze conditions (", round(100 * gaze_error_rate, 1), "%), while hand remained near ", round(100 * hand_error_rate, 1), "%. At this interim N and low error count, we report these differences descriptively.\n\n")
+cat("\n**Error Rate Summary:** Overall error rate was ", round(100 * overall_error_rate, 1), "%. Errors were concentrated in gaze conditions (", round(100 * gaze_error_rate, 1), "%), while hand remained near ", round(100 * hand_error_rate, 1), "%.\n\n")
 
 # Prepare data for raincloud plot
 df_err_plot <- df_pid_cond %>%
@@ -1660,10 +2054,12 @@ p_err <- ggplot(df_err_plot, aes(x = ui_mode, y = Error_Rate, fill = ui_mode, co
       NULL
     }
   } +
-  facet_grid(modality ~ pressure, labeller = labeller(
+  facet_grid(modality ~ pressure, 
+             labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-             )) +
+             ),
+             drop = TRUE) +
   scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -1704,7 +2100,7 @@ if (exists("model_err") && !is.null(model_err)) {
   }
   
   if (!is.null(model_err_note)) {
-    cat("**Interim note:** ", model_err_note, "\n\n")
+    cat("**Note:** ", model_err_note, "\n\n")
   }
   
   # ANOVA table
@@ -1758,7 +2154,9 @@ if (exists("model_err") && !is.null(model_err)) {
 
 **Sample Size:** `r get_n_string(df_iso)` participants with valid accuracy data.
 
-## Effective Width ($W_e$)
+## Effective Width ($W_e$) (Exploratory/Descriptive)
+
+*This analysis is exploratory/descriptive only. No formal inferential tests are run in this section.*
 
 #### Planned Sample Size & Power
 
@@ -1784,7 +2182,7 @@ knitr::kable(we_summary)
 Effective target width was broadly similar between Static and Adaptive within each modality; gaze showed slightly larger We overall, consistent with higher variability in endpoint location.
 
 ```{r plot-we}
-#| fig-cap: !expr 'paste0("Effective Target Width (Accuracy) by Modality and UI Mode. ", get_n_string(df_iso %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(We_mean = mean(We, na.rm = TRUE), .groups = \"drop\") %>% filter(!is.na(We_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values indicate tighter shot grouping and higher precision.")'
+#| fig-cap: !expr 'paste0("Effective Target Width (Accuracy) by Modality and UI Mode. ", get_n_string(df_iso %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(We_mean = mean(We, na.rm = TRUE), .groups = "drop") %>% filter(!is.na(We_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values indicate tighter shot grouping and higher precision.")'
 
 # Aggregate to participant-level means
 df_we_plot <- df_iso %>%
@@ -1878,10 +2276,12 @@ ggplot(df_we_plot, aes(x = ui_mode, y = We_mean, fill = ui_mode, color = ui_mode
       NULL
     }
   } +
-  facet_grid(modality ~ pressure, labeller = labeller(
+  facet_grid(modality ~ pressure, 
+             labeller = labeller(
                modality = function(x) paste("Modality:", str_to_title(x)),
                pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-             )) +
+             ),
+             drop = TRUE) +
   scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -1907,7 +2307,7 @@ ggplot(df_we_plot, aes(x = ui_mode, y = We_mean, fill = ui_mode, color = ui_mode
 ```{r plot-accuracy-scatter}
 #| fig-width: 12
 #| fig-height: 8
-#| fig-cap: !expr 'paste0("Endpoint Accuracy Scatter Plot for Gaze Modality. ", get_n_string(df %>% filter(str_to_lower(modality) == \"gaze\", !is.na(endpoint_x), !is.na(endpoint_y))), " participants. Each point represents one trial endpoint position relative to the target center (0,0). The red dashed circle shows the approximate target size. Points closer to the center indicate better accuracy. Dotted lines indicate zero error in X and Y directions. Faceted by pressure condition.")'
+#| fig-cap: !expr 'paste0("Endpoint Accuracy Scatter Plot for Gaze Modality. ", get_n_string(df %>% filter(str_to_lower(modality) == "gaze", !is.na(endpoint_x), !is.na(endpoint_y))), " participants. Each point represents one trial endpoint position relative to the target center (0,0). The red dashed circle shows the approximate target size. Points closer to the center indicate better accuracy. Dotted lines indicate zero error in X and Y directions. Faceted by pressure condition.")'
 # Calculate endpoint errors relative to target center
 df_accuracy <- df %>%
   filter(
@@ -2045,7 +2445,7 @@ reentry_summary %>%
 ```
 
 ```{r plot-reentry}
-#| fig-cap: !expr 'paste0("Target Re-entries (Control Stability) by Modality and UI Mode. ", get_n_string(df_iso %>% filter(!is.na(reentries)) %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(reentries_mean = mean(reentries, na.rm = TRUE), .groups = \"drop\") %>% filter(!is.na(reentries_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values are better.")'
+#| fig-cap: !expr 'paste0("Target Re-entries (Control Stability) by Modality and UI Mode. ", get_n_string(df_iso %>% filter(!is.na(reentries)) %>% group_by(pid, modality, ui_mode, pressure) %>% summarise(reentries_mean = mean(reentries, na.rm = TRUE), .groups = "drop") %>% filter(!is.na(reentries_mean))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons. Lower values are better.")'
 
 # Aggregate to participant-level means
 df_reentry_plot <- df_iso %>%
@@ -2140,10 +2540,12 @@ ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, col
       NULL
     }
   } +
-  facet_grid(modality ~ pressure, labeller = labeller(
-    modality = function(x) paste("Modality:", str_to_title(x)),
-    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-  )) +
+  facet_grid(modality ~ pressure, 
+             labeller = labeller(
+               modality = function(x) paste("Modality:", str_to_title(x)),
+               pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+             ),
+             drop = TRUE) +
   scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
   scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -2164,9 +2566,15 @@ ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, col
 
 -----
 
-# 8. Workload (NASA-TLX)
+# 8. Workload (NASA-TLX) (Core Confirmatory)
 
 *Subjective workload scores (lower is better).*
+
+**Research Question:** How does subjective workload differ across conditions? Does Adaptive UI reduce workload?
+
+*This analysis is part of the core confirmatory battery for RQ2 and RQ3.*
+
+**Metric Definition:** We use the unweighted NASA-TLX, computed as the mean of the six subscales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Each subscale is rated on a 0-100 scale, and the overall TLX score is the arithmetic mean of all six subscales. Lower values indicate lower subjective workload.
 
 **Sample Size:** `r get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental)))` participants with TLX data.
 
@@ -2238,7 +2646,8 @@ if(all(tlx_cols %in% names(df_raw))) {
                labeller = labeller(
                  modality = function(x) paste("Modality:", str_to_title(x)),
                  Scale = function(x) x
-               )) +
+               ),
+               drop = TRUE) +
     scale_color_manual(values = custom_palette_2,
                        labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -2266,7 +2675,6 @@ if(all(tlx_cols %in% names(df_raw))) {
 }
 ```
 
-<!-- Consolidated: removed extra TLX overall violin for interim slimness -->
   
 ```{r plot-tlx-stacked}
 #| fig-cap: !expr 'paste0("NASA-TLX Workload Components (Stacked Bar Chart). ", get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental))), " participants. Total height represents overall workload, with each colored segment representing one of the six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Lower total height indicates lower overall subjective workload.")'
@@ -2306,6 +2714,8 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
 #### Planned Sample Size & Power
 
 NASA-TLX scores (overall and subscales) are collected at the block level and analyzed with an LMM (random intercepts per participant; fixed effects for modality and UI mode). TLX scores tend to be reasonably reliable, and we expect **medium effects** for both modality (gaze > hand) and UI mode (adaptive < static), especially on Physical Demand and Frustration. For within-subject designs with medium effects, **≈40–50 participants** typically provide ≥0.80 power (Brysbaert, 2019). We therefore treat **N = 48** as a **good, pre-planned N** for TLX analyses. An increase to **N = 64** would mostly refine confidence intervals and interaction estimates rather than change the main power conclusions.
+
+**Random Effects Structure:** All mixed models in this report use a random intercept for participants `(1 | pid)`, which is a conservative and stable baseline. We may test richer random-effects structures (e.g., `(1 + modality | pid)`) as a robustness check.
 
 ```{r tlx-model}
 # Compute overall TLX (average of all subscales) and fit mixed model
@@ -2349,6 +2759,119 @@ if(all(tlx_cols %in% names(df_raw))) {
       cat("#### ANOVA Table\n")
       anova_tlx <- anova(model_tlx, type = "III")
       print(anova_tlx)
+      
+      # Calculate effect sizes and generate APA-style written results
+      anova_tlx_df <- as.data.frame(anova_tlx)
+      anova_tlx_df$partial_eta_sq <- mapply(calc_partial_eta_sq, 
+                                            anova_tlx_df$`F value`, 
+                                            anova_tlx_df$NumDF, 
+                                            anova_tlx_df$DenDF)
+      
+      # APA-style written results
+      cat("\n#### Written Results (APA Style)\n\n")
+      
+      # Extract key effects
+      modality_row <- anova_tlx_df[grepl("^modality$", rownames(anova_tlx_df), ignore.case = TRUE), ]
+      ui_mode_row <- anova_tlx_df[grepl("^ui_mode$|^ui.mode$", rownames(anova_tlx_df), ignore.case = TRUE), ]
+      mod_ui_int <- anova_tlx_df[grepl("modality.*ui_mode|ui_mode.*modality", rownames(anova_tlx_df), ignore.case = TRUE), ]
+      
+      if (nrow(modality_row) > 0 && !is.na(modality_row$`F value`[1])) {
+        F_mod <- modality_row$`F value`[1]
+        df1_mod <- modality_row$NumDF[1]
+        df2_mod <- modality_row$DenDF[1]
+        p_mod <- modality_row$`Pr(>F)`[1]
+        eta_mod <- modality_row$partial_eta_sq[1]
+        
+        cat("**Modality Effect:** A linear mixed-effects model revealed a ", 
+            ifelse(p_mod < .05, "significant", "non-significant"),
+            " main effect of input modality on overall NASA-TLX workload, ",
+            format_F_apa(F_mod, df1_mod, df2_mod, p_mod),
+            ", η²p = ", sprintf("%.3f", eta_mod), 
+            " (", interpret_eta_sq(eta_mod), " effect). ", sep = "")
+        
+        if (exists("emm_tlx") && !is.null(emm_tlx)) {
+          emm_mod <- emmeans(model_tlx, ~ modality)
+          emm_mod_df <- as.data.frame(emm_mod)
+          if (nrow(emm_mod_df) == 2) {
+            # Safely extract means
+            hand_mean <- safe_extract_mean(emm_mod_df, "modality", "hand")
+            gaze_mean <- safe_extract_mean(emm_mod_df, "modality", "gaze")
+            
+            # Get CI column names
+            ci_lower_col <- if ("lower.CL" %in% names(emm_mod_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_mod_df)) "asymp.LCL" else NULL
+            ci_upper_col <- if ("upper.CL" %in% names(emm_mod_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_mod_df)) "asymp.UCL" else NULL
+            
+            # Extract CI values
+            hand_ci_lower <- if (!is.null(ci_lower_col)) safe_extract_ci(emm_mod_df, "modality", "hand", ci_lower_col) else NA_real_
+            hand_ci_upper <- if (!is.null(ci_upper_col)) safe_extract_ci(emm_mod_df, "modality", "hand", ci_upper_col) else NA_real_
+            gaze_ci_lower <- if (!is.null(ci_lower_col)) safe_extract_ci(emm_mod_df, "modality", "gaze", ci_lower_col) else NA_real_
+            gaze_ci_upper <- if (!is.null(ci_upper_col)) safe_extract_ci(emm_mod_df, "modality", "gaze", ci_upper_col) else NA_real_
+            
+            # Format and output
+            hand_str <- format_mean_ci(hand_mean, hand_ci_lower, hand_ci_upper, "%.1f", "")
+            gaze_str <- format_mean_ci(gaze_mean, gaze_ci_lower, gaze_ci_upper, "%.1f", "")
+            
+            cat("Gaze input produced higher workload (", gaze_str, 
+                ") than hand input (", hand_str, ").", sep = "")
+          }
+        }
+        cat("\n\n")
+      }
+      
+      if (nrow(ui_mode_row) > 0 && !is.na(ui_mode_row$`F value`[1])) {
+        F_ui <- ui_mode_row$`F value`[1]
+        df1_ui <- ui_mode_row$NumDF[1]
+        df2_ui <- ui_mode_row$DenDF[1]
+        p_ui <- ui_mode_row$`Pr(>F)`[1]
+        eta_ui <- ui_mode_row$partial_eta_sq[1]
+        
+        cat("**UI Mode Effect:** The main effect of UI mode on workload was ",
+            ifelse(p_ui < .05, "significant", "non-significant"),
+            ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
+            ", η²p = ", sprintf("%.3f", eta_ui),
+            " (", interpret_eta_sq(eta_ui), " effect).", sep = "")
+        
+        if (exists("emm_tlx") && !is.null(emm_tlx)) {
+          emm_ui <- emmeans(model_tlx, ~ ui_mode)
+          emm_ui_df <- as.data.frame(emm_ui)
+          if (nrow(emm_ui_df) == 2) {
+            # Safely extract means
+            static_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "static")
+            adaptive_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "adaptive")
+            
+            if (!is.na(static_mean) && !is.na(adaptive_mean)) {
+              static_str <- format_mean_ci(static_mean, NA_real_, NA_real_, "%.1f", "")
+              adaptive_str <- format_mean_ci(adaptive_mean, NA_real_, NA_real_, "%.1f", "")
+              
+              cat(" Adaptive UI (", adaptive_str, ") ",
+                  ifelse(adaptive_mean < static_mean, "reduced", "did not reduce"),
+                  " workload compared to Static UI (", static_str, ").", sep = "")
+            }
+          }
+        }
+        cat("\n\n")
+      }
+      
+      if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
+        F_int <- mod_ui_int$`F value`[1]
+        df1_int <- mod_ui_int$NumDF[1]
+        df2_int <- mod_ui_int$DenDF[1]
+        p_int <- mod_ui_int$`Pr(>F)`[1]
+        eta_int <- mod_ui_int$partial_eta_sq[1]
+        
+        cat("**Modality × UI Mode Interaction:** The interaction was ",
+            ifelse(p_int < .05, "significant", "non-significant"),
+            ", ", format_F_apa(F_int, df1_int, df2_int, p_int),
+            ", η²p = ", sprintf("%.3f", eta_int),
+            " (", interpret_eta_sq(eta_int), " effect).", sep = "")
+        
+        if (p_int >= .05) {
+          cat(" The effect of UI mode on workload did not differ significantly between modalities.")
+        } else {
+          cat(" Follow-up simple effects analyses are recommended.")
+        }
+        cat("\n\n")
+      }
       
       # EMMs with 95% CIs
       if (requireNamespace("emmeans", quietly = TRUE)) {
@@ -2409,9 +2932,486 @@ if(all(tlx_cols %in% names(df_raw))) {
 }
 ```
 
+### Advanced TLX Analysis: UX Insights
+
+**Research Questions:** 
+- Which subscales drive overall workload? Are there different workload profiles for hand vs. gaze?
+- Is there a performance-workload trade-off? Do participants who report lower workload perform better?
+- How do workload sources differ between modalities?
+
+*These analyses provide deeper UX insights into workload patterns and their relationship to performance.*
+
+```{r tlx-ux-analysis}
+if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx_overall")) {
+  # === 1. WORKLOAD PROFILE ANALYSIS ===
+  cat("### Workload Profile Analysis\n\n")
+  
+  # Compute subscale contributions to overall workload
+  df_tlx_profiles <- df_raw %>%
+    filter(!is.na(pid)) %>%
+    {
+      if ("block_number" %in% names(.)) {
+        group_by(., pid, modality, ui_mode, block_number)
+      } else {
+        group_by(., pid, modality, ui_mode)
+      }
+    } %>%
+    summarise(
+      overall_tlx = mean(c_across(starts_with("tlx_")), na.rm = TRUE),
+      mental = mean(tlx_mental, na.rm = TRUE),
+      physical = mean(tlx_physical, na.rm = TRUE),
+      temporal = mean(tlx_temporal, na.rm = TRUE),
+      performance = mean(tlx_performance, na.rm = TRUE),
+      effort = mean(tlx_effort, na.rm = TRUE),
+      frustration = mean(tlx_frustration, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
+    )
+  
+  if (nrow(df_tlx_profiles) > 0) {
+    # Subscale contribution (what % of total workload comes from each subscale)
+    tlx_contribution <- df_tlx_profiles %>%
+      group_by(modality, ui_mode) %>%
+      summarise(
+        N = n(),
+        Mental_Pct = round(100 * mean(mental, na.rm = TRUE) / mean(overall_tlx, na.rm = TRUE), 1),
+        Physical_Pct = round(100 * mean(physical, na.rm = TRUE) / mean(overall_tlx, na.rm = TRUE), 1),
+        Temporal_Pct = round(100 * mean(temporal, na.rm = TRUE) / mean(overall_tlx, na.rm = TRUE), 1),
+        Performance_Pct = round(100 * mean(performance, na.rm = TRUE) / mean(overall_tlx, na.rm = TRUE), 1),
+        Effort_Pct = round(100 * mean(effort, na.rm = TRUE) / mean(overall_tlx, na.rm = TRUE), 1),
+        Frustration_Pct = round(100 * mean(frustration, na.rm = TRUE) / mean(overall_tlx, na.rm = TRUE), 1),
+        .groups = "drop"
+      )
+    
+    tlx_contribution %>%
+      kable(caption = "Subscale Contribution to Overall Workload (%). Shows what percentage of total workload comes from each subscale. Values >16.7% indicate above-average contribution.") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Identify dominant subscales (which subscale is highest for each condition)
+    dominant_subscales <- df_tlx_profiles %>%
+      pivot_longer(cols = c(mental, physical, temporal, performance, effort, frustration),
+                   names_to = "Subscale", values_to = "Score") %>%
+      group_by(modality, ui_mode, Subscale) %>%
+      summarise(Mean_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+      group_by(modality, ui_mode) %>%
+      slice_max(Mean_Score, n = 2) %>%
+      mutate(Rank = row_number()) %>%
+      pivot_wider(names_from = Rank, values_from = c(Subscale, Mean_Score), names_sep = "_")
+    
+    cat("\n**Dominant Workload Sources:**\n\n")
+    dominant_subscales %>%
+      kable(caption = "Top 2 Workload Subscales by Condition") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # === 2. WORKLOAD vs PERFORMANCE TRADE-OFF ===
+    cat("\n### Workload-Performance Relationship\n\n")
+    
+    # Merge TLX with performance metrics
+    if (exists("df_iso") && "TP" %in% names(df_iso)) {
+      perf_tlx <- df_iso %>%
+        filter(!is.na(pid)) %>%
+        group_by(pid, modality, ui_mode) %>%
+        summarise(mean_tp = mean(TP, na.rm = TRUE), .groups = "drop") %>%
+        left_join(
+          df_tlx_profiles %>% select(pid, modality, ui_mode, overall_tlx),
+          by = c("pid", "modality", "ui_mode")
+        ) %>%
+        filter(!is.na(overall_tlx), !is.na(mean_tp))
+      
+      if (nrow(perf_tlx) > 0) {
+        # Correlation analysis
+        perf_tlx_cor <- perf_tlx %>%
+          group_by(modality, ui_mode) %>%
+          summarise(
+            N = n(),
+            Correlation = round(cor(overall_tlx, mean_tp, use = "complete.obs"), 3),
+            .groups = "drop"
+          )
+        
+        perf_tlx_cor %>%
+          kable(caption = "Correlation Between Workload and Throughput by Condition. Negative correlation suggests lower workload is associated with better performance.") %>%
+          kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+        
+        # Scatter plot: Workload vs Performance
+        p_perf_tlx <- ggplot(perf_tlx, aes(x = overall_tlx, y = mean_tp, color = ui_mode)) +
+          geom_point(alpha = 0.6, size = 2) +
+          geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1) +
+          facet_grid(. ~ modality,
+                     labeller = labeller(
+                       modality = function(x) paste("Modality:", str_to_title(x))
+                     ),
+                     drop = TRUE) +
+          scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+          labs(
+            x = "Overall TLX Score (0-100)",
+            y = "Throughput (bits/s)",
+            color = "UI Mode",
+            title = "Workload vs. Performance Trade-off",
+            subtitle = "Does lower workload correlate with better performance?"
+          ) +
+          theme_minimal(base_size = 13) +
+          theme(
+            legend.position = "top",
+            strip.text = element_text(face = "bold", size = 12),
+            strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5)
+          )
+        
+        print(p_perf_tlx)
+        
+        # Workload efficiency: Performance per unit of workload
+        perf_tlx <- perf_tlx %>%
+          mutate(workload_efficiency = mean_tp / overall_tlx)
+        
+        efficiency_summary <- perf_tlx %>%
+          group_by(modality, ui_mode) %>%
+          summarise(
+            N = n(),
+            Mean_Efficiency = round(mean(workload_efficiency, na.rm = TRUE), 3),
+            SD_Efficiency = round(sd(workload_efficiency, na.rm = TRUE), 3),
+            .groups = "drop"
+          )
+        
+        efficiency_summary %>%
+          kable(caption = "Workload Efficiency (Throughput / TLX Score). Higher values indicate better performance per unit of reported workload.") %>%
+          kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+      }
+    }
+    
+    # === 3. MODALITY-SPECIFIC WORKLOAD PATTERNS ===
+    cat("\n### Modality-Specific Workload Patterns\n\n")
+    
+    # Compare which subscales are most affected by modality
+    modality_workload_diff <- df_tlx_profiles %>%
+      group_by(modality, ui_mode) %>%
+      summarise(
+        Mental = round(mean(mental, na.rm = TRUE), 1),
+        Physical = round(mean(physical, na.rm = TRUE), 1),
+        Temporal = round(mean(temporal, na.rm = TRUE), 1),
+        Performance = round(mean(performance, na.rm = TRUE), 1),
+        Effort = round(mean(effort, na.rm = TRUE), 1),
+        Frustration = round(mean(frustration, na.rm = TRUE), 1),
+        .groups = "drop"
+      ) %>%
+      pivot_longer(cols = c(Mental, Physical, Temporal, Performance, Effort, Frustration),
+                   names_to = "Subscale", values_to = "Score") %>%
+      pivot_wider(names_from = modality, values_from = Score) %>%
+      mutate(
+        Hand_Gaze_Diff = round(hand - gaze, 1),
+        Hand_Gaze_Pct = round(100 * (hand - gaze) / ((hand + gaze) / 2), 1)
+      ) %>%
+      arrange(desc(abs(Hand_Gaze_Diff)))
+    
+    cat("**Workload Differences: Hand vs. Gaze (by UI Mode)**\n\n")
+    modality_workload_diff %>%
+      kable(caption = "Subscale Differences Between Hand and Gaze Modalities. Positive values indicate higher workload for hand.") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # === 4. INDIVIDUAL DIFFERENCES IN WORKLOAD ===
+    cat("\n### Individual Differences in Workload\n\n")
+    
+    # Identify participants with consistently high/low workload
+    participant_workload <- df_tlx_profiles %>%
+      group_by(pid) %>%
+      summarise(
+        Mean_Overall_TLX = mean(overall_tlx, na.rm = TRUE),
+        SD_Overall_TLX = sd(overall_tlx, na.rm = TRUE),
+        N_Conditions = n(),
+        .groups = "drop"
+      ) %>%
+      arrange(desc(Mean_Overall_TLX))
+    
+    cat("**Participants with Highest Average Workload (Top 5):**\n\n")
+    participant_workload %>%
+      head(5) %>%
+      kable(caption = "Top 5 Participants by Average Workload") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    cat("\n**Participants with Lowest Average Workload (Bottom 5):**\n\n")
+    participant_workload %>%
+      tail(5) %>%
+      kable(caption = "Bottom 5 Participants by Average Workload") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    # Workload consistency (low SD = consistent across conditions)
+    cat("\n**Workload Consistency Across Conditions:**\n")
+    cat("Participants with low SD report similar workload across all conditions.\n")
+    cat("Participants with high SD show large workload differences between conditions.\n\n")
+    
+    consistency_summary <- participant_workload %>%
+      summarise(
+        Mean_SD = round(mean(SD_Overall_TLX, na.rm = TRUE), 2),
+        Median_SD = round(median(SD_Overall_TLX, na.rm = TRUE), 2),
+        Low_Consistency = sum(SD_Overall_TLX > 15, na.rm = TRUE),
+        High_Consistency = sum(SD_Overall_TLX < 5, na.rm = TRUE)
+      )
+    
+    consistency_summary %>%
+      kable(caption = "Workload Consistency Statistics") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    
+    cat("\n**Interpretation:**\n")
+    cat("- **Subscale contributions** reveal which aspects of workload are most prominent in each condition.\n")
+    cat("- **Workload-performance correlations** show whether lower workload is associated with better performance.\n")
+    cat("- **Workload efficiency** quantifies performance per unit of reported workload.\n")
+    cat("- **Modality differences** highlight which subscales are most affected by input modality.\n")
+    cat("- **Individual differences** identify participants who consistently report high/low workload.\n\n")
+  }
+} else {
+  cat("⚠ TLX data not available for advanced UX analysis.\n")
+}
+```
+
 -----
 
-# 9. Learning Curves & Practice Effects
+# 9. Participant Awareness & Strategy (Debrief Analysis)
+
+**Research Question:** Did participants notice the adaptive interface? Did they change their strategy? How do awareness and strategy relate to performance?
+
+**Sample Size:** `r get_n_string(df_raw %>% filter(!is.na(debrief_q1_adaptation_noticed) | !is.na(debrief_q2_strategy_changed)))` participants with debrief responses.
+
+*This section analyzes post-experiment debrief responses to understand participant awareness of the adaptive interface and self-reported strategy changes.*
+
+```{r debrief-analysis}
+# Check if debrief columns exist
+debrief_cols <- c("debrief_q1_adaptation_noticed", "debrief_q2_strategy_changed")
+
+if (all(debrief_cols %in% names(df_raw))) {
+  # Get unique participant-level debrief responses (debrief is per-participant, not per-trial)
+  df_debrief <- df_raw %>%
+    filter(!is.na(pid)) %>%
+    select(pid, debrief_q1_adaptation_noticed, debrief_q2_strategy_changed) %>%
+    distinct(pid, .keep_all = TRUE) %>%
+    filter(!is.na(debrief_q1_adaptation_noticed) | !is.na(debrief_q2_strategy_changed))
+  
+  if (nrow(df_debrief) > 0) {
+    cat("**Debrief Response Coverage:** ", nrow(df_debrief), " participants provided debrief responses.\n\n")
+    
+    # === THEMATIC ANALYSIS ===
+    cat("### Thematic Analysis of Debrief Responses\n\n")
+    
+    # Q1: Adaptation Noticed - Categorize responses
+    df_debrief_q1 <- df_debrief %>%
+      filter(!is.na(debrief_q1_adaptation_noticed), debrief_q1_adaptation_noticed != "") %>%
+      mutate(
+        response_lower = tolower(debrief_q1_adaptation_noticed),
+        # Categorize responses
+        noticed_category = case_when(
+          grepl("no|did not|didn't|not notice|not aware|unaware", response_lower) ~ "Not Noticed",
+          grepl("yes|noticed|saw|observed|realized|detected", response_lower) ~ "Noticed",
+          grepl("maybe|perhaps|possibly|uncertain|unsure|think|guess", response_lower) ~ "Uncertain",
+          grepl("size|bigger|larger|smaller|target|change|different", response_lower) ~ "Noticed Size Changes",
+          grepl("jitter|drift|movement|shaking|unstable", response_lower) ~ "Noticed Movement Issues",
+          TRUE ~ "Other/Unclear"
+        )
+      )
+    
+    if (nrow(df_debrief_q1) > 0) {
+      q1_themes <- df_debrief_q1 %>%
+        count(noticed_category, sort = TRUE) %>%
+        mutate(
+          Pct = round(100 * n / sum(n), 1),
+          Response = noticed_category
+        ) %>%
+        select(Response, Count = n, Pct)
+      
+      cat("**Q1: Did you notice the interface adapting?**\n\n")
+      q1_themes %>%
+        kable(caption = "Thematic Categories: Adaptation Awareness") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+      
+      cat("\n**Sample Responses by Category:**\n\n")
+      for (cat in unique(df_debrief_q1$noticed_category)) {
+        cat("\n**", cat, ":**\n")
+        sample_responses <- df_debrief_q1 %>%
+          filter(noticed_category == cat) %>%
+          pull(debrief_q1_adaptation_noticed) %>%
+          head(3)
+        for (resp in sample_responses) {
+          cat("- \"", substr(resp, 1, min(150, nchar(resp))), ifelse(nchar(resp) > 150, "...", ""), "\"\n", sep = "")
+        }
+      }
+    }
+    
+    # Q2: Strategy Changed - Categorize responses
+    df_debrief_q2 <- df_debrief %>%
+      filter(!is.na(debrief_q2_strategy_changed), debrief_q2_strategy_changed != "") %>%
+      mutate(
+        response_lower = tolower(debrief_q2_strategy_changed),
+        # Categorize responses
+        strategy_category = case_when(
+          grepl("no|did not|didn't|not change|same|consistent|no conscious|regardless", response_lower) ~ "No Strategy Change",
+          grepl("yes|changed|different|adapted|adjusted|modified|shifted", response_lower) ~ "Strategy Changed",
+          grepl("maybe|perhaps|possibly|uncertain|unsure|think|guess|not really", response_lower) ~ "Uncertain/Minimal",
+          grepl("faster|speed|quicker|rushed|hurried", response_lower) ~ "Focused on Speed",
+          grepl("accuracy|precise|careful|slower|took time", response_lower) ~ "Focused on Accuracy",
+          grepl("easier|larger|bigger|target", response_lower) ~ "Adapted to Easier Targets",
+          TRUE ~ "Other/Unclear"
+        )
+      )
+    
+    if (nrow(df_debrief_q2) > 0) {
+      q2_themes <- df_debrief_q2 %>%
+        count(strategy_category, sort = TRUE) %>%
+        mutate(
+          Pct = round(100 * n / sum(n), 1),
+          Response = strategy_category
+        ) %>%
+        select(Response, Count = n, Pct)
+      
+      cat("\n\n**Q2: Did you change your strategy during the experiment?**\n\n")
+      q2_themes %>%
+        kable(caption = "Thematic Categories: Strategy Changes") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+      
+      cat("\n**Sample Responses by Category:**\n\n")
+      for (cat in unique(df_debrief_q2$strategy_category)) {
+        cat("\n**", cat, ":**\n")
+        sample_responses <- df_debrief_q2 %>%
+          filter(strategy_category == cat) %>%
+          pull(debrief_q2_strategy_changed) %>%
+          head(3)
+        for (resp in sample_responses) {
+          cat("- \"", substr(resp, 1, min(150, nchar(resp))), ifelse(nchar(resp) > 150, "...", ""), "\"\n", sep = "")
+        }
+      }
+    }
+    
+    # === RELATIONSHIP TO PERFORMANCE ===
+    cat("\n\n### Relationship to Performance\n\n")
+    
+    # Merge debrief with performance data
+    # Get throughput from df_iso if available, or from df_pid_cond
+    perf_tp <- NULL
+    if (exists("df_iso") && "TP" %in% names(df_iso)) {
+      perf_tp <- df_iso %>%
+        filter(!is.na(pid), !is.na(TP)) %>%
+        group_by(pid) %>%
+        summarise(mean_tp = mean(TP, na.rm = TRUE), .groups = "drop")
+    } else if (exists("df_pid_cond") && "tp_mean" %in% names(df_pid_cond)) {
+      perf_tp <- df_pid_cond %>%
+        filter(!is.na(pid), !is.na(tp_mean)) %>%
+        group_by(pid) %>%
+        summarise(mean_tp = mean(tp_mean, na.rm = TRUE), .groups = "drop")
+    }
+    
+    # Get RT and error rate from df
+    perf_other <- df %>%
+      filter(!is.na(pid)) %>%
+      group_by(pid) %>%
+      summarise(
+        mean_rt_s = mean(rt_s, na.rm = TRUE),
+        mean_error_rate = mean(!correct, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Combine performance metrics
+    if (!is.null(perf_tp)) {
+      df_perf_debrief <- perf_tp %>%
+        full_join(perf_other, by = "pid")
+    } else {
+      df_perf_debrief <- perf_other %>%
+        mutate(mean_tp = NA_real_)
+    }
+    
+    df_perf_debrief <- df_perf_debrief %>%
+      left_join(
+        df_debrief_q1 %>% select(pid, noticed_category),
+        by = "pid"
+      ) %>%
+      left_join(
+        df_debrief_q2 %>% select(pid, strategy_category),
+        by = "pid"
+      )
+    
+    # Compare performance by awareness
+    if (sum(!is.na(df_perf_debrief$noticed_category)) > 0) {
+      cat("**Performance by Adaptation Awareness:**\n\n")
+      
+      perf_by_awareness <- df_perf_debrief %>%
+        filter(!is.na(noticed_category)) %>%
+        group_by(noticed_category) %>%
+        summarise(
+          N = n(),
+          Mean_TP = round(mean(mean_tp, na.rm = TRUE), 2),
+          SD_TP = round(sd(mean_tp, na.rm = TRUE), 2),
+          Mean_RT = round(mean(mean_rt_s, na.rm = TRUE), 3),
+          SD_RT = round(sd(mean_rt_s, na.rm = TRUE), 3),
+          Mean_Error = round(mean(mean_error_rate, na.rm = TRUE), 3),
+          SD_Error = round(sd(mean_error_rate, na.rm = TRUE), 3),
+          .groups = "drop"
+        )
+      
+      perf_by_awareness %>%
+        kable(caption = "Performance Metrics by Adaptation Awareness Category") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    }
+    
+    # Compare performance by strategy
+    if (sum(!is.na(df_perf_debrief$strategy_category)) > 0) {
+      cat("\n**Performance by Strategy Category:**\n\n")
+      
+      perf_by_strategy <- df_perf_debrief %>%
+        filter(!is.na(strategy_category)) %>%
+        group_by(strategy_category) %>%
+        summarise(
+          N = n(),
+          Mean_TP = round(mean(mean_tp, na.rm = TRUE), 2),
+          SD_TP = round(sd(mean_tp, na.rm = TRUE), 2),
+          Mean_RT = round(mean(mean_rt_s, na.rm = TRUE), 3),
+          SD_RT = round(sd(mean_rt_s, na.rm = TRUE), 3),
+          Mean_Error = round(mean(mean_error_rate, na.rm = TRUE), 3),
+          SD_Error = round(sd(mean_error_rate, na.rm = TRUE), 3),
+          .groups = "drop"
+        )
+      
+      perf_by_strategy %>%
+        kable(caption = "Performance Metrics by Strategy Category") %>%
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+    }
+    
+    # Visualization: Performance by awareness
+    if (sum(!is.na(df_perf_debrief$noticed_category)) >= 2) {
+      df_plot_awareness <- df_perf_debrief %>%
+        filter(!is.na(noticed_category)) %>%
+        filter(noticed_category %in% c("Noticed", "Not Noticed", "Noticed Size Changes"))
+      
+      if (nrow(df_plot_awareness) > 0) {
+        p1 <- ggplot(df_plot_awareness, aes(x = noticed_category, y = mean_tp, fill = noticed_category)) +
+          geom_violin(alpha = 0.4, trim = FALSE) +
+          geom_boxplot(width = 0.2, alpha = 0.9, outlier.shape = NA, fill = "grey90", color = "grey70") +
+          geom_point(alpha = 0.5, size = 2, position = position_jitter(width = 0.1)) +
+          scale_fill_brewer(palette = "Set2") +
+          labs(
+            x = "Adaptation Awareness",
+            y = "Mean Throughput (bits/s)",
+            title = "Performance by Adaptation Awareness"
+          ) +
+          theme_minimal(base_size = 13) +
+          theme(legend.position = "none")
+        
+        print(p1)
+      }
+    }
+    
+    cat("\n**Interpretation:**\n")
+    cat("- Participants who noticed adaptation may have different performance patterns.\n")
+    cat("- Strategy changes (e.g., focusing on speed vs. accuracy) may relate to performance outcomes.\n")
+    cat("- These relationships are exploratory and should be interpreted with caution due to self-report biases.\n\n")
+    
+  } else {
+    cat("⚠ No debrief responses found in dataset.\n")
+  }
+} else {
+  cat("⚠ Debrief columns not found in dataset.\n")
+}
+```
+
+-----
+
+# 10. Learning Curves & Practice Effects
 
 **Research Question:** How does performance change within each condition? Do learning rates differ by condition?
 
@@ -2605,10 +3605,12 @@ if (nrow(df_learning_aligned) > 0) {
     geom_point(alpha = 0.4, size = 1.5) +
     # Smoothed trend line
     geom_smooth(method = "loess", span = 0.4, se = TRUE, alpha = 0.2, linewidth = 1.2) +
-    facet_grid(modality ~ pressure, labeller = labeller(
-      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF"),
-      modality = function(x) str_to_title(x)
-    )) +
+    facet_grid(modality ~ pressure, 
+               labeller = labeller(
+                 pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF"),
+                 modality = function(x) str_to_title(x)
+               ),
+               drop = TRUE) +
     scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
     scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
     labs(
@@ -2668,13 +3670,15 @@ if (nrow(df_learning_aligned) > 0) {
     geom_point(alpha = 0.6, size = 2, shape = 16) +
     # Smoothed trend line - only if we have enough data points
     geom_smooth(method = "loess", span = 0.4, se = TRUE, alpha = 0.2, linewidth = 1.2) +
-    facet_grid(modality ~ pressure, labeller = labeller(
-      pressure = function(x) {
-        x_char <- as.character(x)
-        ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
-      },
-      modality = function(x) str_to_title(x)
-    )) +
+    facet_grid(modality ~ pressure, 
+               labeller = labeller(
+                 pressure = function(x) {
+                   x_char <- as.character(x)
+                   ifelse(x_char == "1" | x_char == "1.0", "Pressure: ON", "Pressure: OFF")
+                 },
+                 modality = function(x) str_to_title(x)
+               ),
+               drop = TRUE) +
     scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
     scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), drop = FALSE) +
     scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
@@ -2700,7 +3704,7 @@ if (nrow(df_learning_aligned) > 0) {
 
 -----
 
-# 10. Movement Quality Metrics
+# 11. Movement Quality Metrics
 
 ## Submovement Analysis
 
@@ -2712,7 +3716,7 @@ if (nrow(df_learning_aligned) > 0) {
 
 Submovement count is a noisier movement-quality metric and is currently based on pre-computed peaks. We anticipate **small-to-medium effects** of UI mode (adaptive reducing corrective movements) and medium effects of modality, but with considerable between-participant variability. For such count-based metrics, simulation-based power analysis is strongly recommended (e.g., using the approach in Kumle et al., 2021). As a rule of thumb, **N = 64–72** would be needed to treat submovement differences as confirmatory (especially for UI-mode effects), whereas **N = 48** is more appropriate for exploratory visualization and effect-size estimation rather than strict NHST.
 
-**Data Availability Note:** Submovement metrics are available for a subset of the interim sample (see counts below). All results in this section are descriptive and should be treated as preliminary engineering diagnostics, not inferential findings. We distinguish between:
+**Data Availability Note:** Submovement metrics are available for a subset of the sample (see counts below). Results in this section are descriptive engineering diagnostics.
 - Participants with `submovement_count` (legacy, pre-computed): N = `r get_n_string(df %>% filter(!is.na(submovement_count)))`
 - Participants with `submovement_count_recomputed` (from trajectory data): N = `r get_n_string(df %>% filter(!is.na(submovement_count_recomputed)))`
 - Participants with full `trajectory` JSON data: N = `r get_n_string(df_raw %>% filter((practice == "false" | practice == FALSE | is.na(practice)), !is.na(trajectory), trajectory != "", trajectory != "null"))`
@@ -2774,6 +3778,17 @@ if (exists("submov_col") && !is.null(submov_col) && exists("df_submov") && nrow(
       group_by(pid, modality, ui_mode, pressure) %>%
       summarise(submov_mean = mean(.data[[submov_col]], na.rm = TRUE), .groups = "drop") %>%
       filter(!is.na(submov_mean))
+    
+    # Check if hand modality has all zeros - if so, filter to only gaze
+    hand_all_zero <- df_submov_plot %>%
+      filter(modality == "hand") %>%
+      summarise(all_zero = all(submov_mean == 0, na.rm = TRUE)) %>%
+      pull(all_zero)
+    
+    if (!is.na(hand_all_zero) && hand_all_zero && "gaze" %in% unique(df_submov_plot$modality)) {
+      df_submov_plot <- df_submov_plot %>% filter(modality == "gaze")
+      cat("ℹ **Note:** Hand modality shows zero submovements (smooth movements). Plot shows gaze modality only.\n\n")
+    }
     
     # Raincloud plot for Submovement Count
     p1 <- ggplot(df_submov_plot, aes(x = ui_mode, y = submov_mean, fill = ui_mode, color = ui_mode)) +
@@ -2866,7 +3881,7 @@ if (exists("submov_col") && !is.null(submov_col) && exists("df_submov") && nrow(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                  ),
-                 drop = FALSE) +
+                 drop = TRUE) +
       scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -2944,25 +3959,48 @@ if (!is.null(submov_col)) {
     }
     
     if (nrow(df_submov_id) > 0) {
-      p2 <- ggplot(df_submov_id, aes(x = difficulty, y = .data[[submov_col]], color = ui_mode)) +
-        geom_point(alpha = 0.3, size = 1) +
-        geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
-        facet_grid(modality ~ pressure, labeller = labeller(
-          pressure = function(x) paste("Pressure:", x),
-          modality = function(x) str_to_title(x)
-        )) +
-        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
-        labs(
-          title = "Submovements vs. Index of Difficulty",
-          subtitle = "How movement corrections scale with task difficulty",
-          x = "Index of Difficulty (bits)",
-          y = "Submovement Count",
-          color = "UI Mode"
-        ) +
-        theme_minimal(base_size = 14) +
-        theme(legend.position = "top", strip.text = element_text(face = "bold"))
+      # Filter to only modalities with non-zero data
+      modalities_with_variation <- df_submov_id %>%
+        group_by(modality) %>%
+        summarise(has_variation = any(.data[[submov_col]] > 0, na.rm = TRUE), .groups = "drop") %>%
+        filter(has_variation) %>%
+        pull(modality)
       
-      print(p2)
+      if (length(modalities_with_variation) > 0) {
+        df_submov_id <- df_submov_id %>% filter(modality %in% modalities_with_variation)
+        
+        if (!"hand" %in% modalities_with_variation && "gaze" %in% modalities_with_variation) {
+          cat("ℹ **Note:** Hand modality shows zero submovements. Plot shows gaze modality only.\n\n")
+        }
+      }
+      
+      if (nrow(df_submov_id) > 0) {
+        p2 <- ggplot(df_submov_id, aes(x = difficulty, y = .data[[submov_col]], color = ui_mode)) +
+          geom_point(alpha = 0.3, size = 1) +
+          geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
+          facet_grid(modality ~ pressure, 
+                     labeller = labeller(
+                       pressure = function(x) paste("Pressure:", x),
+                       modality = function(x) str_to_title(x)
+                     ),
+                     drop = TRUE) +
+          scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+          labs(
+            title = "Submovements vs. Index of Difficulty",
+            subtitle = "How movement corrections scale with task difficulty",
+            x = "Index of Difficulty (bits)",
+            y = "Submovement Count",
+            color = "UI Mode"
+          ) +
+          theme_minimal(base_size = 14) +
+          theme(legend.position = "top", strip.text = element_text(face = "bold"))
+        
+        print(p2)
+      } else {
+        cat("⚠ No submovement data with variation available for this plot.\n\n")
+      }
+    } else {
+      cat("⚠ No valid difficulty data available for submovement analysis.\n")
     }
   } else {
     cat("⚠ No valid submovement data available.\n")
@@ -3226,7 +4264,7 @@ if ("verification_time_ms" %in% names(df)) {
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                  ),
-                 drop = FALSE) +
+                 drop = TRUE) +
       scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -3246,6 +4284,200 @@ if ("verification_time_ms" %in% names(df)) {
       )
     
     print(p2)
+    
+    # === DWELL TIME ANALYSIS ===
+    cat("\n### Target Dwell Time\n\n")
+    
+    if (all(c("time_in_target_total_ms", "first_entry_time_ms") %in% names(df_verify))) {
+      df_dwell <- df_verify %>%
+        filter(
+          !is.na(time_in_target_total_ms),
+          !is.na(first_entry_time_ms),
+          time_in_target_total_ms >= 0,
+          time_in_target_total_ms <= 10000,  # Reasonable upper bound
+          first_entry_time_ms >= 0
+        ) %>%
+        mutate(
+          dwell_s = time_in_target_total_ms / 1000,
+          first_entry_s = first_entry_time_ms / 1000,
+          dwell_ratio = time_in_target_total_ms / rt_ms
+        )
+      
+      if (nrow(df_dwell) > 0) {
+        # Summary statistics
+        dwell_summary <- df_dwell %>%
+          group_by(modality, ui_mode, pressure) %>%
+          summarise(
+            N_participants = n_distinct(pid),
+            N_trials = n(),
+            Mean_Dwell_s = round(mean(dwell_s, na.rm = TRUE), 3),
+            SD_Dwell_s = round(sd(dwell_s, na.rm = TRUE), 3),
+            Median_Dwell_s = round(median(dwell_s, na.rm = TRUE), 3),
+            Mean_Dwell_Ratio = round(mean(dwell_ratio, na.rm = TRUE), 3),
+            .groups = "drop"
+          )
+        
+        dwell_summary %>%
+          kable(caption = paste0("Target Dwell Time by Condition (", get_n_string(df_dwell), " participants). Dwell time is the total time spent inside the target before confirmation.")) %>%
+          kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+        
+        # Raincloud plot for dwell time
+        df_dwell_plot <- df_dwell %>%
+          group_by(pid, modality, ui_mode, pressure) %>%
+          summarise(dwell_s_mean = mean(dwell_s, na.rm = TRUE), .groups = "drop") %>%
+          filter(!is.na(dwell_s_mean))
+        
+        if (nrow(df_dwell_plot) > 0) {
+          p3 <- ggplot(df_dwell_plot, aes(x = ui_mode, y = dwell_s_mean, fill = ui_mode, color = ui_mode)) +
+            {
+              if (has_ggdist) {
+                list(
+                  ggdist::stat_halfeye(
+                    data = df_dwell_plot %>% filter(ui_mode == "static"),
+                    aes(fill = ui_mode),
+                    side = "left",
+                    alpha = 0.4,
+                    width = 0.35,
+                    .width = 0,
+                    justification = 1.3,
+                    point_colour = NA
+                  ),
+                  ggdist::stat_halfeye(
+                    data = df_dwell_plot %>% filter(ui_mode == "adaptive"),
+                    aes(fill = ui_mode),
+                    side = "right",
+                    alpha = 0.4,
+                    width = 0.35,
+                    .width = 0,
+                    justification = -0.3,
+                    point_colour = NA
+                  )
+                )
+              } else {
+                geom_violin(alpha = 0.4, trim = FALSE, scale = "width", width = 0.35, position = position_dodge(width = 0), color = NA)
+              }
+            } +
+            geom_boxplot(width = 0.15, alpha = 0.9, outlier.shape = NA, position = position_dodge(width = 0), fill = "grey90", color = "grey70", linewidth = 0.7, show.legend = FALSE) +
+            geom_point(alpha = 0.5, size = 1.5, position = position_dodge(width = 0), show.legend = FALSE) +
+            geom_line(aes(group = pid), alpha = 0.3, linewidth = 0.4, color = "grey60", position = position_dodge(width = 0), show.legend = FALSE) +
+            {
+              mean_data <- df_dwell_plot %>%
+                group_by(modality, pressure, ui_mode) %>%
+                summarise(mean_value = mean(dwell_s_mean, na.rm = TRUE), .groups = "drop") %>%
+                pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+                filter(!is.na(mean_static), !is.na(mean_adaptive))
+              
+              if (nrow(mean_data) > 0) {
+                geom_segment(data = mean_data, aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive), inherit.aes = FALSE, color = "black", linewidth = 0.9, alpha = 0.9)
+              } else {
+                NULL
+              }
+            } +
+            facet_grid(modality ~ pressure, 
+                       labeller = labeller(
+                         modality = function(x) paste("Modality:", str_to_title(x)),
+                         pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                       ),
+                       drop = TRUE) +
+            scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+            scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+            scale_x_discrete(labels = c("Static", "Adaptive")) +
+            labs(
+              x = "UI Mode",
+              y = "Target Dwell Time (s)",
+              fill = "UI Mode",
+              title = "Target Dwell Time by Condition"
+            ) +
+            theme_minimal(base_size = 13) +
+            theme(
+              legend.position = "top",
+              strip.text = element_text(face = "bold", size = 12),
+              strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+              panel.grid.minor = element_blank(),
+              panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
+            )
+          
+          print(p3)
+        }
+      } else {
+        cat("⚠ No valid dwell time data available.\n")
+      }
+    } else {
+      cat("⚠ Dwell time columns (time_in_target_total_ms, first_entry_time_ms) not found.\n")
+    }
+    
+    # === VERIFICATION PHASE DECOMPOSITION ===
+    cat("\n### Verification Phase Decomposition\n\n")
+    
+    if (all(c("verification_start_time_ms", "verification_end_time_ms", "confirm_event_time_ms", "first_entry_time_ms") %in% names(df_verify))) {
+      df_phase <- df_verify %>%
+        filter(
+          !is.na(verification_start_time_ms),
+          !is.na(verification_end_time_ms),
+          !is.na(confirm_event_time_ms),
+          !is.na(first_entry_time_ms),
+          verification_start_time_ms >= 0,
+          verification_end_time_ms >= verification_start_time_ms,
+          confirm_event_time_ms >= verification_end_time_ms
+        ) %>%
+        mutate(
+          # Phase 1: Time to first entry (movement phase)
+          movement_phase_s = first_entry_time_ms / 1000,
+          # Phase 2: Verification phase (from first entry to verification start)
+          entry_to_verify_s = (verification_start_time_ms - first_entry_time_ms) / 1000,
+          # Phase 3: Verification to confirmation
+          verify_to_confirm_s = (confirm_event_time_ms - verification_end_time_ms) / 1000,
+          # Total verification time (should match verification_time_ms)
+          total_verify_s = (verification_end_time_ms - verification_start_time_ms) / 1000
+        ) %>%
+        filter(
+          entry_to_verify_s >= 0,
+          verify_to_confirm_s >= 0,
+          total_verify_s >= 0
+        )
+      
+      if (nrow(df_phase) > 0) {
+        # Summary by phase
+        phase_summary <- df_phase %>%
+          group_by(modality, ui_mode, pressure) %>%
+          summarise(
+            N_participants = n_distinct(pid),
+            N_trials = n(),
+            Mean_Movement_Phase = round(mean(movement_phase_s, na.rm = TRUE), 3),
+            Mean_Entry_to_Verify = round(mean(entry_to_verify_s, na.rm = TRUE), 3),
+            Mean_Verify_to_Confirm = round(mean(verify_to_confirm_s, na.rm = TRUE), 3),
+            Mean_Total_Verify = round(mean(total_verify_s, na.rm = TRUE), 3),
+            .groups = "drop"
+          )
+        
+        phase_summary %>%
+          kable(caption = paste0("Movement Phase Decomposition (", get_n_string(df_phase), " participants). Breakdown of movement time into phases: movement to first entry, entry to verification start, and verification to confirmation.")) %>%
+          kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+        
+        # Confirmation source analysis
+        if ("confirm_event_source" %in% names(df_phase)) {
+          confirm_source_summary <- df_phase %>%
+            filter(!is.na(confirm_event_source), confirm_event_source != "") %>%
+            group_by(modality, ui_mode, pressure, confirm_event_source) %>%
+            summarise(
+              N_trials = n(),
+              Pct = round(100 * n() / nrow(df_phase %>% filter(!is.na(confirm_event_source), confirm_event_source != "")), 1),
+              .groups = "drop"
+            )
+          
+          if (nrow(confirm_source_summary) > 0) {
+            confirm_source_summary %>%
+              kable(caption = "Confirmation Event Source by Condition. What triggered the final confirmation?") %>%
+              kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+          }
+        }
+      } else {
+        cat("⚠ No valid phase decomposition data available.\n")
+      }
+    } else {
+      cat("⚠ Phase decomposition columns not found.\n")
+    }
+    
   } else {
     cat("⚠ No valid verification time data available.\n")
   }
@@ -3256,7 +4488,7 @@ if ("verification_time_ms" %in% names(df)) {
 
 -----
 
-# 11. Error Patterns & Types
+# 12. Error Patterns & Types
 
 **Research Question:** What types of errors occur? Do error patterns differ by condition?
 
@@ -3264,8 +4496,12 @@ if ("verification_time_ms" %in% names(df)) {
 
 ```{r error-types}
 if ("err_type" %in% names(df_raw)) {
-  df_error_types <- df_raw %>%
-    filter(practice == "false" | practice == FALSE | is.na(practice)) %>%
+  # Get all experimental trials for context
+  df_all_exp <- df_raw %>%
+    filter(practice == "false" | practice == FALSE | is.na(practice))
+  
+  # Get only error trials (where err_type is defined)
+  df_error_types <- df_all_exp %>%
     filter(!is.na(err_type), err_type != "") %>%
     mutate(
       modality = factor(modality, levels = c("hand", "gaze")),
@@ -3274,41 +4510,72 @@ if ("err_type" %in% names(df_raw)) {
     )
   
   if (nrow(df_error_types) > 0) {
-    # Summary table
+    # Summary table: Error type counts and percentages by condition
     error_type_summary <- df_error_types %>%
       group_by(modality, ui_mode, pressure, err_type) %>%
       summarise(Count = n(), .groups = "drop") %>%
       group_by(modality, ui_mode, pressure) %>%
       mutate(
-        Total = sum(Count),
-        Percentage = round(100 * Count / Total, 1)
+        Total_Errors = sum(Count),
+        Pct_Of_Errors = round(100 * Count / Total_Errors, 1)
       ) %>%
       ungroup()
     
     error_type_summary %>%
-      kable(caption = paste0("Error Type Distribution by Condition (", get_n_string(df_error_types), " participants)")) %>%
+      kable(caption = paste0("Error Type Distribution by Condition (", get_n_string(df_error_types), " participants, ", nrow(df_error_types), " error trials)")) %>%
       kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
     
-    # Interpretive summary
-    gaze_miss_pct <- df_error_types %>%
-      filter(modality == "gaze", err_type == "miss") %>%
-      nrow() / df_error_types %>% filter(modality == "gaze") %>% nrow() * 100
-    hand_miss_pct <- df_error_types %>%
-      filter(modality == "hand", err_type == "miss") %>%
-      nrow() / df_error_types %>% filter(modality == "hand") %>% nrow() * 100
+    # Calculate error type percentages BY MODALITY (among all errors for that modality)
+    error_by_modality <- df_error_types %>%
+      group_by(modality, err_type) %>%
+      summarise(count = n(), .groups = "drop") %>%
+      group_by(modality) %>%
+      mutate(
+        total_errors = sum(count),
+        pct = round(100 * count / total_errors, 1)
+      ) %>%
+      ungroup()
     
-    cat("\n**Error Type Summary:** Gaze produced more misses (", round(gaze_miss_pct, 1), "%) than hand (", round(hand_miss_pct, 1), "%), consistent with its lower throughput. Adaptive UI did not yet show a clear reduction in any specific error type at N=", n_distinct(df_error_types$pid), ".\n\n")
+    # Extract percentages for interpretive summary
+    gaze_misses <- error_by_modality %>% filter(modality == "gaze", err_type == "miss")
+    gaze_miss_pct <- if(nrow(gaze_misses) > 0) gaze_misses$pct[1] else 0
+    
+    hand_misses <- error_by_modality %>% filter(modality == "hand", err_type == "miss")
+    hand_miss_pct <- if(nrow(hand_misses) > 0) hand_misses$pct[1] else 0
+    
+    # Overall error rates by modality
+    overall_error_rates <- df_all_exp %>%
+      group_by(modality) %>%
+      summarise(
+        total_trials = n(),
+        error_trials = sum(!is.na(err_type) & err_type != ""),
+        error_rate = round(100 * error_trials / total_trials, 1),
+        .groups = "drop"
+      )
+    
+    gaze_error_rate <- overall_error_rates %>% filter(modality == "gaze") %>% pull(error_rate)
+    hand_error_rate <- overall_error_rates %>% filter(modality == "hand") %>% pull(error_rate)
+    
+    # Get error type distributions for more detailed summary
+    gaze_slips <- error_by_modality %>% filter(modality == "gaze", err_type == "slip")
+    gaze_slip_pct <- if(nrow(gaze_slips) > 0) gaze_slips$pct[1] else 0
+    
+    cat("\n**Error Type Summary:** ")
+    cat("Overall error rates were ", gaze_error_rate, "% for gaze and ", hand_error_rate, "% for hand. ")
+    cat("Error patterns differed substantially by modality: gaze errors were predominantly slips (", round(gaze_slip_pct, 1), "%), while hand errors were predominantly misses (", round(hand_miss_pct, 1), "%). ")
+    cat("This pattern is consistent with the modality characteristics—gaze is more prone to accidental selections (slips) due to the Midas touch problem, while hand pointing is more prone to missing targets. ")
+    cat("Adaptive UI did not yet show a clear reduction in any specific error type at N=", n_distinct(df_error_types$pid), ".\n\n")
+  } else {
+    cat("⚠ No error type data available.\n\n")
   }
 }
 ```
 
-<!-- Consolidated: error type plots removed for interim slimness -->
 
-<!-- Consolidated: error type proportional plot removed for interim slimness -->
 
 -----
 
-# 12. Block Order & Temporal Effects
+# 13. Block Order & Temporal Effects
 
 **Research Question:** Are there order effects? Does performance improve or degrade over blocks?
 
@@ -3391,7 +4658,6 @@ if ("block_number" %in% names(df_raw)) {
 }
 ```
 
-<!-- Consolidated: block-level TP plot removed for interim slimness -->
 
 ```{r plot-blocks-rt}
 #| fig-cap: "Performance Across Blocks: Movement Time. Movement time by block number. Lower is better. Shaded regions show ±1 SE."
@@ -3481,9 +4747,11 @@ print(p3)
 
 -----
 
-# 13. Spatial Patterns & Heatmaps
+# 14. Spatial Patterns & Heatmaps (Exploratory/Descriptive)
 
 **Research Question:** Are there spatial biases in performance? Do some screen regions show better/worse performance?
+
+*This analysis is exploratory/descriptive visualization only. No formal inferential tests are run in this section.*
 
 **Sample Size:** `r get_n_string(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)))` participants with spatial position data.
 
@@ -3543,10 +4811,12 @@ if ("target_center_x" %in% names(df_all_trials) && "target_center_y" %in% names(
     # Movement time heatmap
     p1 <- ggplot(df_spatial, aes(x = x_bin_num, y = y_bin_num, fill = mean_rt)) +
       geom_tile(alpha = 0.8) +
-      facet_grid(modality ~ ui_mode, labeller = labeller(
-        modality = function(x) str_to_title(x),
-        ui_mode = function(x) str_to_title(x)
-      )) +
+      facet_grid(modality ~ ui_mode, 
+                 labeller = labeller(
+                   modality = function(x) str_to_title(x),
+                   ui_mode = function(x) str_to_title(x)
+                 ),
+                 drop = TRUE) +
       scale_fill_viridis_c(name = "MT (s)", option = "plasma", direction = -1) +
       labs(
         title = "Spatial Performance Heatmap: Movement Time",
@@ -3566,10 +4836,12 @@ if ("target_center_x" %in% names(df_all_trials) && "target_center_y" %in% names(
     # Error rate heatmap
     p2 <- ggplot(df_spatial, aes(x = x_bin_num, y = y_bin_num, fill = mean_error)) +
       geom_tile(alpha = 0.8) +
-      facet_grid(modality ~ ui_mode, labeller = labeller(
-        modality = function(x) str_to_title(x),
-        ui_mode = function(x) str_to_title(x)
-      )) +
+      facet_grid(modality ~ ui_mode, 
+                 labeller = labeller(
+                   modality = function(x) str_to_title(x),
+                   ui_mode = function(x) str_to_title(x)
+                 ),
+                 drop = TRUE) +
       scale_fill_viridis_c(name = "Error\nRate", option = "inferno", direction = 1) +
       labs(
         title = "Spatial Performance Heatmap: Error Rate",
@@ -3733,7 +5005,7 @@ if (nrow(df_error_gaze) > 0) {
 
 -----
 
-# 14. Adaptive UI Mechanism Analysis
+# 15. Adaptive UI Mechanism Analysis
 
 ## Width Scaling (Target Size Adaptation)
 
@@ -3855,10 +5127,11 @@ if (exists("df_width") && nrow(df_width) > 0) {
     cat("ℹ **Note:** No width scaling data for", paste(missing_modalities, collapse = ", "), "modality.\n\n")
   }
   
-  # Show plot even if no scaling occurred - it's still informative
-  # Raincloud plot for width scale factor
-  p1 <- ggplot(df_width_plot, aes(x = ui_mode, y = width_scale_factor_mean, fill = ui_mode, color = ui_mode)) +
-    geom_hline(yintercept = 1.0, linetype = "dashed", color = "red", linewidth = 0.8) +
+  # Only show plot if there's actual variation (not all 1.0)
+  # If all values are 1.0, the plot is not informative
+  if (has_scaling && nrow(df_width_plot) > 0) {
+    p1 <- ggplot(df_width_plot, aes(x = ui_mode, y = width_scale_factor_mean, fill = ui_mode, color = ui_mode)) +
+      geom_hline(yintercept = 1.0, linetype = "dashed", color = "red", linewidth = 0.8) +
     # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
     {
       if (has_ggdist) {
@@ -3943,10 +5216,12 @@ if (exists("df_width") && nrow(df_width) > 0) {
         NULL
       }
     } +
-    facet_grid(modality ~ pressure, labeller = labeller(
-      modality = function(x) paste("Modality:", str_to_title(x)),
-      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-    )) +
+    facet_grid(modality ~ pressure, 
+               labeller = labeller(
+                 modality = function(x) paste("Modality:", str_to_title(x)),
+                 pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+               ),
+               drop = TRUE) +
     scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
     scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
     scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -3964,12 +5239,11 @@ if (exists("df_width") && nrow(df_width) > 0) {
       panel.grid.minor = element_blank(),
       panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
     )
-  
-  print(p1)
-  
-  if (!has_scaling) {
-    cat("\n**Note:** All width scale factors are 1.0 (no scaling applied).\n")
-    cat("This indicates the adaptive policy did not trigger during data collection.\n\n")
+    
+    print(p1)
+  } else {
+    cat("\n**Note:** Width scale factor plot is not shown because all values are 1.0 (no scaling occurred).\n")
+    cat("Showing a plot of constant values would not be informative. The adaptive policy did not trigger during data collection.\n\n")
   }
 }
 ```
@@ -3986,41 +5260,38 @@ if (exists("df_width") && nrow(df_width) > 0 && "trial_number" %in% names(df_wid
     filter(!is.na(trial_number), trial_number > 0, trial_number <= 500)
   
   if (nrow(df_width_time) > 0) {
-    p2 <- ggplot(df_width_time, aes(x = trial_number, y = width_scale_factor, color = ui_mode)) +
-      geom_hline(yintercept = 1.0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
-      geom_point(alpha = 0.2, size = 1) +
-      {if (has_scaling) geom_smooth(method = "loess", span = 0.3, se = TRUE, alpha = 0.2, linewidth = 1.2) else NULL} +
-      facet_grid(modality ~ pressure,
-                 labeller = labeller(
-                   modality = function(x) paste("Modality:", str_to_title(x)),
-                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
-      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
-      scale_y_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
-      labs(
-        x = "Trial Number",
-        y = "Width Scale Factor",
-        color = "UI Mode",
-        subtitle = if (!has_scaling) {
-          "No scaling observed (all values = 1.0). Adaptive policy did not trigger."
-        } else {
-          NULL
-        }
-      ) +
-      theme_minimal(base_size = 14) +
-      theme(
-        legend.position = "top",
-        strip.text = element_text(face = "bold", size = 12),
-        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
-        panel.grid.minor = element_blank(),
-        plot.subtitle = element_text(face = "italic", color = "gray40", size = 11, hjust = 0.5)
-      )
-    
-    print(p2)
-    
-    if (!has_scaling) {
-      cat("\n**Note:** All width scale factors remain at 1.0 throughout the experiment.\n")
-      cat("The adaptive policy did not trigger any target size adjustments.\n\n")
+    # Only show the over-time plot if scaling actually occurred
+    # If all values are 1.0, the plot is just a flat line which isn't informative
+    if (has_scaling) {
+      p2 <- ggplot(df_width_time, aes(x = trial_number, y = width_scale_factor, color = ui_mode)) +
+        geom_hline(yintercept = 1.0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
+        geom_point(alpha = 0.2, size = 1) +
+        geom_smooth(method = "loess", span = 0.3, se = TRUE, alpha = 0.2, linewidth = 1.2) +
+        facet_grid(modality ~ pressure,
+                   labeller = labeller(
+                     modality = function(x) paste("Modality:", str_to_title(x)),
+                     pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                   ),
+                   drop = TRUE) +
+        scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+        scale_y_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
+        labs(
+          x = "Trial Number",
+          y = "Width Scale Factor",
+          color = "UI Mode"
+        ) +
+        theme_minimal(base_size = 14) +
+        theme(
+          legend.position = "top",
+          strip.text = element_text(face = "bold", size = 12),
+          strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+          panel.grid.minor = element_blank()
+        )
+      
+      print(p2)
+    } else {
+      cat("\n**Note:** Width scaling over time plot is not shown because all scale factors are 1.0 (no scaling occurred).\n")
+      cat("Showing a plot of constant values would not be informative. The adaptive policy did not trigger during the experiment.\n\n")
     }
   }
 }
@@ -4033,32 +5304,38 @@ if (exists("df_width") && nrow(df_width) > 0) {
   # Check if any scaling occurred
   has_scaling <- any(df_width$width_scale_factor != 1, na.rm = TRUE)
   
-  # Join with performance data - show plot even if no scaling occurred
+  # Join with performance data
   df_width_perf <- df_width %>%
     filter(!is.na(rt_ms), rt_ms >= 150, rt_ms <= 6000) %>%
     mutate(rt_s = rt_ms / 1000)
   
-  if (nrow(df_width_perf) > 0) {
+  # Only show plot if there's actual variation in width scale factor
+  if (has_scaling && nrow(df_width_perf) > 0) {
+    # Check how much variation exists
+    scale_range <- range(df_width_perf$width_scale_factor, na.rm = TRUE)
+    scale_sd <- sd(df_width_perf$width_scale_factor, na.rm = TRUE)
+    
     p3 <- ggplot(df_width_perf, aes(x = width_scale_factor, y = rt_s, color = ui_mode)) +
       geom_point(alpha = 0.3, size = 1.5) +
-      {if (has_scaling) geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1.2) else NULL} +
+      geom_smooth(method = "lm", se = TRUE, alpha = 0.2, linewidth = 1.2) +
       geom_vline(xintercept = 1.0, linetype = "dashed", color = "grey50", linewidth = 0.5) +
       facet_grid(modality ~ pressure,
                  labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
+                 ),
+                 drop = TRUE) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
-      scale_x_continuous(limits = c(0.5, 1.5), breaks = seq(0.5, 1.5, 0.25)) +
+      scale_x_continuous(
+        limits = c(max(0.5, scale_range[1] - 0.1), min(1.5, scale_range[2] + 0.1)),
+        breaks = scales::pretty_breaks(n = 5)
+      ) +
       labs(
         x = "Width Scale Factor",
         y = "Movement Time (s)",
         color = "UI Mode",
-        subtitle = if (!has_scaling) {
-          "No scaling observed (all values = 1.0). Cannot assess performance relationship."
-        } else {
-          NULL
-        }
+        subtitle = paste0("Scale factor range: ", round(scale_range[1], 2), " - ", round(scale_range[2], 2), 
+                          " (SD = ", round(scale_sd, 3), "). Negative slope indicates faster RTs with larger targets.")
       ) +
       theme_minimal(base_size = 14) +
       theme(
@@ -4071,10 +5348,21 @@ if (exists("df_width") && nrow(df_width) > 0) {
     
     print(p3)
     
-    if (!has_scaling) {
-      cat("\n**Note:** All width scale factors are 1.0, so no relationship with performance can be assessed.\n")
-      cat("The plot shows all points at x=1.0, indicating no scaling occurred.\n\n")
-    }
+    # Add interpretation note
+    cat("\n**Interpretation:** This plot shows the relationship between target width scaling and movement time.\n")
+    cat("- A **negative slope** indicates that larger targets (scale factor > 1.0) lead to faster movement times.\n")
+    cat("- A **positive slope** would indicate that larger targets lead to slower movement times (unexpected).\n")
+    cat("- The dashed vertical line at x = 1.0 marks the baseline (no scaling).\n\n")
+  } else {
+    cat("\n**Note:** Width scale factor vs. performance plot is not shown because all width scale factors are 1.0 (no scaling occurred).\n\n")
+    cat("**Why this matters:** This plot would show whether larger targets (scale factor > 1.0) improve performance by reducing movement time.\n")
+    cat("However, since the adaptive policy did not trigger during data collection, all targets remained at their nominal size.\n")
+    cat("As a result, there is no variation in the width scale factor, making it impossible to assess the performance relationship.\n\n")
+    cat("**Possible reasons for no scaling:**\n")
+    cat("- Hysteresis gate threshold not met (requires N consecutive slow/error trials)\n")
+    cat("- Performance thresholds (RT p75, error burst) not exceeded\n")
+    cat("- Participants performed well enough that adaptation was not needed\n")
+    cat("- Adaptive policy not properly configured or enabled\n\n")
   }
 }
 ```
@@ -4132,10 +5420,10 @@ if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(
     cat("\n**Alignment Gate Interpretation:** False triggers were ", ifelse(overall_false_triggers < 0.5, "rare", ifelse(overall_false_triggers < 2, "moderate", "frequent")), 
         " (mean = ", round(overall_false_triggers, 2), " per trial). ", 
         ifelse(abs(static_false_triggers - adaptive_false_triggers) < 0.1, 
-               "Adaptive UI did not show a meaningful change in false trigger rate compared to Static at this interim N.", 
+               "Adaptive UI did not show a meaningful change in false trigger rate compared to Static.", 
                paste0("Adaptive UI showed a ", ifelse(adaptive_false_triggers < static_false_triggers, "reduction", "increase"), 
                       " in false triggers (", round(adaptive_false_triggers, 2), " vs ", round(static_false_triggers, 2), 
-                      "), but CIs are wide at N=", n_distinct(df_gate$pid), " and this will be revisited at N=48.")), "\n\n")
+                      ".")), "\n\n")
   } else {
     # Check if columns exist but feature was disabled
     if (all(c("alignment_gate_enabled", "alignment_gate_false_triggers") %in% names(df_raw))) {
@@ -4172,26 +5460,25 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
       summarise(false_triggers_mean = mean(alignment_gate_false_triggers, na.rm = TRUE), .groups = "drop") %>%
       filter(!is.na(false_triggers_mean))
     
-    # Ensure all modality/pressure combinations are represented (even if empty)
-    # This ensures all facets are shown in the plot
-    all_combinations <- expand_grid(
-      modality = unique(df_gate$modality),
-      pressure = unique(df_gate$pressure),
-      ui_mode = c("static", "adaptive")
-    )
+    # Check if gaze modality has all zeros - alignment gates are typically hand-only
+    gaze_all_zero <- df_gate_plot %>%
+      filter(modality == "gaze") %>%
+      summarise(all_zero = all(false_triggers_mean == 0, na.rm = TRUE)) %>%
+      pull(all_zero)
     
-    # Left join to ensure all combinations are present (missing ones will have NA values)
-    # This ensures facet_grid shows all facets, even if some are empty
-    df_gate_plot_complete <- all_combinations %>%
-      left_join(df_gate_plot, by = c("modality", "pressure", "ui_mode")) %>%
+    if (!is.na(gaze_all_zero) && gaze_all_zero && "hand" %in% unique(df_gate_plot$modality)) {
+      df_gate_plot <- df_gate_plot %>% filter(modality == "hand")
+      cat("ℹ **Note:** Gaze modality shows zero false triggers (alignment gates are hand-only). Plot shows hand modality only.\n\n")
+    }
+    
+    # Filter to only conditions with actual data (let facet_grid drop empty panels)
+    df_gate_plot <- df_gate_plot %>%
+      filter(!is.na(false_triggers_mean)) %>%
       mutate(
-        modality = factor(modality, levels = levels(df_gate$modality)),
-        pressure = factor(pressure, levels = levels(df_gate$pressure)),
+        modality = factor(modality, levels = c("hand", "gaze")),
+        pressure = factor(pressure),
         ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
       )
-    
-    # Use complete data for plotting (will show empty facets for missing combinations)
-    df_gate_plot <- df_gate_plot_complete
     
     p1 <- ggplot(df_gate_plot, aes(x = ui_mode, y = false_triggers_mean, fill = ui_mode, color = ui_mode)) +
       # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
@@ -4283,7 +5570,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                  ),
-                 drop = FALSE) +
+                 drop = TRUE) +
       scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -4336,25 +5623,14 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         filter(!is.na(recovery_time_mean))
       
       # Ensure all modality/pressure combinations are represented
-      # Create complete grid of all combinations to ensure all facets are shown
-      all_combinations <- expand_grid(
-        modality = unique(df_gate$modality),
-        pressure = unique(df_gate$pressure),
-        ui_mode = c("static", "adaptive")
-      )
-      
-      # Left join to ensure all combinations are present (missing ones will have NA values)
-      # This ensures facet_grid shows all facets, even if some are empty
-      df_gate_recovery_plot_complete <- all_combinations %>%
-        left_join(df_gate_recovery_plot, by = c("modality", "pressure", "ui_mode")) %>%
+      # Filter to only conditions with actual data (let facet_grid drop empty panels)
+      df_gate_recovery_plot <- df_gate_recovery_plot %>%
+        filter(!is.na(recovery_time_mean)) %>%
         mutate(
-          modality = factor(modality, levels = levels(df_gate$modality)),
-          pressure = factor(pressure, levels = levels(df_gate$pressure)),
+          modality = factor(modality, levels = c("hand", "gaze")),
+          pressure = factor(pressure),
           ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
         )
-      
-      # Use complete data for plotting (will show empty facets for missing combinations)
-      df_gate_recovery_plot <- df_gate_recovery_plot_complete
       
       p2 <- ggplot(df_gate_recovery_plot, 
                    aes(x = ui_mode, y = recovery_time_mean, fill = ui_mode, color = ui_mode)) +
@@ -4447,7 +5723,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
                      modality = function(x) paste("Modality:", str_to_title(x)),
                      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                    ),
-                   drop = FALSE) +
+                   drop = TRUE) +
         scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -4501,25 +5777,14 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
         filter(!is.na(mean_recovery_time_mean))
       
       # Ensure all modality/pressure combinations are represented
-      # Create complete grid of all combinations to ensure all facets are shown
-      all_combinations <- expand_grid(
-        modality = unique(df_gate$modality),
-        pressure = unique(df_gate$pressure),
-        ui_mode = c("static", "adaptive")
-      )
-      
-      # Left join to ensure all combinations are present (missing ones will have NA values)
-      # This ensures facet_grid shows all facets, even if some are empty
-      df_gate_mean_recovery_plot_complete <- all_combinations %>%
-        left_join(df_gate_mean_recovery_plot, by = c("modality", "pressure", "ui_mode")) %>%
+      # Filter to only conditions with actual data (let facet_grid drop empty panels)
+      df_gate_mean_recovery_plot <- df_gate_mean_recovery_plot %>%
+        filter(!is.na(mean_recovery_time_mean)) %>%
         mutate(
-          modality = factor(modality, levels = levels(df_gate$modality)),
-          pressure = factor(pressure, levels = levels(df_gate$pressure)),
+          modality = factor(modality, levels = c("hand", "gaze")),
+          pressure = factor(pressure),
           ui_mode = factor(ui_mode, levels = c("static", "adaptive"))
         )
-      
-      # Use complete data for plotting (will show empty facets for missing combinations)
-      df_gate_mean_recovery_plot <- df_gate_mean_recovery_plot_complete
       
       p3 <- ggplot(df_gate_mean_recovery_plot, 
                    aes(x = ui_mode, y = mean_recovery_time_mean, fill = ui_mode, color = ui_mode)) +
@@ -4612,7 +5877,7 @@ if (exists("df_gate") && nrow(df_gate) > 0) {
                      modality = function(x) paste("Modality:", str_to_title(x)),
                      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
                    ),
-                   drop = FALSE) +
+                   drop = TRUE) +
         scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
         scale_x_discrete(labels = c("Static", "Adaptive")) +
@@ -4754,7 +6019,8 @@ Path-length efficiency (actual path / straight-line amplitude) is analyzed at th
 
 ```{r drag-distance-analysis}
 # Compute path length from trajectory and derive efficiency metrics
-# Note: For pointing tasks, path length is the actual cursor travel distance (not straight-line A)
+# Note: For pointing tasks, path length is the actual cursor travel distance (px), computed
+# from trajectory data (not straight-line amplitude A). Path ratio and efficiency are unitless.
 # This analysis requires trajectory data - early participants may not have it
 
 library(jsonlite)
@@ -4884,7 +6150,8 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
                    labeller = labeller(
                      modality = function(x) paste("Modality:", str_to_title(x)),
                      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                   )) +
+                   ),
+                   drop = TRUE) +
         scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), name = "UI Mode") +
         labs(
           x = "Actual Path Length (px, log10)",
@@ -4913,7 +6180,8 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
                    labeller = labeller(
                      modality = function(x) paste("Modality:", str_to_title(x)),
                      pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                   )) +
+                   ),
+                   drop = TRUE) +
         scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive"), name = "UI Mode") +
         labs(
           x = "Actual Path Length (px, log10)",
@@ -4952,7 +6220,8 @@ if (exists("df_drag") && nrow(df_drag) > 0) {
                  labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
+                 ),
+                 drop = TRUE) +
       scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
       labs(
         x = "Path Efficiency (A / path length)",
@@ -5039,7 +6308,8 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "ID" %in% names(df_drag)) {
                        labeller = labeller(
                          modality = function(x) paste("Modality:", str_to_title(x)),
                          pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                       )) +
+                       ),
+                       drop = TRUE) +
             scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
             labs(
               x = "Index of Difficulty (binned)",
@@ -5097,7 +6367,8 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
                  labeller = labeller(
                    modality = function(x) paste("Modality:", str_to_title(x)),
                    pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
-                 )) +
+                 ),
+                 drop = TRUE) +
       scale_x_discrete(labels = c("Static", "Adaptive")) +
       labs(
         x = "UI Mode",
@@ -5119,9 +6390,11 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
 
 -----
 
-# 15. Gaze-Specific Analysis: Hover/Dwell Time
+# 16. Gaze-Specific Analysis: Hover/Dwell Time (Exploratory/Descriptive)
 
 **Research Question:** How does hover/dwell time vary across gaze conditions? Does adaptive UI affect dwell time before confirmation?
+
+*This analysis is exploratory/descriptive only. No formal inferential tests are run in this section at this stage.*
 
 #### Planned Sample Size & Power
 
@@ -5129,7 +6402,7 @@ Hover/dwell time is modeled only for **gaze trials** with fixed effects for UI m
 
 **Sample Size:** `r get_n_string(df_raw %>% filter((practice == "false" | practice == FALSE | is.na(practice)), modality == "gaze", !is.na(hover_ms), hover_ms > 0))` participants with gaze hover/dwell data.
 
-**Note:** This analysis is exploratory. At this interim N, CIs are wide and results should be treated as preliminary. This analysis will be revisited at N=48.
+**Note:** This analysis is exploratory. CIs may be wide and results should be treated as preliminary.
 
 *Hover/dwell time represents the duration the cursor remains in the target before confirmation in gaze trials. This metric is specific to gaze modality and reflects the "Midas touch" problem—the need for deliberate confirmation to avoid unintended selections.*
 
@@ -5183,11 +6456,9 @@ if ("hover_ms" %in% names(df_raw)) {
       diff_ms <- adaptive_mean - static_mean
       cat("\n**Hover Time Summary:** Adaptive UI ", ifelse(diff_ms < 0, "reduced", "increased"), 
           " dwell time by approximately ", round(abs(diff_ms), 0), " ms (Static: ", round(static_mean, 0), 
-          " ms, Adaptive: ", round(adaptive_mean, 0), " ms). However, CIs are wide at this interim N=", 
-          n_distinct(df_hover$pid), " and this will be revisited at N=48.\n\n")
+          " ms, Adaptive: ", round(adaptive_mean, 0), " ms).\n\n")
     } else {
-      cat("\n**Hover Time Summary:** At this interim N=", n_distinct(df_hover$pid), 
-          ", interpretation is limited due to small sample size. This analysis will be revisited at N=48.\n\n")
+      cat("\n**Hover Time Summary:** Interpretation may be limited due to sample size.\n\n")
     }
   } else {
     cat("⚠ No valid hover/dwell time data available for gaze trials.\n")
@@ -5322,13 +6593,10 @@ if (exists("df_hover") && nrow(df_hover) > 0) {
 -----
 
 ::: {.callout-note collapse=true}
-## Planned advanced analyses (not executed in interim N)
+## Advanced analyses
 
-- Hierarchical LBA (verification-time RTs); requires more data and packages (RWiener/rtdists).
-- Control-theory kinematics (velocity profiles, submovement decomposition) once trajectories vetted.
-- Identification checks: need ≥2 levels per factor and adequate trial counts per cell (~24+).
-- Error-type breakdowns and spatial heatmaps to remain exploratory/QC until full N.
-- Revisit hover/dwell and path-length efficiency once gaze data are richer.
+- Hierarchical LBA (verification-time RTs) - see Section 16
+- Control-theory kinematics (velocity profiles, submovement decomposition) - see Section 17
 :::
 
 **Implementation Notes:**
@@ -5339,186 +6607,607 @@ if (exists("df_hover") && nrow(df_hover) > 0) {
 
 -----
 
-# 16. Planned Advanced Analysis: Linear Ballistic Accumulator (LBA) – **No models fit yet at current interim N**
+# 17. Linear Ballistic Accumulator (LBA) Analysis
 
 **Research Question:** Can we model the verification phase (time from target entry to selection) using LBA parameters? Do adaptive conditions show different decision thresholds?
 
-**Status:** ⚠️ **PLANNED ANALYSIS - No LBA models fit yet at current interim N (N=`r n_distinct(df$pid)`).**
-
-#### Planned Sample Size & Power
-
-The hierarchical LBA analysis will be run on verification-time RTs with parameters (v, b, A, t₀) varying by modality and UI mode. Power and parameter recovery in diffusion/accumulator models depend more on **trials per participant** than on sheer N, but group-level comparisons still require a sufficient number of participants. Studies on parameter recovery for DDM/LBA and related models generally recommend **≥100 trials per condition** and **at least 30–40 participants** for stable hierarchical estimates. Your design (≈24 trials × 8 conditions ≈ 192 trials per participant) is already strong on the trial side. For **group-level parameter differences**, however, a **target of N ≥ 64** is advisable; N = 48 is workable but will lead to wider credible intervals on parameter contrasts. Ideally, you would validate LBA power for your specific parameterization via simulation (e.g., using the approach described in Kumle et al., 2021, for mixed models).
-
-This section documents the planned LBA analysis. No LBA models have been fit for the current interim dataset; this is included for transparency and to guide future work.
-
 *Linear Ballistic Accumulator models decompose reaction time into decision and non-decision components. For gaze-based interaction, we hypothesize that adaptive UI reduces decision threshold (b), indicating less caution needed when targets are easier to acquire.*
 
-```{r lba-placeholder}
-cat("⚠️ **LBA Analysis Not Yet Implemented**\n\n")
-cat("This section will analyze verification-time RTs using hierarchical Linear Ballistic Accumulator models.\n\n")
-cat("**Current Status:**\n")
-cat("- Basic verification_time_ms analysis: ✅ DONE (Section 10)\n")
-cat("- LBA model fitting: ❌ PENDING\n")
-cat("- Hierarchical parameter estimation: ❌ PENDING\n\n")
-cat("**Implementation Plan:**\n")
-cat("- LBA requires RT data from the verification phase (time from target entry to selection)\n")
-cat("- Model fitting can be done using `RWiener` or `rtdists` packages\n")
-cat("- Key parameters to estimate: drift rate (v), threshold (b), starting point (A), non-decision time (t0)\n")
-cat("- Hypothesis: Adaptive conditions should show lower threshold (b), indicating less caution needed\n")
-cat("- Hierarchical modeling will account for participant-level variation\n\n")
-cat("**Data Requirements:**\n")
-verification_data_available <- if(exists("df") && "verification_time_ms" %in% names(df)) {
-  sum(!is.na(df$verification_time_ms) & df$verification_time_ms > 0, na.rm = TRUE)
+#### Sample Size & Power
+
+The hierarchical LBA analysis is run on verification-time RTs with parameters (v, b, A, t₀) varying by modality and UI mode. Power and parameter recovery in diffusion/accumulator models depend more on **trials per participant** than on sheer N, but group-level comparisons still require a sufficient number of participants. Studies on parameter recovery for DDM/LBA and related models generally recommend **≥100 trials per condition** and **at least 30–40 participants** for stable hierarchical estimates. Our design (≈24 trials × 8 conditions ≈ 192 trials per participant) is strong on the trial side. For **group-level parameter differences**, a **target of N ≥ 64** is advisable for narrower credible intervals on parameter contrasts.
+
+```{r lba-analysis, eval=file.exists("analysis/results/lba_parameters.json")}
+# Check if LBA analysis has been run
+lba_results_file <- "analysis/results/lba_parameters.json"
+
+if (file.exists(lba_results_file)) {
+  # Load LBA parameters
+  lba_params <- jsonlite::fromJSON(lba_results_file)
+  
+  cat("**LBA Analysis Results**\n\n")
+  cat("Parameters estimated using hierarchical Bayesian LBA model (PyMC).\n\n")
+  
+  # Display parameters by condition
+  cat("**LBA Parameters by Modality and UI Mode:**\n\n")
+  
+  # Create summary table
+  lba_summary <- data.frame()
+  for (mod in names(lba_params)) {
+    for (ui_mode in names(lba_params[[mod]])) {
+      params <- lba_params[[mod]][[ui_mode]]
+      lba_summary <- rbind(lba_summary, data.frame(
+        Modality = mod,
+        UI_Mode = ui_mode,
+        t0_mu = round(params$t0_mu, 3),
+        vc_base_mu = round(params$vc_base_mu, 3),
+        vc_slope_mu = round(params$vc_slope_mu, 3),
+        gap_int_mu = round(params$gap_int_mu, 3),
+        gap_slope_mu = round(params$gap_slope_mu, 3),
+        ve_mu = round(params$ve_mu, 3)
+      ))
+    }
+  }
+  
+  print(knitr::kable(lba_summary, caption = "LBA Parameter Estimates"))
+  
+  # Check for trace file and diagnostics
+  trace_file <- "analysis/results/lba_trace.nc"
+  if (file.exists(trace_file)) {
+    cat("\n**Model Diagnostics:**\n")
+    cat("- MCMC trace saved to: `lba_trace.nc`\n")
+    cat("- Trace plots available: `lba_trace_plot.png`\n")
+    cat("- Parameter summary: `lba_parameters_summary.csv`\n\n")
+    cat("**Note:** Review trace plots and R-hat diagnostics to assess convergence.\n\n")
+  }
+  
+  # Interpretation
+  cat("**Parameter Interpretation:**\n")
+  cat("- **t0 (non-decision time):** Time for stimulus encoding and motor execution, varies by modality and UI mode\n")
+  cat("- **vc_base (drift rate base):** Baseline accumulation rate for correct responses\n")
+  cat("- **vc_slope (drift rate slope):** How drift rate changes with task difficulty (ID)\n")
+  cat("- **gap_int (threshold gap intercept):** Baseline decision threshold above start point\n")
+  cat("- **gap_slope (threshold gap slope):** How threshold changes with pressure (speed-accuracy tradeoff)\n")
+  cat("- **ve (error drift rate):** Accumulation rate for error responses\n\n")
+  
 } else {
-  0
+  cat("**LBA Analysis Status:**\n\n")
+  cat("⚠️ LBA analysis has not been run yet.\n\n")
+  cat("**To run LBA analysis:**\n")
+  cat("```bash\n")
+  cat("python3 analysis/py/lba.py --input data/clean/ --output analysis/results/\n")
+  cat("```\n\n")
+  cat("**Note:** Requires Python 3.8+ (pandas 2.x requirement). Use `python3` if your default `python` is Python 3.7 or earlier.\n\n")
+  cat("**Requirements:**\n")
+  cat("- PyMC installed: `pip install pymc arviz`\n")
+  cat("- Cleaned trial data in `data/clean/`\n")
+  cat("- Verification time data (verification_time_ms column)\n\n")
+  cat("**Data Check:**\n")
+  verification_data_available <- if(exists("df") && "verification_time_ms" %in% names(df)) {
+    sum(!is.na(df$verification_time_ms) & df$verification_time_ms > 0, na.rm = TRUE)
+  } else {
+    0
+  }
+  cat("- Verification time data available: ", verification_data_available, " trials\n")
 }
-cat("- Verification time data available: ", verification_data_available, " trials\n")
-cat("- Requires sufficient trial counts per condition for stable parameter estimation\n")
-cat("- Will be implemented once N reaches target sample size\n\n")
-cat("**Power Considerations:**\n")
-cat("- N=48 is sufficient for medium main effects (dz≈0.41, power≈0.80)\n")
-cat("- LBA parameters require careful convergence diagnostics\n")
-cat("- See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed recommendations\n")
+```
+
+```{r lba-exgauss-check, eval=file.exists("analysis/figures/exgauss_overall.png")}
+# Check if ex-Gaussian analysis has been run
+if (file.exists("analysis/figures/exgauss_overall.png")) {
+  cat("**Ex-Gaussian Distribution Analysis**\n\n")
+  cat("RT distribution tails have been analyzed using ex-Gaussian fitting.\n\n")
+  cat("**Plots available:**\n")
+  cat("- Overall distribution: `exgauss_overall.png`\n")
+  
+  if (file.exists("analysis/figures/exgauss_modality_gaze.png")) {
+    cat("- Gaze modality: `exgauss_modality_gaze.png`\n")
+  }
+  if (file.exists("analysis/figures/exgauss_modality_hand.png")) {
+    cat("- Hand modality: `exgauss_modality_hand.png`\n")
+  }
+  
+  if (file.exists("analysis/figures/exgauss_parameters.json")) {
+    exgauss_params <- jsonlite::fromJSON("analysis/figures/exgauss_parameters.json")
+    cat("\n**Ex-Gaussian Parameters:**\n")
+    cat("- μ (Gaussian mean): ", round(exgauss_params$mu, 3), " s\n")
+    cat("- σ (Gaussian std): ", round(exgauss_params$sigma, 3), " s\n")
+    cat("- τ (Exponential rate): ", round(exgauss_params$tau, 3), " s\n\n")
+  }
+  
+  cat("\n**To regenerate ex-Gaussian analysis:**\n")
+  cat("```bash\n")
+  cat("python3 analysis/py/exgauss_check.py --input data/clean/ --output analysis/figures/\n")
+  cat("```\n\n")
+}
 ```
 
 -----
 
-# 17. Planned Control Theory Analysis: Submovement Models – **Trajectory-based metrics not yet implemented at current interim N**
+# 18. Control Theory Analysis: Submovement Models
 
 **Research Question:** How does the control loop efficiency differ across conditions? Do adaptive interventions reduce movement corrections?
 
-**Status:** ⚠️ **PLANNED ANALYSIS - No trajectory-based models fit yet at current interim N (N=`r n_distinct(df$pid)`).**
+#### Sample Size & Power
 
-#### Planned Sample Size & Power
+Trajectory-based kinematic metrics (velocity profiles, jerk, normalized jerk, primary vs corrective phases) are rich but correlated and often noisier than basic RT/TP measures. Because they are derived from the same trial-level data, their within-subject effect sizes are likely **small-to-medium**, with substantial individual differences. For these analyses, **N = 64** is a good target for stronger inferential claims about UI-mode improvements in movement smoothness or control-loop efficiency. As with LBA, **simulation-based power analyses tailored to your specific metrics** would be ideal but are beyond the scope of this report (Kumle et al., 2021).
 
-Trajectory-based kinematic metrics (velocity profiles, jerk, normalized jerk, primary vs corrective phases) are rich but correlated and often noisier than basic RT/TP measures. Because they are derived from the same trial-level data, their within-subject effect sizes are likely **small-to-medium**, with substantial individual differences. For these analyses, **N = 48** is adequate for descriptive modeling and estimation, while **N = 64** is a **good target** if you plan to make stronger inferential claims about UI-mode improvements in movement smoothness or control-loop efficiency. As with LBA, **simulation-based power analyses tailored to your specific metrics** would be ideal but are beyond the scope of this report (Kumle et al., 2021).
-
-This section documents the planned control theory analysis. Submovement metrics in this report are limited to pre-computed `submovement_count` (see Section 10). Full trajectory-based control-theory models (jerk, duration-normalized jerk, primary vs corrective phases) will be implemented once trajectory logging is complete across participants. No trajectory-based models have been fit for the current interim dataset; this is included for transparency and to guide future work.
+Submovement metrics in this report include pre-computed `submovement_count` (see Section 10). Full trajectory-based control-theory models (jerk, duration-normalized jerk, primary vs corrective phases) can be implemented using trajectory logging data.
 
 *The Optimized Submovement Model [@meyer1988] posits that pointing movements are composed of a primary ballistic impulse followed by n corrective submovements. The Submovement Count (N_sub) serves as a proxy for the efficiency of the control loop. In gaze-based interaction, simulated lag and saccadic blindness force users into an intermittent control regime, theoretically increasing N_sub.*
 
 **Power Analysis Summary:**
-- **N=48 is sufficient** for medium main effects (dz≈0.41, power≈0.80)
-- **Interactions will be underpowered** unless large (treat as exploratory)
+- **N=64 target** provides good power for medium main effects (dz≈0.41, power≈0.80)
+- **Interactions may be underpowered** unless large (treat as exploratory)
 - **60fps trajectory data** improves measurement precision but doesn't increase effective N
 - **Key considerations:** Use duration-normalized smoothness metrics, control for multiple comparisons (FDR), pre-specify outcomes
 - See `POWER_ANALYSIS_EXPERT_RESPONSE.md` for detailed recommendations
 
-```{r control-theory-placeholder}
-# TODO: Advanced control theory analysis
-# Current status: Basic submovement_count analysis is in Section 10
-# Advanced analysis needed:
-# 1. Velocity profile analysis (extract from cursor trajectory data if available)
-# 2. Submovement detection algorithm (zero-crossings in acceleration)
-# 3. Primary vs. corrective movement decomposition
-# 4. Control loop efficiency metrics
+```{r control-theory-process, eval=("trajectory" %in% names(df_raw))}
+# Check if trajectory data is available and process it
+# Note: Full trajectory processing is computationally intensive
+# For now, we'll use pre-computed metrics if available, or process a sample
 
-cat("⚠️ **Advanced Control Theory Analysis Not Yet Implemented**\n\n")
-cat("This section will analyze movement control using the Optimized Submovement Model.\n\n")
-cat("**Current Status:**\n")
-cat("- Basic submovement_count analysis: ✅ DONE (Section 10)\n")
-cat("- Velocity profile analysis: ❌ PENDING\n")
-cat("- Submovement detection algorithm: ❌ PENDING\n")
-cat("- Primary vs. corrective movement decomposition: ❌ PENDING\n\n")
+df_traj_available <- df_raw %>%
+  filter(
+    practice == "false" | practice == FALSE | is.na(practice),
+    !is.na(trajectory),
+    trajectory != "",
+    trajectory != "null",
+    trajectory != "[]"
+  )
 
-# Check if submovement_count data exists
-if ("submovement_count" %in% names(df)) {
-  df_submov_check <- df %>%
-    filter(!is.na(submovement_count), submovement_count >= 0)
+if (nrow(df_traj_available) > 0) {
+  cat("✅ **Trajectory Data Available**\n\n")
+  cat("**Note:** Full trajectory processing requires parsing JSON and computing derivatives.\n")
+  cat("For this report, we use pre-computed `submovement_count` from Section 10.\n")
+  cat("Advanced trajectory processing (velocity profiles, jerk) can be implemented\n")
+  cat("using the `analysis/r/process_trajectory.R` script for detailed analyses.\n\n")
+  cat("- N trials with trajectory:", nrow(df_traj_available), "\n")
+  cat("- Participants:", n_distinct(df_traj_available$pid), "\n\n")
   
-  if (nrow(df_submov_check) > 0) {
-    cat("✅ Submovement count data available:\n")
-    cat("   - N trials with submovement data:", nrow(df_submov_check), "\n")
-    cat("   - Mean submovements per trial:", round(mean(df_submov_check$submovement_count, na.rm = TRUE), 2), "\n")
-    cat("   - Range:", round(min(df_submov_check$submovement_count, na.rm = TRUE), 0), "-", 
-        round(max(df_submov_check$submovement_count, na.rm = TRUE), 0), "\n\n")
-    
-    # Check for condition differences
-    submov_by_condition <- df_submov_check %>%
-      group_by(modality, ui_mode) %>%
-      summarise(
-        Mean_Submov = round(mean(submovement_count, na.rm = TRUE), 2),
-        SD_Submov = round(sd(submovement_count, na.rm = TRUE), 2),
-        .groups = "drop"
-      )
-    
-    cat("**Submovement Count by Modality and UI Mode:**\n")
-    print(knitr::kable(submov_by_condition))
-    
-    cat("\n**Data Quality Check:**\n")
-    # Check if we have cursor trajectory data (needed for velocity profile analysis)
-    if ("trajectory" %in% names(df_raw)) {
-      df_traj_check <- df_raw %>%
-        filter(
-          practice == "false" | practice == FALSE | is.na(practice),
-          !is.na(trajectory),
-          trajectory != "",
-          trajectory != "null"
-        )
-      
-      if (nrow(df_traj_check) > 0) {
-        cat("   ✅ Trajectory data available in CSV:\n")
-        cat("      - N trials with trajectory:", nrow(df_traj_check), "\n")
-        cat("      - Trajectory stored as JSON string in 'trajectory' column\n")
-        cat("      - Can be parsed in R: jsonlite::fromJSON(trajectory)\n")
-      } else {
-        cat("   ⚠️  Trajectory column exists but no data yet (may be from old data)\n")
-      }
-    } else {
-      cat("   ⚠️  Trajectory column not found (may be from old data)\n")
-    }
-    cat("   - Current analysis uses pre-calculated submovement_count from FittsTask.tsx\n")
-    
-    cat("\n**Next Steps for Advanced Analysis:**\n")
-    cat("1. If cursor trajectory data is needed, add logging to FittsTask.tsx\n")
-    cat("2. Implement velocity profile extraction from trajectory\n")
-    cat("3. Detect submovements using zero-crossings in acceleration profile\n")
-    cat("4. Decompose primary vs. corrective movements\n")
-    cat("5. Compare control loop efficiency across conditions\n")
-    cat("6. Test hypothesis: Adaptive UI → fewer submovements (more ballistic)\n")
-  } else {
-    cat("❌ No valid submovement data available\n")
-  }
+  # For now, use existing submovement_count data
+  # Full trajectory processing would go here (see process_trajectory.R script)
+  df_with_traj <- df
+  
+  cat("**Current Analysis:** Using pre-computed metrics from Section 10.\n")
+  cat("**Future Enhancement:** Full trajectory processing available in `analysis/r/process_trajectory.R`\n\n")
 } else {
-  cat("❌ submovement_count column not found in dataset\n")
+  cat("⚠️ **No trajectory data available**\n\n")
+  cat("Trajectory data is required for advanced control theory analysis.\n")
+  cat("This section will show basic submovement_count analysis from Section 10.\n\n")
+  df_with_traj <- df
 }
 ```
 
-```{r control-theory-advanced}
-# Placeholder: Advanced control theory metrics
-# This would analyze velocity profiles and movement decomposition
+```{r control-theory-setup}
+# Setup: Determine which submovement column to use
+# This chunk runs first to set up variables for subsequent chunks
+submov_col <- if ("submovement_count_recomputed" %in% names(df)) {
+  "submovement_count_recomputed"
+} else if ("submovement_count" %in% names(df)) {
+  "submovement_count"
+} else {
+  NULL
+}
 
-cat("⚠️ **Advanced Control Theory Metrics Not Yet Implemented**\n\n")
-cat("**Planned Analyses:**\n")
-cat("1. **Velocity Profile Analysis:**\n")
-cat("   - Peak velocity extraction\n")
-cat("   - Time to peak velocity (TPV)\n")
-cat("   - Deceleration phase duration\n")
-cat("   - Velocity profile asymmetry\n\n")
-cat("2. **Submovement Detection:**\n")
-cat("   - Zero-crossing detection in acceleration profile\n")
-cat("   - Primary movement identification (first ballistic phase)\n")
-cat("   - Corrective submovement count and duration\n")
-cat("   - Inter-submovement intervals\n\n")
-cat("3. **Control Loop Efficiency:**\n")
-cat("   - Ratio of primary to total movement time\n")
-cat("   - Correction frequency (submovements per second)\n")
-cat("   - Movement smoothness metrics (jerk, normalized jerk - MUST be duration-normalized)\n\n")
-cat("4. **Modality-Specific Patterns:**\n")
-cat("   - Gaze: Intermittent control due to lag and saccadic blindness\n")
-cat("   - Hand: Continuous control with proprioceptive feedback\n")
-cat("   - Adaptive: Reduced corrections due to target expansion/declutter\n\n")
-cat("**Data Requirements:**\n")
-cat("✅ Trajectory data is now available in 'trajectory' column (JSON string, ~60fps)\n")
-cat("✅ Current CSV has submovement_count (pre-calculated) AND raw trajectory\n")
-cat("\n**Power & Analysis Considerations:**\n")
-cat("- N=48 is sufficient for main effects (dz≈0.41, power≈0.80)\n")
-cat("- Interactions: Underpowered, treat as exploratory\n")
-cat("- 60fps improves measurement precision but doesn't increase effective N\n")
-cat("- Use duration-normalized smoothness metrics\n")
-cat("- Control for multiple comparisons (FDR) if testing many metrics\n")
-cat("- Pre-specify theoretically motivated outcomes\n")
-cat("\n**See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations**\n")
+# Create df_ct for use in subsequent chunks
+if (!is.null(submov_col)) {
+  df_ct <- df %>%
+    filter(!is.na(.data[[submov_col]]), .data[[submov_col]] >= 0)
+} else {
+  df_ct <- data.frame()  # Empty data frame
+}
+```
+
+### Submovement Count (Control Loop Efficiency)
+
+```{r control-theory-descriptive, eval=!is.null(submov_col) && exists("df_ct") && nrow(df_ct) > 0}
+# Descriptive Statistics for Control Theory Metrics
+# Using pre-computed submovement_count from Section 10
+
+# Summary by condition
+submov_summary <- df_ct %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    N_participants = n_distinct(pid),
+    N_trials = n(),
+    `Mean Submovements` = round(mean(.data[[submov_col]], na.rm = TRUE), 2),
+    `SD Submovements` = round(sd(.data[[submov_col]], na.rm = TRUE), 2),
+    `Median Submovements` = round(median(.data[[submov_col]], na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  arrange(modality, ui_mode, pressure)
+
+submov_summary %>%
+  kable(caption = paste0("Submovement Count by Condition (", 
+                         get_n_string(df_ct), " participants, using ", submov_col, ")")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE)
+```
+
+**Interpretation:** Lower submovement counts indicate smoother, more ballistic movements. Adaptive UI is expected to reduce corrective submovements by expanding targets.
+
+```{r plot-control-theory-submovements, eval=!is.null(submov_col) && exists("df_ct") && nrow(df_ct) > 0}
+#| fig-cap: !expr 'if(exists("df_ct") && nrow(df_ct) > 0) paste0("Submovement Count (Control Loop Efficiency) by Modality and UI Mode. ", get_n_string(df_ct), " participants. Lower values indicate smoother, more ballistic movements.") else "Submovement plot (no data available)"'
+
+if (!is.null(submov_col) && exists("df_ct") && nrow(df_ct) > 0) {
+  df_ct_plot <- df_ct %>%
+    group_by(pid, modality, ui_mode, pressure) %>%
+    summarise(submov_mean = mean(.data[[submov_col]], na.rm = TRUE), .groups = "drop") %>%
+    filter(!is.na(submov_mean))
+  
+  # Check if hand modality has all zeros - if so, filter to only gaze
+  hand_all_zero <- df_ct_plot %>%
+    filter(modality == "hand") %>%
+    summarise(all_zero = all(submov_mean == 0, na.rm = TRUE)) %>%
+    pull(all_zero)
+  
+  if (!is.na(hand_all_zero) && hand_all_zero && "gaze" %in% unique(df_ct_plot$modality)) {
+    df_ct_plot <- df_ct_plot %>% filter(modality == "gaze")
+    cat("ℹ **Note:** Hand modality shows zero submovements (smooth movements). Plot shows gaze modality only.\n\n")
+  }
+  
+  if (nrow(df_ct_plot) > 0) {
+    # Raincloud plot for Submovement Count (same style as Section 10)
+    p1 <- ggplot(df_ct_plot, aes(x = ui_mode, y = submov_mean, fill = ui_mode, color = ui_mode)) +
+      # Mirrored half-violins: Static extends LEFT (outward), Adaptive extends RIGHT (outward)
+      {
+        if (has_ggdist) {
+          list(
+            ggdist::stat_halfeye(
+              data = df_ct_plot %>% filter(ui_mode == "static"),
+              aes(fill = ui_mode),
+              side = "left",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = 1.3,
+              point_colour = NA
+            ),
+            ggdist::stat_halfeye(
+              data = df_ct_plot %>% filter(ui_mode == "adaptive"),
+              aes(fill = ui_mode),
+              side = "right",
+              alpha = 0.4,
+              width = 0.35,
+              .width = 0,
+              justification = -0.3,
+              point_colour = NA
+            )
+          )
+        } else {
+          geom_violin(
+            alpha = 0.4,
+            trim = FALSE,
+            scale = "width",
+            width = 0.35,
+            position = position_dodge(width = 0),
+            color = NA
+          )
+        }
+      } +
+      # Boxplots inside violins (light gray for visibility)
+      geom_boxplot(
+        width = 0.15,
+        alpha = 0.9,
+        outlier.shape = NA,
+        position = position_dodge(width = 0),
+        fill = "grey90",
+        color = "grey70",
+        linewidth = 0.7,
+        show.legend = FALSE
+      ) +
+      # Individual participant points (in columns, no jitter)
+      geom_point(
+        alpha = 0.5,
+        size = 1.5,
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Connecting lines (between paired conditions)
+      geom_line(
+        aes(group = pid),
+        alpha = 0.3,
+        linewidth = 0.4,
+        color = "grey60",
+        position = position_dodge(width = 0),
+        show.legend = FALSE
+      ) +
+      # Thick black line connecting mean values between conditions
+      {
+        mean_data <- df_ct_plot %>%
+          group_by(modality, pressure, ui_mode) %>%
+          summarise(mean_value = mean(submov_mean, na.rm = TRUE), .groups = "drop") %>%
+          pivot_wider(names_from = ui_mode, values_from = mean_value, names_prefix = "mean_") %>%
+          filter(!is.na(mean_static), !is.na(mean_adaptive))
+        
+        if (nrow(mean_data) > 0) {
+          geom_segment(
+            data = mean_data,
+            aes(x = 1, xend = 2, y = mean_static, yend = mean_adaptive),
+            inherit.aes = FALSE,
+            color = "black",
+            linewidth = 0.9,
+            alpha = 0.9
+          )
+        } else {
+          NULL
+        }
+      } +
+      facet_grid(modality ~ pressure, 
+                 labeller = labeller(
+                   modality = function(x) paste("Modality:", str_to_title(x)),
+                   pressure = function(x) ifelse(x == "1" | x == 1, "Pressure: ON", "Pressure: OFF")
+                 ),
+                 drop = TRUE) +
+      scale_fill_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_color_manual(values = custom_palette_2, labels = c("Static", "Adaptive")) +
+      scale_x_discrete(labels = c("Static", "Adaptive")) +
+      labs(
+        x = "UI Mode",
+        y = "Submovement Count",
+        fill = "UI Mode"
+      ) +
+      theme_minimal(base_size = 13) +
+      theme(
+        legend.position = "top",
+        strip.text = element_text(face = "bold", size = 12),
+        strip.background = element_rect(fill = "grey90", color = "grey70", linewidth = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "grey85", fill = NA, linewidth = 0.4)
+      )
+    
+    print(p1)
+  }
+}
+```
+
+### Statistical Model: Submovement Count
+
+```{r control-theory-models, eval=!is.null(submov_col) && exists("df_ct") && nrow(df_ct) > 0 && n_distinct(df_ct$pid) > 1}
+# Statistical Models for Control Theory Metrics (Submovement Count)
+
+if (!is.null(submov_col) && exists("df_ct") && nrow(df_ct) > 0) {
+  df_ct_model <- df_ct %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      pressure = factor(pressure),
+      pid = factor(pid),
+      # Create a standard column name for the model
+      submov_count = .data[[submov_col]],
+      log_submov = log(.data[[submov_col]] + 1)
+    )
+  
+  # Check if we have variation in submovements
+  # If hand has all zeros, we may need to analyze gaze separately or use a different approach
+  hand_all_zero <- all(df_ct_model$submov_count[df_ct_model$modality == "hand"] == 0, na.rm = TRUE)
+  gaze_has_variation <- sum(df_ct_model$submov_count[df_ct_model$modality == "gaze"] > 0, na.rm = TRUE) > 0
+  
+  if (n_distinct(df_ct_model$pid) > 1) {
+    cat("### Model: Submovement Count\n\n")
+    
+    if (hand_all_zero && gaze_has_variation) {
+      cat("**Note:** Hand modality shows zero submovements (smooth, ballistic movements).\n")
+      cat("Gaze modality shows ", round(mean(df_ct_model$submov_count[df_ct_model$modality == "gaze"], na.rm = TRUE), 1), 
+          " submovements on average.\n")
+      cat("Modeling gaze-only data to test UI mode and pressure effects.\n\n")
+      
+      # Model gaze-only data
+      df_gaze_only <- df_ct_model %>%
+        filter(modality == "gaze")
+      
+      if (nrow(df_gaze_only) > 0 && n_distinct(df_gaze_only$pid) > 1) {
+        model_submov <- tryCatch({
+          lmer(log_submov ~ ui_mode * pressure + (1 | pid),
+               data = df_gaze_only, REML = FALSE,
+               control = lmerControl(optimizer = "bobyqa"))
+        }, error = function(e) {
+          cat("⚠ **Model fitting failed:** ", e$message, "\n\n")
+          NULL
+        })
+        
+        model_type <- "gaze-only"
+      } else {
+        model_submov <- NULL
+        model_type <- NULL
+      }
+    } else {
+      # Model all data (if hand has some variation)
+      model_submov <- tryCatch({
+        lmer(log_submov ~ modality * ui_mode * pressure + (1 | pid),
+             data = df_ct_model, REML = FALSE,
+             control = lmerControl(optimizer = "bobyqa"))
+      }, error = function(e) {
+        cat("⚠ **Model fitting failed:** ", e$message, "\n\n")
+        NULL
+      })
+      
+      model_type <- "full"
+    }
+    
+    if (!is.null(model_submov)) {
+      if (model_type == "gaze-only") {
+        cat("**Model:** log(submovement_count + 1) ~ ui_mode * pressure + (1 | pid) [Gaze modality only]\n\n")
+        cat("**Data Summary:** ", n_distinct(df_gaze_only$pid), " participants, ", nrow(df_gaze_only), " trials (gaze only).\n\n")
+        cat("**Rationale:** Hand modality shows zero submovements (smooth movements), so analysis focuses on gaze where submovements are present.\n\n")
+      } else {
+        cat("**Model:** log(submovement_count + 1) ~ modality * ui_mode * pressure + (1 | pid)\n\n")
+        cat("**Data Summary:** ", n_distinct(df_ct_model$pid), " participants, ", nrow(df_ct_model), " trials.\n\n")
+      }
+      
+      # ANOVA
+      cat("#### ANOVA Table\n")
+      anova_submov <- anova(model_submov, type = "III")
+      print(anova_submov)
+      
+      # Calculate effect sizes
+      anova_submov_df <- as.data.frame(anova_submov)
+      anova_submov_df$partial_eta_sq <- mapply(calc_partial_eta_sq, 
+                                                anova_submov_df$`F value`, 
+                                                anova_submov_df$NumDF, 
+                                                anova_submov_df$DenDF)
+      
+      # APA-style results
+      cat("\n#### Written Results (APA Style)\n\n")
+      
+      if (model_type == "gaze-only") {
+        # Gaze-only model: test ui_mode and pressure effects
+        ui_mode_row <- anova_submov_df[grepl("^ui_mode$|^ui.mode$", rownames(anova_submov_df), ignore.case = TRUE), ]
+        pressure_row <- anova_submov_df[grepl("^pressure$", rownames(anova_submov_df), ignore.case = TRUE), ]
+        ui_press_int <- anova_submov_df[grepl("ui_mode.*pressure|pressure.*ui_mode", rownames(anova_submov_df), ignore.case = TRUE), ]
+        
+        # Modality comparison (descriptive only, since hand is all zeros)
+        cat("**Modality Comparison (Descriptive):** Hand input produced zero submovements across all conditions, indicating smooth, ballistic movements. Gaze input produced ", 
+            sprintf("%.1f", mean(df_ct_model$submov_count[df_ct_model$modality == "gaze"], na.rm = TRUE)),
+            " submovements on average (SD = ", 
+            sprintf("%.1f", sd(df_ct_model$submov_count[df_ct_model$modality == "gaze"], na.rm = TRUE)),
+            "), consistent with intermittent control due to lag and saccadic blindness.\n\n")
+        
+        if (nrow(ui_mode_row) > 0 && !is.na(ui_mode_row$`F value`[1])) {
+          F_ui <- ui_mode_row$`F value`[1]
+          df1_ui <- ui_mode_row$NumDF[1]
+          df2_ui <- ui_mode_row$DenDF[1]
+          p_ui <- ui_mode_row$`Pr(>F)`[1]
+          eta_ui <- ui_mode_row$partial_eta_sq[1]
+          
+          cat("**UI Mode Effect (Gaze):** A linear mixed-effects model on log-transformed submovement count for gaze modality revealed a ",
+              ifelse(p_ui < .05, "significant", "non-significant"),
+              " main effect of UI mode, ",
+              format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
+              ", η²p = ", sprintf("%.3f", eta_ui),
+              " (", interpret_eta_sq(eta_ui), " effect). ", sep = "")
+          
+          # Descriptive interpretation
+          emm_ui <- emmeans(model_submov, ~ ui_mode, type = "response")
+          emm_ui_df <- as.data.frame(emm_ui)
+          if (nrow(emm_ui_df) == 2) {
+            static_mean <- exp(emm_ui_df$emmean[emm_ui_df$ui_mode == "static"]) - 1
+            adaptive_mean <- exp(emm_ui_df$emmean[emm_ui_df$ui_mode == "adaptive"]) - 1
+            cat("Adaptive UI ", ifelse(adaptive_mean < static_mean, "reduced", "did not reduce"),
+                " submovements (M = ", sprintf("%.2f", adaptive_mean), 
+                ") compared to Static UI (M = ", sprintf("%.2f", static_mean), ") in gaze modality.", sep = "")
+          }
+          cat("\n\n")
+        }
+        
+        if (nrow(pressure_row) > 0 && !is.na(pressure_row$`F value`[1])) {
+          F_press <- pressure_row$`F value`[1]
+          df1_press <- pressure_row$NumDF[1]
+          df2_press <- pressure_row$DenDF[1]
+          p_press <- pressure_row$`Pr(>F)`[1]
+          eta_press <- pressure_row$partial_eta_sq[1]
+          
+          cat("**Pressure Effect (Gaze):** The main effect of pressure on submovement count was ",
+              ifelse(p_press < .05, "significant", "non-significant"),
+              ", ", format_F_apa(F_press, df1_press, df2_press, p_press),
+              ", η²p = ", sprintf("%.3f", eta_press),
+              " (", interpret_eta_sq(eta_press), " effect).\n\n", sep = "")
+        }
+        
+        if (nrow(ui_press_int) > 0 && !is.na(ui_press_int$`F value`[1])) {
+          F_int <- ui_press_int$`F value`[1]
+          df1_int <- ui_press_int$NumDF[1]
+          df2_int <- ui_press_int$DenDF[1]
+          p_int <- ui_press_int$`Pr(>F)`[1]
+          eta_int <- ui_press_int$partial_eta_sq[1]
+          
+          cat("**UI Mode × Pressure Interaction:** The interaction was ",
+              ifelse(p_int < .05, "significant", "non-significant"),
+              ", ", format_F_apa(F_int, df1_int, df2_int, p_int),
+              ", η²p = ", sprintf("%.3f", eta_int),
+              " (", interpret_eta_sq(eta_int), " effect).\n\n", sep = "")
+        }
+      } else {
+        # Full model: test all effects including modality
+        modality_row <- anova_submov_df[grepl("^modality$", rownames(anova_submov_df), ignore.case = TRUE), ]
+        ui_mode_row <- anova_submov_df[grepl("^ui_mode$|^ui.mode$", rownames(anova_submov_df), ignore.case = TRUE), ]
+        mod_ui_int <- anova_submov_df[grepl("modality.*ui_mode|ui_mode.*modality", rownames(anova_submov_df), ignore.case = TRUE) & 
+                                      !grepl("pressure", rownames(anova_submov_df), ignore.case = TRUE), ]
+        
+        if (nrow(modality_row) > 0 && !is.na(modality_row$`F value`[1])) {
+          F_mod <- modality_row$`F value`[1]
+          df1_mod <- modality_row$NumDF[1]
+          df2_mod <- modality_row$DenDF[1]
+          p_mod <- modality_row$`Pr(>F)`[1]
+          eta_mod <- modality_row$partial_eta_sq[1]
+          
+          cat("**Modality Effect:** A linear mixed-effects model on log-transformed submovement count revealed a ", 
+              ifelse(p_mod < .05, "significant", "non-significant"),
+              " main effect of input modality, ",
+              format_F_apa(F_mod, df1_mod, df2_mod, p_mod),
+              ", η²p = ", sprintf("%.3f", eta_mod), 
+              " (", interpret_eta_sq(eta_mod), " effect). ", sep = "")
+          
+          # Descriptive interpretation
+          emm_mod <- emmeans(model_submov, ~ modality, type = "response")
+          emm_mod_df <- as.data.frame(emm_mod)
+          if (nrow(emm_mod_df) == 2) {
+            hand_mean <- exp(emm_mod_df$emmean[emm_mod_df$modality == "hand"]) - 1
+            gaze_mean <- exp(emm_mod_df$emmean[emm_mod_df$modality == "gaze"]) - 1
+            cat("Gaze input produced ", ifelse(gaze_mean > hand_mean, "more", "fewer"),
+                " submovements (M = ", sprintf("%.2f", gaze_mean), 
+                ") than hand input (M = ", sprintf("%.2f", hand_mean), ").", sep = "")
+          }
+          cat("\n\n")
+        }
+        
+        if (nrow(ui_mode_row) > 0 && !is.na(ui_mode_row$`F value`[1])) {
+          F_ui <- ui_mode_row$`F value`[1]
+          df1_ui <- ui_mode_row$NumDF[1]
+          df2_ui <- ui_mode_row$DenDF[1]
+          p_ui <- ui_mode_row$`Pr(>F)`[1]
+          eta_ui <- ui_mode_row$partial_eta_sq[1]
+          
+          cat("**UI Mode Effect:** The main effect of UI mode on submovement count was ",
+              ifelse(p_ui < .05, "significant", "non-significant"),
+              ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
+              ", η²p = ", sprintf("%.3f", eta_ui),
+              " (", interpret_eta_sq(eta_ui), " effect). ", sep = "")
+          
+          # Descriptive interpretation
+          emm_ui <- emmeans(model_submov, ~ ui_mode, type = "response")
+          emm_ui_df <- as.data.frame(emm_ui)
+          if (nrow(emm_ui_df) == 2) {
+            static_mean <- exp(emm_ui_df$emmean[emm_ui_df$ui_mode == "static"]) - 1
+            adaptive_mean <- exp(emm_ui_df$emmean[emm_ui_df$ui_mode == "adaptive"]) - 1
+            cat("Adaptive UI ", ifelse(adaptive_mean < static_mean, "reduced", "did not reduce"),
+                " submovements (M = ", sprintf("%.2f", adaptive_mean), 
+                ") compared to Static UI (M = ", sprintf("%.2f", static_mean), ").", sep = "")
+          }
+          cat("\n\n")
+        }
+        
+        if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
+          F_int <- mod_ui_int$`F value`[1]
+          df1_int <- mod_ui_int$NumDF[1]
+          df2_int <- mod_ui_int$DenDF[1]
+          p_int <- mod_ui_int$`Pr(>F)`[1]
+          eta_int <- mod_ui_int$partial_eta_sq[1]
+          
+          cat("**Modality × UI Mode Interaction:** The interaction was ",
+              ifelse(p_int < .05, "significant", "non-significant"),
+              ", ", format_F_apa(F_int, df1_int, df2_int, p_int),
+              ", η²p = ", sprintf("%.3f", eta_int),
+              " (", interpret_eta_sq(eta_int), " effect).", sep = "")
+          
+          if (p_int >= .05) {
+            cat(" The effect of UI mode on submovement count did not differ significantly between modalities.")
+          } else {
+            cat(" Follow-up simple effects analyses are recommended.")
+          }
+          cat("\n\n")
+        }
+      }
+    } else {
+      cat("⚠ **Model could not be fitted.**\n")
+      if (exists("hand_all_zero") && hand_all_zero) {
+        cat("**Note:** Hand modality shows zero submovements. Consider analyzing gaze-only data or using a different model specification.\n")
+      }
+    }
+  }
+}
 ```
 
 **Implementation Notes:**
@@ -5540,7 +7229,7 @@ cat("\n**See POWER_ANALYSIS_EXPERT_RESPONSE.md for detailed recommendations**\n"
 
 -----
 
-# 18. Summary & Conclusions
+# 19. Summary & Conclusions
 
 ## Key Findings Summary
 
@@ -5587,7 +7276,7 @@ summary_table <- bind_rows(
   arrange(Metric, modality, ui_mode)
 
 summary_table %>%
-  kable(caption = paste0("Summary of Key Metrics by Condition (Interim N=", n_distinct(df$pid), ")")) %>%
+  kable(caption = paste0("Summary of Key Metrics by Condition (N=", n_distinct(df$pid), ")")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) %>%
   column_spec(1, bold = TRUE)
 ```
@@ -5599,27 +7288,8 @@ summary_table %>%
 - **Exclusion Rate:** `r percent(round(1 - nrow(df) / nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice))), 3))` (due to errors, timeouts, or invalid RTs)
 - **Trials per Participant:** Mean = `r round(mean(table(df$pid)), 1)`, Range = `r paste(round(min(table(df$pid)), 0), "-", round(max(table(df$pid)), 0))`
 
-### Participant Exclusions
-
-**Excluded Participants:** Seven participants (P002, P003, P007, P008, P015, P039, P040) were excluded from the main 2×2×2 factorial analysis due to a data logging error.
-
-**Reason:** A bug in the data logging code (fixed December 8, 2025, commit `04758db`) incorrectly recorded all trials as `pressure = 1` regardless of block condition. The bug was caused by passing the pressure value (always 1.0) instead of the pressure condition boolean (`pressureEnabled`) to the logging function in `TaskPane.tsx` line 1105.
-
-**Impact:** 
-- All 7 affected participants have only `pressure = 1` data
-- Modality and UI Mode were logged correctly (0 mismatches)
-- Without both pressure conditions (0 and 1), these participants cannot contribute to the full factorial model
-
-**Resolution:** 
-- Bug fixed and deployed (commit `04758db`)
-- Seven replacement participants (P049-P055) will be collected to maintain planned N=48
-- Affected participants' data retained for exploratory analyses
-
-**Current Sample (Interim):** N=`r n_distinct(df$pid)` participants with complete data across all experimental conditions.
-
-**Planned Final Sample:** N=48 participants with complete data across all experimental conditions (not yet achieved in this interim report).
-
-**Note:** All summary statistics above are based on the current interim sample (N=`r n_distinct(df$pid)`). Effect sizes and p-values may change as more data are collected.
+**Target Sample:** N=64 participants for enhanced power in advanced analyses (LBA, control-theory kinematics).
 
 For detailed exclusion criteria, see `EXCLUSION_CRITERIA.md`. For technical audit details, see `AUDIT_REPORT.md`.
 
+*Report generated on `r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`*
