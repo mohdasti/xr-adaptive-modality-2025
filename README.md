@@ -2,7 +2,7 @@
 
 ![CI Status](https://img.shields.io/github/actions/workflow/status/mohdasti/xr-adaptive-modality-2025/ci.yml?branch=main&logo=github)
 ![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
-[![DOI](https://zenodo.org/badge/1083506474.svg)](https://doi.org/10.5281/zenodo.18204915)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg)](https://doi.org/10.5281/zenodo.18204915)
 ![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
