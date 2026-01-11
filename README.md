@@ -9,7 +9,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)
 ![R](https://img.shields.io/badge/R-4.4.0-276DC3?logo=r&logoColor=white)
 
-> **Study status: Pre-Data (`v0.3.0-pilot`)**
+> **Study status: Data Collection (Finalizing)**
 > 
 > **Status Checklist:**
 > - ✅ Design finalized & preregistered
@@ -17,19 +17,18 @@
 > - ✅ Analysis pipeline implemented and validated on synthetic data
 > - ✅ Policy thresholds tuned (target 15–25% adaptation trigger rate)
 > - ✅ Participant links generated (40 links for redundancy, target: 32 complete)
-> - ⏳ Pilot data collection (5 participants)
-> - ⏳ Policy lock (after pilot tuning)
-> - ⏳ Main study data collection (N=32 target)
-> - ⏳ Data analysis & reporting
+> - ✅ Data collection completed (N=70 participants, 3,985 trials)
+> - ✅ Policy lock (post-pilot)
+> - 🔄 Data analysis & reporting (in progress)
 > 
-> **⚠️ IMPORTANT: All performance metrics below are PREDICTED (literature-based) until `v1.0.0-data`**
+> **Note:** Data collection phase completed. Analysis and reporting are ongoing. See `Report.qmd` for detailed analysis results.
 
 ## Privacy & Data Governance
 
 - No PII collected (anonymous participant IDs only).  
 - Minimal logging: cursor positions, display metadata (zoom/DPR/fullscreen), trial metrics.  
 - Webcam/eye-tracking is **optional & exploratory**; never required to participate.  
-- Raw trial logs stored locally (gitignored); aggregated results shared via OSF/Zenodo on `v1.0.0-data`.  
+- Raw trial logs stored locally (gitignored); aggregated results available via Zenodo (see DOI badge above).  
 - Participants can withdraw any time; data minimization practiced.
 
 ## Telemetry Tiers
@@ -375,7 +374,7 @@ localStorage.removeItem('participantIndex'); location.reload();
 - `data/clean/trial_data.csv`: Aggregated cleaned dataset (for analysis)
   - Merged dataset from all participants
   - Used by all analysis scripts
-  - Currently contains synthetic data for testing (will be replaced with real data)
+  - Contains collected data from 70 participants (3,985 trials)
 
 **Merging Raw Data:**
 When you have participant data files, merge them into the cleaned dataset:
@@ -428,7 +427,7 @@ This script:
 ## Study Snapshot (Portfolio-Ready)
 
 - **Design:** 2×2 within — Modality (Hand vs Gaze-confirm) × UI (Static vs Adaptive)
-- **N:** 32 (target) | **Links:** 40 (redundancy for attrition) | **Session:** Single session (~25 min) | **Trials:** ~160/participant
+- **N:** 70 (collected) | **Target:** 32 | **Trials:** 3,985 total (~57/participant average) | **Session:** Single session (~25 min)
 - **Counterbalancing:** True 8×8 Balanced Latin Square (Williams Design) — controls for order and carryover effects
 - **KPIs:** Movement Time, Error, **Throughput (IDe/MT)**, Raw NASA-TLX
 - **Adaptation:** RT p75 or 2-error burst triggers; **~15–25%** adaptive; **5-trial hysteresis**
