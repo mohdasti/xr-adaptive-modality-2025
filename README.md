@@ -3,8 +3,11 @@
 ![CI Status](https://img.shields.io/github/actions/workflow/status/mohdasti/xr-adaptive-modality-2025/ci.yml?branch=main&logo=github)
 ![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg)](https://doi.org/10.5281/zenodo.18204915)
-![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
+![Made with Vite](https://img.shields.io/badge/Made%20with-Vite-646CFF?logo=vite&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)
+![R](https://img.shields.io/badge/R-4.4.0-276DC3?logo=r&logoColor=white)
 
 > **Study status: Pre-Data (`v0.3.0-pilot`)**
 > 
