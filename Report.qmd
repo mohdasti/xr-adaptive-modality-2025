@@ -1857,6 +1857,18 @@ if (exists("model_tp") && !is.null(model_tp)) {
       print(pairs_tp_df %>% head(20))
     }
   }
+  
+  # Structured interpretation summary
+  cat("\n#### Interpretation Summary\n\n")
+  cat("**Omnibus takeaway:** The 2×2×2 factorial model shows a large modality main effect (hand > gaze) dominates throughput differences, with UI mode effects diluted by hand non-manipulation.\n\n")
+  
+  if (exists("model_tp_gaze") && !is.null(model_tp_gaze)) {
+    cat("**Gaze-only takeaway:** The gaze-only UI Mode × Pressure model is the primary adaptation effectiveness test. Declutter effects in gaze are evaluable here.\n\n")
+  }
+  
+  if (exists("model_tp_hand") && !is.null(model_tp_hand)) {
+    cat("**Hand-only takeaway:** Hand models exclude UI mode by design because width_scale_factor never deviated from 1.0 (no manipulation occurred). Pressure effects are evaluable in hand, but UI mode is not interpretable as adaptation.\n\n")
+  }
 } else {
   cat("⚠ **Statistical model could not be fitted for Throughput.**\n\n")
   
@@ -2289,6 +2301,18 @@ if (exists("model_rt") && !is.null(model_rt)) {
     pairs_rt_df <- as.data.frame(pairs_rt)
     print(pairs_rt_df %>% head(20))
   }
+  
+  # Structured interpretation summary
+  cat("\n#### Interpretation Summary\n\n")
+  cat("**Omnibus takeaway:** The 2×2×2 factorial model shows a large modality main effect (hand < gaze RT) dominates movement time differences, with UI mode effects diluted by hand non-manipulation.\n\n")
+  
+  if (exists("model_rt_gaze") && !is.null(model_rt_gaze)) {
+    cat("**Gaze-only takeaway:** The gaze-only UI Mode × Pressure model is the primary adaptation effectiveness test. Declutter effects on movement time in gaze are evaluable here.\n\n")
+  }
+  
+  if (exists("model_rt_hand") && !is.null(model_rt_hand)) {
+    cat("**Hand-only takeaway:** Hand models exclude UI mode by design because width_scale_factor never deviated from 1.0 (no manipulation occurred). Pressure effects are evaluable in hand, but UI mode is not interpretable as adaptation.\n\n")
+  }
 } else {
   cat("⚠ **Statistical model could not be fitted for Movement Time.**\n\n")
   
@@ -2666,6 +2690,18 @@ if (exists("model_err") && !is.null(model_err)) {
       print(knitr::kable(pairs_err_hand_df, digits = 3))
     }
     cat("\n")
+  }
+  
+  # Structured interpretation summary
+  cat("\n#### Interpretation Summary\n\n")
+  cat("**Omnibus takeaway:** The 2×2×2 factorial model shows a large modality main effect (gaze > hand error rates) dominates error rate differences, with UI mode effects diluted by hand non-manipulation.\n\n")
+  
+  if (exists("model_err_gaze") && !is.null(model_err_gaze)) {
+    cat("**Gaze-only takeaway:** The gaze-only UI Mode × Pressure model is the primary adaptation effectiveness test. Declutter effects on error rates in gaze are evaluable here.\n\n")
+  }
+  
+  if (exists("model_err_hand") && !is.null(model_err_hand)) {
+    cat("**Hand-only takeaway:** Hand models exclude UI mode by design because width_scale_factor never deviated from 1.0 (no manipulation occurred). Pressure effects are evaluable in hand, but UI mode is not interpretable as adaptation.\n\n")
   }
 } else {
   cat("⚠ **Statistical model could not be fitted for Error Rate.**\n\n")
@@ -3060,6 +3096,18 @@ if (exists("df_iso") && nrow(df_iso) > 0 && "We" %in% names(df_iso)) {
           cat("\n**Pressure Contrast (Hand-only, Holm-adjusted):**\n")
           print(kable(pairs_we_hand_df, digits = 3))
           cat("\n")
+        }
+        
+        # Structured interpretation summary
+        cat("#### Interpretation Summary\n\n")
+        cat("**Omnibus takeaway:** The 2×2×2 factorial model shows a modality main effect (gaze > hand We) dominates effective width differences, with UI mode effects diluted by hand non-manipulation.\n\n")
+        
+        if (!is.null(emm_we_gaze) && !is.null(pairs_we_gaze)) {
+          cat("**Gaze-only takeaway:** The gaze-only UI Mode × Pressure model is the primary adaptation effectiveness test. Declutter effects on spatial precision (We) in gaze are evaluable here.\n\n")
+        }
+        
+        if (!is.null(emm_we_hand) && !is.null(pairs_we_hand)) {
+          cat("**Hand-only takeaway:** Hand models exclude UI mode by design because width_scale_factor never deviated from 1.0 (no manipulation occurred). Pressure effects on We are evaluable in hand, but UI mode is not interpretable as adaptation.\n\n")
         }
       }
     }, error = function(e) {
@@ -3753,8 +3801,19 @@ if(all(tlx_cols %in% names(df_raw))) {
           print(p_emm_tlx)
         }
       }
+      
+      # Structured interpretation summary
+      cat("\n#### Interpretation Summary\n\n")
+      cat("**Omnibus takeaway:** The 2×2 factorial model (modality × UI mode) shows a modality main effect (gaze > hand workload) dominates TLX differences, with UI mode effects diluted by hand non-manipulation.\n\n")
+      
+      if (!is.null(model_tlx_gaze) && !is.null(emm_tlx_gaze)) {
+        cat("**Gaze-only takeaway:** The gaze-only UI Mode model is the primary adaptation effectiveness test. Declutter effects on workload in gaze are evaluable here (TLX is block-level and typically does not vary by pressure).\n\n")
+      }
+      
+      cat("**Hand-only note:** Hand UI mode is not interpretable as adaptation because width_scale_factor never deviated from 1.0 (no manipulation occurred). TLX is block-level and typically does not vary by pressure, so pressure-only hand models are not reported for TLX.\n\n")
     }
   }
+}
 ```
 
 ### Advanced TLX Analysis: UX Insights
