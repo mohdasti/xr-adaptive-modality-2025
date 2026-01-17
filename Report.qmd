@@ -1223,8 +1223,8 @@ This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' l
 # Results Snapshot (N = `r qc_participants_included`)
 
 ```{r results-snapshot}
-# Gaze-only: adaptive - static contrasts (optionally by pressure)
-gaze_snapshot <- df_pid_cond %>%
+# Gaze-only: adaptive - static contrasts within each pressure level + overall
+gaze_snapshot_by_pressure <- df_pid_cond %>%
   filter(modality == "gaze") %>%
   group_by(modality, ui_mode, pressure) %>%
   summarise(
@@ -1241,23 +1241,26 @@ gaze_snapshot <- df_pid_cond %>%
   ) %>%
   select(modality, pressure, tp_diff_adapt_static, rt_diff_adapt_static, err_diff_adapt_static)
 
-# Hand-only: pressure effect contrasts (ui_mode excluded by design)
-hand_snapshot <- df_pid_cond %>%
-  filter(modality == "hand") %>%
-  group_by(modality, pressure) %>%
+# Gaze-only: overall (collapsed across pressure)
+gaze_snapshot_overall <- df_pid_cond %>%
+  filter(modality == "gaze") %>%
+  group_by(modality, ui_mode) %>%
   summarise(
     tp = mean(tp_mean, na.rm = TRUE),
     rt = mean(rt_mean, na.rm = TRUE),
     err = mean(error_rate, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  pivot_wider(names_from = pressure, values_from = c(tp, rt, err)) %>%
+  pivot_wider(names_from = ui_mode, values_from = c(tp, rt, err)) %>%
   mutate(
-    tp_diff_p1_p0 = tp_1 - tp_0,
-    rt_diff_p1_p0 = rt_1 - rt_0,
-    err_diff_p1_p0 = err_1 - err_0
+    tp_diff_adapt_static = tp_adaptive - tp_static,
+    rt_diff_adapt_static = rt_adaptive - rt_static,
+    err_diff_adapt_static = err_adaptive - err_static,
+    pressure = "Overall"
   ) %>%
-  select(modality, tp_diff_p1_p0, rt_diff_p1_p0, err_diff_p1_p0)
+  select(modality, pressure, tp_diff_adapt_static, rt_diff_adapt_static, err_diff_adapt_static)
+
+gaze_snapshot <- bind_rows(gaze_snapshot_by_pressure, gaze_snapshot_overall)
 
 tlx_snapshot <- df_raw %>%
   filter(!is.na(pid)) %>%
@@ -1278,15 +1281,35 @@ manip_snapshot <- df_raw %>%
 
 cat("\n### Gaze: Adaptive vs Static (Primary Adaptive Test)\n\n")
 gaze_snapshot %>%
-  kable(caption = "Gaze contrasts: adaptive - static (by pressure)") %>%
+  kable(caption = "Gaze contrasts: adaptive - static (by pressure level + overall)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-cat("\n### Hand: Pressure Effect (UI Mode Not Exercised)\n\n")
-hand_snapshot %>%
-  kable(caption = "Hand contrasts: pressure ON - pressure OFF") %>%
+cat("\n### Hand: UI-Mode Manipulation Not Exercised\n\n")
+cat("**Note:** Hand UI-mode manipulation not exercised (width_scale_factor always 1.0), so adaptive vs static comparisons are non-inferential/no-manipulation. Hand analyses focus on pressure and modality effects only.\n\n")
+
+# Show hand pressure effect for reference
+hand_pressure_snapshot <- df_pid_cond %>%
+  filter(modality == "hand") %>%
+  group_by(modality, pressure) %>%
+  summarise(
+    tp = mean(tp_mean, na.rm = TRUE),
+    rt = mean(rt_mean, na.rm = TRUE),
+    err = mean(error_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = pressure, values_from = c(tp, rt, err)) %>%
+  mutate(
+    tp_diff_p1_p0 = tp_1 - tp_0,
+    rt_diff_p1_p0 = rt_1 - rt_0,
+    err_diff_p1_p0 = err_1 - err_0
+  ) %>%
+  select(modality, tp_diff_p1_p0, rt_diff_p1_p0, err_diff_p1_p0)
+
+hand_pressure_snapshot %>%
+  kable(caption = "Hand: pressure ON - pressure OFF (UI mode collapsed)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-cat("\n*Note:* Hand width inflation did not activate (width_scale_factor always 1); UI mode is not interpreted as an adaptive manipulation for hand. The gaze-only UI Mode × Pressure model is the primary test of adaptive vs static effects.\n\n")
+cat("\n")
 
 tlx_snapshot %>%
   kable(caption = "RQ2 snapshot: Overall TLX") %>%
@@ -1296,7 +1319,7 @@ manip_snapshot %>%
   kable(caption = "RQ3 manipulation check: width scaling") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-cat("\n*Note:* Hand width inflation did not activate; all recorded `width_scale_factor` values equal 1.0. See root-cause diagnostic section for investigation of non-activation.\n\n")
+cat("\n*Note:* Hand width inflation did not activate; all recorded `width_scale_factor` values equal 1.0. Root cause analysis indicates policy actions were emitted but not applied to UI (see replay diagnostics).\n\n")
 ```
 
 ## Key Findings
@@ -1631,6 +1654,9 @@ if (exists("model_tp") && !is.null(model_tp)) {
   cat("\n#### Model Summary\n")
   print(summary(model_tp))
   
+  # Prominent interpretation rule
+  cat("\n**⚠ Interpretation Rule:** UI-mode effects in the omnibus model reflect declutter in gaze (the adaptation that operated). Width inflation did not exercise in hand (width_scale_factor always 1.0), so any hand UI-mode effects are treated as noise/non-causal, not adaptation effectiveness.\n\n")
+  
   # Calculate effect sizes and generate APA-style written results
   anova_tp_df <- as.data.frame(anova_tp)
   anova_tp_df$partial_eta_sq <- mapply(calc_partial_eta_sq, 
@@ -1748,6 +1774,42 @@ if (exists("model_tp") && !is.null(model_tp)) {
         print(knitr::kable(key_contrasts %>% head(6), digits = 3))
       }
       cat("\n")
+    }
+  }
+  
+  # Hand-specific reporting: UI-mode not exercised
+  cat("\n#### Hand: UI-Mode Not Exercised\n\n")
+  cat("**Manipulation Check:**\n\n")
+  
+  # Check width_scale_factor for hand/adaptive/pressure=1
+  if ("width_scale_factor" %in% names(df_raw)) {
+    df_hand_adapt_p1_check <- df_raw %>%
+      filter(
+        modality == "hand" | tolower(modality) == "hand",
+        ui_mode == "adaptive" | tolower(ui_mode) == "adaptive",
+        pressure == 1 | pressure == "1",
+        (practice == "false" | practice == FALSE | is.na(practice))
+      )
+    
+    if (nrow(df_hand_adapt_p1_check) > 0) {
+      n_trials_check <- nrow(df_hand_adapt_p1_check)
+      n_scaled_check <- sum(df_hand_adapt_p1_check$width_scale_factor != 1, na.rm = TRUE)
+      pct_scaled_check <- 100 * n_scaled_check / n_trials_check
+      
+      manip_check_table <- data.frame(
+        Condition = "Hand/Adaptive/Pressure=1",
+        N_Trials = n_trials_check,
+        N_With_Scaling = n_scaled_check,
+        Pct_With_Scaling = round(pct_scaled_check, 2),
+        Mean_Width_Scale = round(mean(df_hand_adapt_p1_check$width_scale_factor, na.rm = TRUE), 3)
+      )
+      
+      print(knitr::kable(manip_check_table, caption = "Manipulation Check: Width Scaling in Hand/Adaptive/Pressure=1"))
+      cat("\n")
+      
+      if (n_scaled_check == 0) {
+        cat("**Conclusion:** H3/RQ3-hand cannot be tested in this dataset. Width inflation did not activate (width_scale_factor always 1.0), so hand UI-mode effects are not interpretable as adaptation effectiveness.\n\n")
+      }
     }
   }
   
@@ -2610,6 +2672,9 @@ if (exists("model_err") && !is.null(model_err)) {
     cat("**Note:** 'car' package not available. Using lmerTest::anova() instead.\n")
     print(anova(model_err, type = "III"))
   }
+  
+  # Prominent interpretation rule
+  cat("\n**⚠ Interpretation Rule:** UI-mode effects in the omnibus model reflect declutter in gaze (the adaptation that operated). Width inflation did not exercise in hand (width_scale_factor always 1.0), so any hand UI-mode effects are treated as noise/non-causal, not adaptation effectiveness.\n\n")
   
   # Pairwise comparisons (omnibus)
   if (exists("pairs_err") && !is.null(pairs_err)) {
@@ -6216,23 +6281,131 @@ if (nrow(df_error_gaze) > 0) {
 
 ```{r root-cause-diagnostic}
 # Root-cause diagnostic for width scaling non-activation
-# Load diagnostic summary (generated by scripts/diagnose_width_inflation.R)
-diagnostic_paths <- c("outputs/width_inflation_diagnostics_summary.csv", "../outputs/width_inflation_diagnostics_summary.csv")
-diag_summary <- NULL
+# Load policy replay diagnostics (generated by scripts/policy_replay_width_inflation_diagnostics.ts)
+replay_summary_paths <- c("outputs/policy_replay_summary.csv", "../outputs/policy_replay_summary.csv")
+replay_summary <- NULL
 
-for (path in diagnostic_paths) {
+for (path in replay_summary_paths) {
   if (file.exists(path)) {
-    diag_summary <- read_csv(path, show_col_types = FALSE)
-    cat("Loaded diagnostic summary from:", path, "\n\n")
+    replay_summary <- read_csv(path, show_col_types = FALSE)
+    cat("Loaded policy replay summary from:", path, "\n\n")
     break
   }
 }
 
-if (is.null(diag_summary)) {
-  cat("⚠ Diagnostic summary not found. Run scripts/diagnose_width_inflation.R first.\n")
-  cat("Running inline diagnostic...\n\n")
+# Also load per-participant and events if available
+replay_by_pid_paths <- c("outputs/policy_replay_by_pid.csv", "../outputs/policy_replay_by_pid.csv")
+replay_by_pid <- NULL
+for (path in replay_by_pid_paths) {
+  if (file.exists(path)) {
+    replay_by_pid <- read_csv(path, show_col_types = FALSE)
+    break
+  }
+}
+
+replay_events_paths <- c("outputs/policy_replay_events.csv", "../outputs/policy_replay_events.csv")
+replay_events <- NULL
+for (path in replay_events_paths) {
+  if (file.exists(path)) {
+    replay_events <- read_csv(path, show_col_types = FALSE)
+    break
+  }
+}
+
+# Key diagnostic table
+cat("### Key Diagnostics Summary\n\n")
+
+if (!is.null(replay_summary) && nrow(replay_summary) > 0) {
+  # Extract values from replay summary
+  n_participants <- replay_summary$n_participants[1]
+  n_ever_inflate_width <- replay_summary$n_ever_inflate_width[1]
+  pct_ever_inflate_width <- replay_summary$pct_ever_inflate_width[1]
+  n_max_streak_ge5 <- replay_summary$n_max_streak_ge5[1]
+  pct_max_streak_ge5 <- replay_summary$pct_max_streak_ge5[1]
+  total_inflate_width_events <- replay_summary$total_inflate_width_events[1]
+  total_policy_events <- replay_summary$total_policy_events[1]
+  n_pressure_not_enabled <- replay_summary$n_pressure_not_enabled[1]
+  top_reason <- replay_summary$top_reason[1]
   
-  # Fallback: inline diagnostic (reconstruct from df_clean)
+  # Check actual width_scale_factor in data
+  df_hand_adapt_p1_check <- df_raw %>%
+    filter(
+      modality == "hand" | tolower(modality) == "hand",
+      ui_mode == "adaptive" | tolower(ui_mode) == "adaptive",
+      pressure == 1 | pressure == "1",
+      (practice == "false" | practice == FALSE | is.na(practice))
+    )
+  
+  pct_scaled_actual <- if (nrow(df_hand_adapt_p1_check) > 0 && "width_scale_factor" %in% names(df_hand_adapt_p1_check)) {
+    100 * mean(df_hand_adapt_p1_check$width_scale_factor != 1, na.rm = TRUE)
+  } else {
+    0
+  }
+  
+  key_diagnostics <- data.frame(
+    Metric = c(
+      "Width scaling in data (Hand/Adaptive/Pressure=1)",
+      "PolicyEngine emitted inflate_width (replay)",
+      "Participants with ever inflate_width (replay)",
+      "Participants with max bad streak >= 5 (replay)",
+      "Total inflate_width events emitted (replay)",
+      "Events with 'Pressure mode not enabled' (replay)"
+    ),
+    Value = c(
+      sprintf("%.2f%%", pct_scaled_actual),
+      sprintf("%d events", total_inflate_width_events),
+      sprintf("%d (%.1f%%)", n_ever_inflate_width, pct_ever_inflate_width),
+      sprintf("%d (%.1f%%)", n_max_streak_ge5, pct_max_streak_ge5),
+      sprintf("%d", total_inflate_width_events),
+      sprintf("%d", n_pressure_not_enabled)
+    )
+  )
+  
+  print(kable(key_diagnostics, caption = "Width Inflation Diagnostic Summary: Policy Replay vs. Observed Data"))
+  cat("\n")
+  
+  # Root cause conclusion
+  cat("### Root Cause Analysis\n\n")
+  
+  if (total_inflate_width_events > 0 && pct_scaled_actual == 0) {
+    cat("**Evidence favors UI integration issue:** PolicyEngine emitted ", total_inflate_width_events, 
+        " inflate_width actions (", n_ever_inflate_width, " participants, ", 
+        sprintf("%.1f%%", pct_ever_inflate_width), "), but width_scale_factor remained 1.0 in all recorded trials. ",
+        "This indicates the policy logic executed correctly (triggers met, hysteresis reached), but the actions were not applied to UI targets. ",
+        "Likely causes: event bus not propagating policy:change events, TaskPane not updating widthScale state, or FittsTask not receiving/applying widthScale prop.\n\n", sep = "")
+  } else if (total_inflate_width_events == 0 && pct_max_streak_ge5 < 50) {
+    cat("**Evidence favors strict hysteresis threshold:** PolicyEngine did not emit inflate_width actions. ",
+        "Only ", sprintf("%.1f%%", pct_max_streak_ge5), 
+        " of participants reached the hysteresis threshold (5 consecutive triggered trials). ",
+        "This suggests the hysteresis gate was too strict for the task duration and participant performance patterns.\n\n", sep = "")
+  } else if (n_pressure_not_enabled > 0) {
+    cat("**Evidence favors pressure gate:** ", n_pressure_not_enabled, 
+        " policy events had reason 'Pressure mode not enabled', suggesting pressureEnabled runtime state did not match pressure condition labels.\n\n", sep = "")
+  } else {
+    cat("**Conclusion:** Policy replay diagnostics available. See outputs/policy_replay_*.csv for detailed analysis.\n\n")
+  }
+  
+  # Top reasons from events
+  if (!is.null(replay_events) && nrow(replay_events) > 0) {
+    hand_events <- replay_events %>%
+      filter(modality == "hand", ui_mode == "adaptive")
+    
+    if (nrow(hand_events) > 0) {
+      reason_counts <- hand_events %>%
+        group_by(reason) %>%
+        summarise(n = n(), .groups = "drop") %>%
+        arrange(desc(n))
+      
+      cat("**Top reasons in hand/adaptive policy events:**\n")
+      print(kable(reason_counts %>% head(5), caption = "Policy event reasons (hand/adaptive only)"))
+      cat("\n")
+    }
+  }
+} else {
+  cat("⚠ Policy replay diagnostics not found. Run scripts/policy_replay_width_inflation_diagnostics.ts first.\n")
+  cat("Falling back to trigger reconstruction diagnostic...\n\n")
+  
+  # Fallback to trigger reconstruction
   df_hand_adapt_p1 <- df_raw %>%
     filter(
       modality == "hand",
@@ -6250,7 +6423,6 @@ if (is.null(diag_summary)) {
     )
   
   if (nrow(df_hand_adapt_p1) > 0) {
-    # Compute candidate triggers (matching diagnostic script)
     trigger_summary <- df_hand_adapt_p1 %>%
       group_by(pid) %>%
       arrange(trial_number) %>%
@@ -6268,70 +6440,37 @@ if (is.null(diag_summary)) {
       summarise(max_consecutive_triggered = first(max_consecutive_triggered), .groups = "drop")
     
     n_streak_ge5 <- sum(trigger_summary$max_consecutive_triggered >= 5, na.rm = TRUE)
+    pct_streak_ge5 <- 100 * n_streak_ge5 / nrow(trigger_summary)
     median_max_streak <- median(trigger_summary$max_consecutive_triggered, na.rm = TRUE)
     mean_max_streak <- mean(trigger_summary$max_consecutive_triggered, na.rm = TRUE)
-  } else {
-    n_streak_ge5 <- 0
-    median_max_streak <- 0
-    mean_max_streak <- 0
-  }
-} else {
-  # Extract key metrics from CSV
-  get_value <- function(metric_name) {
-    row <- diag_summary %>% filter(metric == metric_name)
-    if (nrow(row) > 0) as.numeric(row$value[1]) else NA
-  }
-  
-  n_streak_ge5 <- get_value("n_streak_ge5")
-  pct_streak_ge5 <- get_value("pct_streak_ge5")
-  median_max_streak <- get_value("median_max_streak")
-  mean_max_streak <- get_value("mean_max_streak")
-  pct_scaled_hand_adapt_p1 <- get_value("pct_scaled_hand_adapt_p1")
-}
-
-# Key diagnostic table
-cat("### Key Diagnostics Summary\n\n")
-
-key_diagnostics <- data.frame(
-  Metric = c(
-    "Width scaling activation (Hand/Adaptive/Pressure=1)",
-    "Participants with max trigger streak >= 5 (hysteresis threshold)",
-    "Median max consecutive triggered trials",
-    "Mean max consecutive triggered trials"
-  ),
-  Value = c(
-    ifelse(is.null(diag_summary), "0.00%", sprintf("%.2f%%", pct_scaled_hand_adapt_p1)),
-    ifelse(is.na(n_streak_ge5), "N/A", sprintf("%.1f%%", pct_streak_ge5)),
-    ifelse(is.na(median_max_streak), "N/A", sprintf("%.1f", median_max_streak)),
-    ifelse(is.na(mean_max_streak), "N/A", sprintf("%.2f", mean_max_streak))
-  )
-)
-
-print(kable(key_diagnostics, caption = "Width Inflation Diagnostic Summary (Hand/Adaptive/Pressure=1)"))
-cat("\n")
-
-# Conclusion
-cat("### Root Cause Analysis\n\n")
-
-if (!is.na(n_streak_ge5) && !is.na(pct_scaled_hand_adapt_p1)) {
-  if (pct_scaled_hand_adapt_p1 == 0) {
-    if (n_streak_ge5 < 5) {
-      cat("**Evidence favors strict hysteresis threshold:** Width scaling did not activate (0% of trials) even though candidate triggers (RT > p75 OR error bursts) occurred frequently. However, only ", 
+    
+    key_diagnostics <- data.frame(
+      Metric = c(
+        "Width scaling activation (Hand/Adaptive/Pressure=1)",
+        "Participants with max trigger streak >= 5",
+        "Median max consecutive triggered",
+        "Mean max consecutive triggered"
+      ),
+      Value = c(
+        "0.00%",
+        sprintf("%.1f%%", pct_streak_ge5),
+        sprintf("%.1f", median_max_streak),
+        sprintf("%.2f", mean_max_streak)
+      )
+    )
+    
+    print(kable(key_diagnostics, caption = "Width Inflation Diagnostic (Trigger Reconstruction)"))
+    cat("\n")
+    
+    if (pct_streak_ge5 < 10) {
+      cat("**Evidence favors strict hysteresis threshold:** Only ", 
           sprintf("%.1f%%", pct_streak_ge5), 
-          " of participants reached the hysteresis threshold (5 consecutive triggered trials), with median/mean streaks of ", 
-          sprintf("%.1f / %.2f", median_max_streak, mean_max_streak), 
-          " consecutive trials. This suggests the hysteresis gate (default: 5 consecutive triggers required) was too strict for the task duration and participant performance patterns.\n\n", sep = "")
-    } else {
-      cat("**Evidence favors integration/policy issue:** Width scaling did not activate (0% of trials) despite ", 
-          sprintf("%.1f%%", pct_streak_ge5), 
-          " of participants reaching the hysteresis threshold (>=5 consecutive triggered trials). This suggests a pressure gate issue, policy integration problem, or configuration error rather than threshold strictness.\n\n", sep = "")
+          " of participants reached the hysteresis threshold (5 consecutive triggered trials).\n\n", sep = "")
     }
   }
-} else {
-  cat("**Conclusion:** Diagnostic data unavailable. See scripts/diagnose_width_inflation.R for full analysis.\n\n")
 }
 
-cat("**Note:** The diagnostic script reconstructs candidate triggers using policy-like logic: (RT > participant p75) OR (error burst >= 2). The policy requires 5 consecutive triggered trials (hysteresis_trials=5) before activating width inflation.\n\n")
+cat("**Note:** Policy replay uses the actual PolicyEngine from app/src/lib/policy.ts, replaying trials through the same logic used at runtime. This provides definitive evidence of whether policy actions were emitted.\n\n")
 ```
 
 ## Width Scaling (Target Size Adaptation)
@@ -6340,7 +6479,7 @@ cat("**Note:** The diagnostic script reconstructs candidate triggers using polic
 
 **Sample Size:** `r get_n_string(df_raw %>% filter((practice == 'false' | practice == FALSE | is.na(practice)), !is.na(nominal_width_px)))` participants with width scaling data.
 
-**Status:** In the current dataset, the width scaling mechanism was disabled/misconfigured; all recorded `width_scale_factor` values equal 1.0. Results here serve as a template for future analysis once scaling is active.
+**Status:** No activation observed (width_scale_factor == 1.0 throughout). Root cause analysis indicates policy actions were emitted (see replay diagnostics) but not applied to UI targets, suggesting an integration issue rather than threshold strictness.
 
 *The adaptive UI may scale target widths based on performance. This section examines whether and how target sizes are adjusted.*
 

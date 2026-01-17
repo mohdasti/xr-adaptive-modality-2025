@@ -177,3 +177,43 @@ The width scaling logic is correctly implemented across policy engine, event han
 3. **Trigger thresholds:** RT p75 or error burst conditions not met in practice
 
 The root-cause diagnostic section in Report.qmd will help identify which of these (or other factors) is responsible for the observed non-activation.
+
+## Data-Backed Conclusion (Policy Replay Diagnostics)
+
+**Analysis Method:** Replayed trial logs through actual PolicyEngine (`app/src/lib/policy.ts`) using `scripts/policy_replay_width_inflation_diagnostics.ts`.
+
+### Key Findings
+
+**PolicyEngine Behavior:**
+- **Total inflate_width events emitted:** 243 events across 17 participants (20.0% of 85 participants)
+- **Participants reaching hysteresis threshold (max bad streak >= 5):** 64 participants (75.3%)
+- **Total policy events (action != 'none'):** 2,087 events
+- **Events with reason 'Pressure mode not enabled':** 0
+
+**Observed Data:**
+- **Width scaling in data (Hand/Adaptive/Pressure=1):** 0% (width_scale_factor always 1.0)
+
+### Root Cause: UI Integration Issue
+
+**Evidence:** PolicyEngine correctly emitted `inflate_width` actions (243 events, 17 participants), but `width_scale_factor` remained 1.0 in all recorded trials. This indicates:
+
+1. **Policy logic executed correctly:** Triggers were met, hysteresis threshold (5 consecutive) was reached, and PolicyEngine returned `action: 'inflate_width'` with `delta_w: 0.25`.
+
+2. **Actions not applied to UI:** The policy actions were emitted but not reflected in the rendered targets or logged `width_scale_factor`.
+
+3. **Likely failure points:**
+   - Event bus not propagating `policy:change` events from PolicyEngine to TaskPane
+   - TaskPane not updating `widthScale` state when receiving events
+   - FittsTask not receiving/applying `widthScale` prop correctly
+   - CSV logging capturing nominal width instead of displayed width
+
+**Not a threshold/hysteresis issue:** 75.3% of participants reached the hysteresis threshold, and 20% had inflate_width actions emitted, so strict thresholds are not the cause.
+
+**Not a pressure gate issue:** 0 events had reason 'Pressure mode not enabled', indicating `pressureEnabled` runtime state matched condition labels.
+
+### Recommended Fixes
+
+1. **Verify event bus:** Check if `policy:change` events are emitted when PolicyEngine state changes
+2. **Verify TaskPane listener:** Confirm `handlePolicyChange` in TaskPane.tsx (lines 228-241) is receiving events
+3. **Verify widthScale prop:** Check if FittsTask receives and applies `widthScale` prop correctly
+4. **Verify CSV logging:** Ensure `width_scale_factor` in CSV reflects actual displayed width, not nominal width

@@ -1,0 +1,86 @@
+pid,n_trials,n_hand_adaptive_p1,max_bad_streak,ever_inflate_width,n_inflate_width,top_reason,n_reason_pressure_not_enabled,n_reason_triggered,n_reason_performance_improved,n_reason_other
+Also I noticed that the space bar option was easier once I got the hang of it,236,0,0,false,0,N/A,0,0,0,0
+I did not notice any changes related to the decluttered interface.",236,0,0,false,0,N/A,0,0,0,0
+One thing I noticed was that each time the game rule was changed (from Hand Mode or Gaze Mode,236,0,0,false,0,N/A,0,0,0,0
+P001,236,27,12,false,0,Performance improved,0,27,20,0
+P002,209,27,28,false,0,Reset,0,0,0,27
+P003,236,27,10,true,13,Triggered: RT p75=1398ms, err_burst=2,0,27,9,5
+P004,236,27,43,false,0,Reset,0,0,0,27
+P005,236,27,17,false,0,Performance improved,0,0,27,0
+P006,236,27,24,false,0,Performance improved,0,0,27,0
+P007,236,27,10,false,0,Performance improved,0,0,27,0
+P008,236,27,0,false,0,Reset,0,0,0,27
+P009,236,27,11,false,0,Performance improved,0,27,23,0
+P010,236,27,21,true,16,Triggered: RT p75=1154ms, err_burst=1,0,27,7,4
+P011,236,27,6,false,0,Reset,0,0,0,27
+P012,236,27,7,true,12,Performance improved,0,27,11,4
+P013,236,27,0,false,0,Reset,0,0,0,27
+P014,236,27,0,false,0,Reset,0,0,0,27
+P015,236,27,13,true,8,Triggered: RT p75=1269ms, err_burst=2,0,27,11,0
+P016,236,27,13,false,0,Performance improved,0,27,19,0
+P017,236,27,6,true,9,Performance improved,0,27,18,0
+P018,236,27,18,true,12,Triggered: RT p75=925ms, err_burst=0,0,27,11,4
+P019,236,27,12,false,0,Reset,0,0,0,27
+P020,236,27,0,false,0,Reset,0,0,0,27
+P021,236,27,0,false,0,Reset,0,0,0,27
+P022,226,27,8,false,0,Performance improved,0,0,27,0
+P023,236,27,13,false,0,Triggered: RT p75=1407ms, err_burst=2,0,27,10,0
+P024,236,27,11,true,20,Triggered: RT p75=1092ms, err_burst=2,0,27,0,0
+P025,236,27,10,false,0,Performance improved,0,27,23,0
+P026,236,27,16,false,0,Reset,0,0,0,27
+P027,236,27,6,false,0,Reset,0,0,0,27
+P028,236,27,19,true,9,Performance improved,0,27,14,4
+P029,236,27,14,false,0,Performance improved,0,27,20,0
+P030,236,27,5,false,0,Triggered: RT p75=1788ms, err_burst=3,0,27,11,0
+P031,236,27,54,false,0,Triggered: RT p75=980ms, err_burst=2,0,27,12,0
+P032,236,27,11,false,0,Performance improved,0,27,23,0
+P035,236,27,0,false,0,Reset,0,0,0,27
+P036,236,27,21,false,0,Reset,0,0,0,27
+P037,128,27,7,true,8,Performance improved,0,27,16,0
+P038,236,27,23,false,0,Performance improved,0,0,27,0
+P039,236,27,11,false,0,Performance improved,0,27,23,0
+P040,216,27,0,false,0,Reset,0,0,0,27
+P041,236,27,27,true,14,Reset,0,0,0,27
+P042,226,27,15,true,19,Reset,0,27,0,15
+P043,236,27,0,false,0,Reset,0,0,0,27
+P045,236,27,9,false,0,Performance improved,0,0,27,0
+P046,472,54,5,false,0,Performance improved,0,54,46,0
+P047,236,27,0,false,0,Reset,0,0,0,27
+P048,209,27,0,false,0,Reset,0,0,0,27
+P049,236,27,18,false,0,Performance improved,0,0,27,0
+P050,235,27,5,false,0,Reset,0,0,0,27
+P051,236,27,0,false,0,Reset,0,0,0,27
+P054,236,27,9,false,0,Performance improved,0,0,27,0
+P055,236,27,25,true,10,Performance improved,0,27,20,0
+P057,235,27,15,false,0,Performance improved,0,27,21,0
+P058,236,27,31,false,0,Reset,0,0,0,27
+P059,236,27,9,false,0,Reset,0,0,0,27
+P060,236,27,20,false,0,Reset,0,0,0,27
+P061,236,27,9,false,0,Performance improved,0,27,24,0
+P062,236,27,16,true,6,Performance improved,0,27,21,0
+P063,235,27,7,false,0,Performance improved,0,27,21,0
+P064,236,27,5,true,9,Reset,0,27,0,22
+P065,236,27,10,false,0,Performance improved,0,27,22,0
+P066,236,27,0,false,0,Reset,0,0,0,27
+P067,236,27,5,false,0,Reset,0,0,0,27
+P068,236,27,16,false,0,Reset,0,0,0,27
+P069,236,27,6,true,50,Performance improved,0,27,18,0
+P070,236,27,0,false,0,Reset,0,0,0,27
+P072,236,27,0,false,0,Reset,0,0,0,27
+P073,155,27,16,false,0,Reset,0,0,0,27
+P074,236,27,10,false,0,Reset,0,0,0,27
+P075,236,27,9,false,0,Reset,0,0,0,27
+P076,236,27,0,false,0,Reset,0,0,0,27
+P077,225,27,6,false,0,Reset,0,0,0,27
+P078,209,27,0,false,0,Reset,0,0,0,27
+P079,236,27,0,false,0,Reset,0,0,0,27
+P080,236,27,17,false,0,Triggered: RT p75=606ms, err_burst=3,0,27,0,0
+P081,226,27,10,true,5,Performance improved,0,0,27,0
+P082,236,27,27,false,0,Reset,0,0,0,27
+P083,236,27,10,false,0,Reset,0,0,0,27
+P084,236,27,15,false,0,Reset,0,0,0,27
+P085,236,27,8,false,0,Performance improved,0,27,23,0
+P086,236,27,18,false,0,Performance improved,0,0,27,0
+P087,236,27,9,false,0,Performance improved,0,0,27,0
+P088,236,27,9,true,23,Reset,0,0,0,27
+The start button was quite glitchy and tended to run away from my cursor (was it on purpose?)",236,0,0,false,0,N/A,0,0,0,0
