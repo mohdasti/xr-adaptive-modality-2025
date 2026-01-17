@@ -45,6 +45,36 @@ These participants' data can be used for:
 **Replacement Strategy:**
 7 additional participants (P049-P055) were added to compensate, ensuring N=48 for the main analysis.
 
+### Category 2: Input Device Confound (Partial Exclusion)
+
+**Participants:** Trackpad users (n≈5, 6.2% of sample)
+
+**Reason for Partial Exclusion:**
+Trackpad vs mouse is a known confound in pointing task research (MacKenzie & Jusoh, 2001; Karam et al., 2009). Trackpads have different acceleration curves, precision characteristics, and motor control requirements compared to mice, which can significantly affect hand modality performance (throughput, RT, error rates, movement quality).
+
+**Exclusion Strategy (Data-Salvaging Approach):**
+- ❌ **Exclude:** Hand trials from trackpad users (~400 trials, ~3% of total)
+- ✅ **Keep:** Gaze trials from trackpad users (~400 trials) - simulation normalizes input
+- ✅ **Keep:** All trials from mouse users (both hand and gaze, ~12,000 trials)
+
+**Rationale:**
+- **Hand modality:** Requires device-dependent motor control → standardize device (mouse only)
+- **Gaze modality:** Uses physiologically-informed simulation that converts raw input (mouse or trackpad) into gaze-like coordinates → device doesn't matter after simulation
+- **Data utilization:** This approach maximizes data utilization (keeps 100% of gaze trials) while maintaining validity (hand modality device-standardized)
+
+**Analysis Impact:**
+- **Hand modality analyses:** N=75 participants (mouse users only)
+- **Gaze modality analyses:** N=80 participants (75 mouse + 5 trackpad users)
+- **Modality comparisons:** Mouse users' hand data vs all users' gaze data (methodologically valid)
+
+**Technical Details:**
+- Exclusion applied in preprocessing: filter `(input_device == "mouse" | (input_device == "trackpad" & modality == "gaze"))`
+- Trackpad users' gaze trials are methodologically valid because gaze simulation normalizes input
+- Hand vs gaze comparisons remain valid because hand uses standardized device while gaze uses simulation-normalized input
+
+**Documentation:**
+See `INPUT_DEVICE_EXCLUSION_STRATEGY.md` for full rationale and implementation details.
+
 ---
 
 ## Inclusion Criteria

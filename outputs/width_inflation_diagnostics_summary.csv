@@ -1,0 +1,15 @@
+metric,value
+total_trials,17359
+n_participants,81
+n_scaled_overall,0
+pct_scaled_overall,0
+n_hand_adapt_p1_trials,2214
+n_scaled_hand_adapt_p1,0
+pct_scaled_hand_adapt_p1,0
+n_ever_triggered,81
+n_streak_ge5,3
+pct_streak_ge5,3.7037037037037033
+median_max_streak,2
+mean_max_streak,2.45679012345679
+max_max_streak,5
+pressure_mismatch_pct,NA

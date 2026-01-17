@@ -17,7 +17,8 @@ docs/
 │   ├── SESSION_TRACKING_GUIDE.md
 │   ├── SESSION_TRACKING_IMPLEMENTATION.md
 │   ├── QUICK_START_SESSIONS.md
-│   └── REGENERATE_LINKS.md
+│   ├── REGENERATE_LINKS.md
+│   └── mcmc_progress_monitoring.md  # Progress indicators for MCMC analyses
 ├── ops/                         # Operations and troubleshooting
 │   ├── VERCEL_BUILD_FIX.md     # Troubleshooting Vercel build issues
 │   ├── VERCEL_DEPLOYMENT_CHECK.md
@@ -58,6 +59,7 @@ docs/
 ### For Developers
 - **Architecture**: See [app/ARCHITECTURE.md](../app/ARCHITECTURE.md) in the app directory
 - **Internal Notes**: See [dev/](dev/) directory for development-specific documentation
+- **MCMC Analysis**: [guides/mcmc_progress_monitoring.md](guides/mcmc_progress_monitoring.md) - Progress monitoring for long-running Bayesian analyses
 
 ## Categories
 
@@ -67,6 +69,7 @@ User-facing documentation and how-to guides for common tasks:
 - Deploying to production
 - Managing participants and sessions
 - Data collection workflows
+- **MCMC Progress Monitoring**: [guides/mcmc_progress_monitoring.md](guides/mcmc_progress_monitoring.md) - Best practices for adding progress bars, ETA, and diagnostics to Bayesian MCMC analyses
 
 ### ops/
 Operational documentation for troubleshooting and maintenance:

@@ -22,7 +22,8 @@ This model specifically targets the "Verification Phase" - the time spent
 deciding to click once inside the target (after movement completion).
 
 Usage:
-    python lba.py --input data/clean/ --output analysis/results/
+    python3 lba.py --input data/clean/ --output analysis/results/
+    # Note: Requires Python 3.8+ (pandas 2.x requirement)
     
 Output:
     - lba_parameters.json: Parameters separated by modality and ui_mode
@@ -112,16 +113,14 @@ def cdf_lba_single(t, A, b, v, s):
     
     return pt.clip(cdf_val, 0.0, 1.0)
 
-def logp_lba_race(value, A, b, v_c, v_e, s, t0):
+def logp_lba_race(rt, response, A, b, v_c, v_e, s, t0):
     """
     Log-Likelihood for the LBA Race Model (Correct vs Error accumulators).
     
-    value: dict with 'rt' and 'response' keys (observed data)
+    rt: observed reaction times
+    response: observed responses (1 = correct, 0 = error)
     A, b, v_c, v_e, s, t0: LBA parameters
     """
-    rt = value['rt']
-    response = value['response']
-    
     # Effective reaction time (time spent accumulating)
     t = rt - t0
     
@@ -262,6 +261,8 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
     pressure_obs = df['pressure_norm'].values
     
     print("Building PyMC Model...")
+    print("  Using non-centered parameterization for hierarchical effects (improves geometry)")
+    print("  Using less informative priors (improves convergence)")
     
     with pm.Model() as model:
         # --- Priors ---
@@ -269,40 +270,42 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         # 1. Non-Decision Time (t0)
         # Varies by Modality and UI Mode (Hand vs Gaze have different physics, UI modes may affect verification)
         # Hierarchical: Group mean + Participant deviation
+        # Using NON-CENTERED parameterization for better geometry
         # Shape: (n_modalities, n_ui_modes) to allow interaction
-        t0_mu = pm.Normal('t0_mu', mu=0.3, sigma=0.1, shape=(n_m, n_u))
-        t0_sd = pm.HalfNormal('t0_sd', sigma=0.1)
-        t0_offset = pm.Normal('t0_offset', mu=0, sigma=1, shape=(n_p, n_m, n_u))
+        t0_mu = pm.Normal('t0_mu', mu=0.0, sigma=1.0, shape=(n_m, n_u))  # Less informative prior
+        t0_sd = pm.HalfNormal('t0_sd', sigma=0.5)  # More flexible
+        t0_offset_raw = pm.Normal('t0_offset_raw', mu=0, sigma=1, shape=(n_p, n_m, n_u))  # Standard normal
         
-        # t0 must be positive and less than min(RT) ~ 0.2
-        # We use Softplus to ensure positivity
-        # Index by both modality and ui_mode
-        t0 = pm.Deterministic('t0', pm.math.softplus(
+        # Non-centered: t0 = softplus(mu + offset_raw * sd)
+        # This improves geometry for hierarchical models
+        t0 = pm.Deterministic('t0', pt.softplus(
             t0_mu[mod_idx, ui_mode_idx] + 
-            t0_offset[pid_idx, mod_idx, ui_mode_idx] * t0_sd
+            t0_offset_raw[pid_idx, mod_idx, ui_mode_idx] * t0_sd
         ))
         
         # 2. Start Point Variability (A)
         # Upper bound of start point distribution.
         # Usually relatively constant. Fit one per participant.
-        A_mu = pm.Normal('A_mu', mu=0.3, sigma=0.1)
-        A_sd = pm.HalfNormal('A_sd', sigma=0.1)
-        A_offset = pm.Normal('A_offset', mu=0, sigma=1, shape=n_p)
-        A = pm.Deterministic('A', pm.math.softplus(A_mu + A_offset[pid_idx] * A_sd))
+        # Using NON-CENTERED parameterization
+        A_mu = pm.Normal('A_mu', mu=0.0, sigma=1.0)  # Less informative prior
+        A_sd = pm.HalfNormal('A_sd', sigma=0.5)  # More flexible
+        A_offset_raw = pm.Normal('A_offset_raw', mu=0, sigma=1, shape=n_p)  # Standard normal
+        A = pm.Deterministic('A', pt.softplus(A_mu + A_offset_raw[pid_idx] * A_sd))
         
         # 3. Decision Threshold (b)
         # b = A + gap. Gap depends on Pressure.
         # gap = intercept + slope * pressure
-        gap_intercept_mu = pm.Normal('gap_int_mu', mu=0.2, sigma=0.1)
-        gap_slope_mu = pm.Normal('gap_slope_mu', mu=-0.1, sigma=0.1)  # Expect neg slope (higher pressure -> lower gap)
+        # Using NON-CENTERED parameterization for participant effects
+        gap_intercept_mu = pm.Normal('gap_int_mu', mu=0.0, sigma=1.0)  # Less informative
+        gap_slope_mu = pm.Normal('gap_slope_mu', mu=0.0, sigma=0.5)  # Less informative, expect neg slope
         
-        # Participant random effects on intercept
-        gap_int_sd = pm.HalfNormal('gap_int_sd', sigma=0.05)
-        gap_int_offset = pm.Normal('gap_int_offset', mu=0, sigma=1, shape=n_p)
+        # Participant random effects on intercept (non-centered)
+        gap_int_sd = pm.HalfNormal('gap_int_sd', sigma=0.3)  # More flexible
+        gap_int_offset_raw = pm.Normal('gap_int_offset_raw', mu=0, sigma=1, shape=n_p)  # Standard normal
         
         gap = pm.Deterministic('gap', 
-            pm.math.softplus(
-                (gap_intercept_mu + gap_int_offset[pid_idx] * gap_int_sd) + 
+            pt.softplus(
+                (gap_intercept_mu + gap_int_offset_raw[pid_idx] * gap_int_sd) + 
                 gap_slope_mu * pressure_obs
             )
         )
@@ -314,23 +317,24 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         # v_correct depends on ID (Difficulty).
         # v_correct = v_c_base + v_c_slope * ID
         # v_error is often modeled as flat or typically smaller.
+        # Using NON-CENTERED parameterization for participant effects
         
-        vc_base_mu = pm.Normal('vc_base_mu', mu=2.5, sigma=0.5)
-        vc_slope_mu = pm.Normal('vc_slope_mu', mu=-0.5, sigma=0.2)  # Harder (Higher ID) -> Slower drift
+        vc_base_mu = pm.Normal('vc_base_mu', mu=0.0, sigma=2.0)  # Less informative, wider prior
+        vc_slope_mu = pm.Normal('vc_slope_mu', mu=0.0, sigma=1.0)  # Less informative, expect neg slope
         
-        vc_base_sd = pm.HalfNormal('vc_base_sd', sigma=0.5)
-        vc_base_offset = pm.Normal('vc_base_offset', mu=0, sigma=1, shape=n_p)
+        vc_base_sd = pm.HalfNormal('vc_base_sd', sigma=1.0)  # More flexible
+        vc_base_offset_raw = pm.Normal('vc_base_offset_raw', mu=0, sigma=1, shape=n_p)  # Standard normal
         
-        ve_mu = pm.Normal('ve_mu', mu=1.0, sigma=0.5)  # Error drift usually lower
+        ve_mu = pm.Normal('ve_mu', mu=0.0, sigma=2.0)  # Less informative prior
         
         v_c = pm.Deterministic('v_c', 
-            pm.math.softplus(
-                (vc_base_mu + vc_base_offset[pid_idx] * vc_base_sd) + 
+            pt.softplus(
+                (vc_base_mu + vc_base_offset_raw[pid_idx] * vc_base_sd) + 
                 vc_slope_mu * id_obs
             )
         )
         
-        v_e = pm.Deterministic('v_e', pm.math.softplus(ve_mu))  # Flat error drift
+        v_e = pm.Deterministic('v_e', pt.softplus(ve_mu))  # Flat error drift
         
         # 5. Drift Variability (s)
         # Fixed to 1.0 for scaling constraint in LBA
@@ -338,26 +342,70 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         
         # --- Likelihood ---
         
+        # For PyMC 5.x CustomDist, stack observed data into 2D array
+        # Shape: (n_trials, 2) where [:, 0] = rt, [:, 1] = response
+        rt_array = np.asarray(rt_obs, dtype=np.float64)
+        resp_array = np.asarray(resp_obs, dtype=np.int32)
+        observed_stack = np.column_stack([rt_array, resp_array])
+        
         # Custom Density - vectorized over trials
-        # Note: CustomDist expects logp(value, *params) signature
-        # The logp function will be called for each trial
+        # PyMC 5.x: observed value is passed as first argument to logp
+        # The lambda extracts rt and response from the stacked array
         obs = pm.CustomDist(
             'obs',
             A, b, v_c, v_e, s, t0,
-            logp=logp_lba_race,
-            observed={'rt': rt_obs, 'response': resp_obs}
+            logp=lambda value, A, b, v_c, v_e, s, t0: logp_lba_race(
+                value[:, 0],  # rt (first column)
+                value[:, 1],  # response (second column)
+                A, b, v_c, v_e, s, t0
+            ),
+            observed=observed_stack
         )
         
         # --- Sampling ---
-        print("Sampling... (This may take time)")
+        print("\n" + "="*60)
+        print("Starting MCMC Sampling...")
+        print("="*60)
+        print(f"Configuration:")
+        print(f"  - Draws: 1000 per chain")
+        print(f"  - Tune (warmup): 2000 per chain (increased for better adaptation)")
+        print(f"  - Chains: 4 (increased for robust diagnostics)")
+        print(f"  - Total iterations: 12000 (3000 per chain)")
+        print(f"  - Target accept rate: 0.95 (higher = more conservative)")
+        print(f"  - Max tree depth: 15")
+        print(f"  - Estimated time: 60-90 minutes (longer due to 4 chains + more warmup)")
+        print("="*60)
+        print("\nProgress will be shown below. This may take a while...\n")
+        
+        # Add progress bar callback
+        import time
+        start_time = time.time()
+        
+        def progress_callback(trace, draw):
+            """Callback to show progress during sampling"""
+            if draw % 100 == 0:
+                elapsed = time.time() - start_time
+                total_draws = 2000  # per chain
+                progress = (draw / total_draws) * 100
+                eta = (elapsed / draw) * (total_draws - draw) if draw > 0 else 0
+                print(f"Chain progress: {draw}/{total_draws} ({progress:.1f}%) | "
+                      f"Elapsed: {elapsed/60:.1f}m | ETA: {eta/60:.1f}m", flush=True)
+            return trace
+        
         trace = pm.sample(
             draws=1000,
-            tune=1000,
-            target_accept=0.9,
-            chains=2,
-            cores=2,
-            return_inferencedata=True
+            tune=2000,  # Increased warmup for better adaptation
+            target_accept=0.95,  # Increased from 0.9 to improve convergence
+            chains=4,  # Increased from 2 for better diagnostics
+            cores=4,  # Match number of chains
+            return_inferencedata=True,
+            progressbar=True,  # Use PyMC's built-in progress bar
+            max_treedepth=15  # Increased from default 10 to handle difficult geometry
         )
+        
+        elapsed_total = time.time() - start_time
+        print(f"\n✓ Sampling complete! Total time: {elapsed_total/60:.1f} minutes")
+        print("="*60)
         
     return trace, model
 
@@ -389,17 +437,28 @@ def main():
             print("Install with: pip install pymc arviz", file=sys.stderr)
             sys.exit(1)
         
+        print("\n" + "="*60)
+        print("Fitting Hierarchical LBA Model...")
+        print("="*60)
+        
         trace, model = fit_hierarchical_lba(df, participants, modalities, ui_modes)
+        
+        print("\n" + "="*60)
+        print("Extracting Results...")
+        print("="*60)
         
         # Save Summary
         summary = az.summary(trace, var_names=['t0_mu', 'vc_slope_mu', 'gap_slope_mu', 've_mu', 'vc_base_mu', 'gap_int_mu'])
         print("\nModel Summary:")
         print(summary)
         
+        print(f"\nSaving results to {output_dir}...")
         summary.to_csv(output_dir / 'lba_parameters_summary.csv')
+        print("  ✓ Saved: lba_parameters_summary.csv")
         
         # Save full trace as netCDF
         trace.to_netcdf(output_dir / 'lba_trace.nc')
+        print("  ✓ Saved: lba_trace.nc")
         
         # Extract parameters by modality and ui_mode for JSON export
         print("\nExtracting parameters by modality and ui_mode...")
@@ -447,29 +506,102 @@ def main():
         json_path = output_dir / 'lba_parameters.json'
         with open(json_path, 'w') as f:
             json.dump(parameters_by_condition, f, indent=2)
-        print(f"✓ Parameters exported to {json_path}")
+        print(f"  ✓ Saved: lba_parameters.json")
         
         # Plot
+        print("\nGenerating trace plots...")
         try:
+            import matplotlib
+            matplotlib.use('Agg')  # Non-interactive backend
             import matplotlib.pyplot as plt
             az.plot_trace(trace, var_names=['vc_slope_mu', 'gap_slope_mu', 't0_mu'])
             plt.savefig(output_dir / 'lba_trace_plot.png', dpi=150, bbox_inches='tight')
             plt.close()
-            print(f"Trace plot saved to {output_dir / 'lba_trace_plot.png'}")
+            print(f"  ✓ Saved: lba_trace_plot.png")
         except Exception as e:
-            print(f"Warning: Could not create trace plot: {e}")
+            print(f"  ⚠ Warning: Could not create trace plot: {e}")
         
         # Save convergence diagnostics
-        rhat = az.rhat(trace)
-        rhat_df = az.extract(rhat, var_names=['vc_slope_mu', 'gap_slope_mu', 't0_mu', 've_mu'])
-        print("\nR-hat diagnostics (should be < 1.05):")
-        print(rhat_df)
+        print("\nComputing convergence diagnostics...")
+        try:
+            # Get R-hat for key parameters (group-level means and SDs)
+            var_names = ['vc_slope_mu', 'gap_slope_mu', 't0_mu', 've_mu', 'vc_base_mu', 'gap_int_mu', 
+                        't0_sd', 'A_sd', 'vc_base_sd', 'gap_int_sd']  # Also check SD parameters
+            rhat = az.rhat(trace, var_names=var_names)
+            
+            # Extract R-hat values from Dataset
+            print("\nR-hat diagnostics (should be < 1.01, acceptable < 1.05):")
+            for var_name in var_names:
+                try:
+                    # Try to get the value from the Dataset
+                    if var_name in rhat.data_vars:
+                        rhat_val = float(rhat[var_name].values)
+                    elif hasattr(rhat, 'to_dict'):
+                        rhat_dict = rhat.to_dict()
+                        rhat_val = float(rhat_dict.get('data_vars', {}).get(var_name, {}).get('data', [0])[0])
+                    else:
+                        # Fallback: try to access directly
+                        rhat_val = float(rhat[var_name].values) if var_name in rhat else 999.0
+                    
+                    status = "✓" if rhat_val < 1.01 else "⚠" if rhat_val < 1.05 else "✗"
+                    print(f"  {status} {var_name}: {rhat_val:.3f}")
+                except Exception as e:
+                    print(f"  ⚠ {var_name}: Could not extract R-hat ({e})")
+            
+            # Also get ESS (Effective Sample Size) for same parameters
+            ess = az.ess(trace, var_names=var_names)
+            print("\nESS (Effective Sample Size, should be > 400):")
+            for var_name in var_names:
+                try:
+                    if var_name in ess.data_vars:
+                        ess_val = float(ess[var_name].values)
+                    else:
+                        ess_val = 0.0
+                    
+                    status = "✓" if ess_val > 400 else "⚠" if ess_val > 100 else "✗"
+                    print(f"  {status} {var_name}: {ess_val:.1f}")
+                except Exception as e:
+                    print(f"  ⚠ {var_name}: Could not extract ESS ({e})")
+            
+            # Check for convergence issues
+            rhat_values = []
+            ess_values = []
+            for var_name in var_names:
+                try:
+                    if var_name in rhat.data_vars:
+                        rhat_values.append(float(rhat[var_name].values))
+                    if var_name in ess.data_vars:
+                        ess_values.append(float(ess[var_name].values))
+                except:
+                    pass
+            
+            if rhat_values and (max(rhat_values) > 1.05 or min(ess_values) < 100 if ess_values else False):
+                print("\n⚠ WARNING: Model convergence issues detected!")
+                print("  - High R-hat values indicate poor convergence")
+                print("  - Low ESS indicates inefficient sampling")
+                print("  - Consider:")
+                print("    1. Re-running with current improved settings (target_accept=0.95, max_treedepth=15)")
+                print("    2. Running more chains (4+) for better diagnostics")
+                print("    3. Reparameterizing the model")
+                print("    4. Using simpler priors")
+                print("  See analysis/LBA_CONVERGENCE_NOTES.md for details")
+            
+        except Exception as e:
+            print(f"  ⚠ Warning: Could not compute convergence diagnostics: {e}")
+            print("  (Results were still saved, but convergence may be poor)")
+            import traceback
+            traceback.print_exc()
         
-        print(f"\nAnalysis Complete. Results saved to {output_dir}")
-        print(f"  - lba_parameters.json: Parameters by modality and ui_mode")
-        print(f"  - lba_parameters_summary.csv: Parameter estimates")
-        print(f"  - lba_trace.nc: Full MCMC trace")
-        print(f"  - lba_trace_plot.png: Trace plots")
+        print("\n" + "="*60)
+        print("✓ LBA Analysis Complete!")
+        print("="*60)
+        print(f"\nResults saved to: {output_dir}")
+        print(f"  • lba_parameters.json - Parameters by modality and ui_mode")
+        print(f"  • lba_parameters_summary.csv - Parameter estimates")
+        print(f"  • lba_trace.nc - Full MCMC trace")
+        print(f"  • lba_trace_plot.png - Trace plots")
+        print("\nYou can now render Report.qmd to see the results in Section 16.")
+        print("="*60)
         
     except Exception as e:
         print(f"Fitting Error: {e}", file=sys.stderr)

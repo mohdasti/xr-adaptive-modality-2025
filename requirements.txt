@@ -1,12 +1,16 @@
 # Python dependencies for data processing scripts
 # Install with: pip install -r requirements.txt
+# Note: Requires Python 3.8+ (pandas 2.x requires Python 3.8+)
+# Use: python3 -m pip install -r requirements.txt
 
 # Data processing
 pandas>=2.0.0
 
-# Analysis (optional - for LBA analysis)
-# pymc>=5.0.0
-# arviz>=0.15.0
+# Analysis (required for LBA analysis)
+pymc>=5.0.0
+arviz>=0.15.0
+
+
 
 
 

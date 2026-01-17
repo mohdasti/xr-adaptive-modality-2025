@@ -109,6 +109,8 @@ If HDDM is not installed or data is insufficient, the script automatically recom
 
 Linear Ballistic Accumulator (LBA) model, a robust alternative to DDM.
 
+**Note**: This script includes comprehensive progress monitoring (progress bars, ETA, diagnostics). See [docs/guides/mcmc_progress_monitoring.md](../docs/guides/mcmc_progress_monitoring.md) for implementation details and best practices.
+
 **Required Packages:**
 ```bash
 # Optional for Bayesian estimation:
