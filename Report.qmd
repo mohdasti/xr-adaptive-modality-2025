@@ -36,6 +36,7 @@ if (!has_effectsize) {
 }
 
 # Set sum-to-zero contrasts for proper type-III ANOVA interpretation in factorial designs
+# Note: Type III ANOVA is necessary for unbalanced designs (hand and gaze N differ due to input device exclusion)
 options(contrasts = c("contr.sum", "contr.poly"))
 
 # Check for ggdist (needed for proper raincloud plots)
@@ -204,6 +205,59 @@ get_n_modality_string <- function(data) {
   if (n_hand == 0 && n_gaze == 0) return("N = 0")
   if (n_hand == n_gaze) return(paste0("N = ", n_hand, " per modality"))
   paste0("N = ", n_hand, " (hand), ", n_gaze, " (gaze)")
+}
+
+# --- HELPER: INPUT DEVICE SAMPLE SIZE COMPUTATION ---
+# Compute actual sample sizes for unbalanced design reporting
+compute_input_device_stats <- function(data) {
+  if (!"input_device" %in% names(data)) {
+    return(list(
+      hand_n = 0,
+      gaze_n = 0,
+      mouse_n = 0,
+      trackpad_n = 0,
+      trackpad_hand_trials = 0,
+      trackpad_gaze_trials = 0
+    ))
+  }
+  
+  # Get unique participants by input device
+  device_pids <- data %>%
+    filter(!is.na(input_device)) %>%
+    distinct(pid, input_device, .keep_all = TRUE)
+  
+  mouse_pids <- device_pids %>% filter(input_device == "mouse") %>% pull(pid)
+  trackpad_pids <- device_pids %>% filter(input_device == "trackpad") %>% pull(pid)
+  
+  # Hand modality: only mouse users
+  hand_n <- data %>%
+    filter(modality == "hand", pid %in% mouse_pids) %>%
+    distinct(pid) %>%
+    n_distinct()
+  
+  # Gaze modality: all users (mouse + trackpad)
+  gaze_n <- data %>%
+    filter(modality == "gaze") %>%
+    distinct(pid) %>%
+    n_distinct()
+  
+  # Trackpad users' trial counts (for exclusion impact)
+  trackpad_hand_trials <- if (length(trackpad_pids) > 0) {
+    data %>% filter(pid %in% trackpad_pids, modality == "hand") %>% nrow()
+  } else { 0 }
+  
+  trackpad_gaze_trials <- if (length(trackpad_pids) > 0) {
+    data %>% filter(pid %in% trackpad_pids, modality == "gaze") %>% nrow()
+  } else { 0 }
+  
+  return(list(
+    hand_n = hand_n,
+    gaze_n = gaze_n,
+    mouse_n = length(mouse_pids),
+    trackpad_n = length(trackpad_pids),
+    trackpad_hand_trials = trackpad_hand_trials,
+    trackpad_gaze_trials = trackpad_gaze_trials
+  ))
 }
 
 # --- HELPER: APA FORMATTING FUNCTIONS ---
@@ -457,6 +511,87 @@ df <- df_all_trials %>%
     rt_ms >= 150,  # Physiological minimum
     rt_ms <= 6000  # Time-out threshold
   )
+
+# --- INPUT DEVICE EXCLUSION ---
+# Methodological note: Trackpad vs mouse is a known confound in pointing task research
+# (MacKenzie & Jusoh, 2001; Karam et al., 2009). Trackpads have different acceleration 
+# curves and precision characteristics that can significantly affect hand modality 
+# performance (throughput, RT, error rates, movement quality).
+#
+# Exclusion strategy (data-salvaging approach):
+# - EXCLUDE: Hand trials from trackpad users (device confound for hand modality)
+# - KEEP: Gaze trials from trackpad users (simulation normalizes input, device-independent)
+# - KEEP: All trials from mouse users (standard device, both hand and gaze)
+#
+# Rationale:
+# - Hand modality requires device-dependent motor control → standardize device (mouse only)
+# - Gaze modality uses physiologically-informed simulation → device doesn't matter after simulation
+# - This approach maximizes data utilization while maintaining validity
+
+if ("input_device" %in% names(df)) {
+  # Check input device distribution
+  input_device_dist <- df %>%
+    filter(!is.na(input_device)) %>%
+    distinct(pid, input_device, .keep_all = TRUE) %>%
+    count(input_device, name = "N_participants") %>%
+    mutate(Pct = round(100 * N_participants / sum(N_participants), 1))
+  
+  cat("\n### Input Device Distribution (Before Exclusion)\n\n")
+  print(knitr::kable(input_device_dist, 
+                     caption = "Participants by input device type"))
+  cat("\n")
+  
+  # Count trackpad users and their trials
+  trackpad_pids <- df %>%
+    filter(!is.na(input_device), input_device == "trackpad") %>%
+    distinct(pid) %>%
+    pull(pid)
+  
+  if (length(trackpad_pids) > 0) {
+    trackpad_hand_trials <- df %>%
+      filter(pid %in% trackpad_pids, modality == "hand") %>%
+      nrow()
+    
+    trackpad_gaze_trials <- df %>%
+      filter(pid %in% trackpad_pids, modality == "gaze") %>%
+      nrow()
+    
+    cat("**Input Device Exclusion Applied:**\n")
+    cat("- Trackpad users: N = ", length(trackpad_pids), " participants\n")
+    cat("- Hand trials excluded: ", trackpad_hand_trials, " (device confound for hand modality)\n")
+    cat("- Gaze trials included: ", trackpad_gaze_trials, " (simulation normalizes input)\n\n")
+  }
+  
+  # Apply exclusion: exclude hand trials from trackpad users
+  df <- df %>%
+    filter(
+      input_device == "mouse" |  # Keep all mouse users' trials (both hand and gaze)
+      (input_device == "trackpad" & modality == "gaze")  # Keep trackpad users' gaze only
+    )
+  
+  cat("**Exclusion rationale:** Hand modality requires device-dependent motor control, so we standardize device (mouse only). Gaze modality uses physiologically-informed simulation that normalizes input, so device doesn't matter after simulation. This maximizes data utilization while maintaining validity.\n\n")
+  
+  # Update df_factorial similarly (for factorial analyses)
+  if (exists("df_factorial")) {
+    df_factorial <- df_factorial %>%
+      filter(
+        input_device == "mouse" |
+        (input_device == "trackpad" & modality == "gaze")
+      )
+  }
+  
+  # Also update df_all_trials for error rate analysis
+  if (exists("df_all_trials")) {
+    df_all_trials <- df_all_trials %>%
+      filter(
+        input_device == "mouse" |
+        (input_device == "trackpad" & modality == "gaze")
+      )
+  }
+  
+} else {
+  cat("**Note:** `input_device` column not found in data. Input device exclusion not applied.\n\n")
+}
 
 # Create a version of df for full factorial analyses (excludes participants with pressure bug)
 # This is used only for analyses requiring modality × ui_mode × pressure
@@ -852,7 +987,177 @@ if (nrow(df_errors) > 0) {
 }
 ```
 
+# Follow-up Models: Gaze-only and Hand-only
+
+```{r follow-up-models}
+# Throughput follow-ups: Gaze-only (ui_mode * pressure) and Hand-only (pressure only)
+if (exists("df_tp_model") && nrow(df_tp_model) > 0) {
+  df_tp_gaze <- df_tp_model %>% filter(modality == "gaze")
+  df_tp_hand <- df_tp_model %>% filter(modality == "hand")
+  
+  # Gaze-only TP model
+  model_tp_gaze <- NULL
+  emm_tp_gaze <- NULL
+  pairs_tp_gaze <- NULL
+  if (nrow(df_tp_gaze) > 0 && n_distinct(df_tp_gaze$pid) >= 2) {
+    model_tp_gaze <- tryCatch({
+      lmer(TP ~ ui_mode * pressure + (1|pid), data = df_tp_gaze, 
+           REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+    }, error = function(e) NULL)
+    
+    if (!is.null(model_tp_gaze)) {
+      emm_tp_gaze <- tryCatch({
+        emmeans(model_tp_gaze, ~ ui_mode * pressure)
+      }, error = function(e) NULL)
+      
+      if (!is.null(emm_tp_gaze)) {
+        pairs_tp_gaze <- tryCatch({
+          pairs(emm_tp_gaze, adjust = "holm")
+        }, error = function(e) NULL)
+      }
+    }
+  }
+  
+  # Hand-only TP model (pressure only)
+  model_tp_hand <- NULL
+  emm_tp_hand <- NULL
+  pairs_tp_hand <- NULL
+  if (nrow(df_tp_hand) > 0 && n_distinct(df_tp_hand$pid) >= 2) {
+    model_tp_hand <- tryCatch({
+      lmer(TP ~ pressure + (1|pid), data = df_tp_hand, 
+           REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+    }, error = function(e) NULL)
+    
+    if (!is.null(model_tp_hand)) {
+      emm_tp_hand <- tryCatch({
+        emmeans(model_tp_hand, ~ pressure)
+      }, error = function(e) NULL)
+      
+      if (!is.null(emm_tp_hand)) {
+        pairs_tp_hand <- tryCatch({
+          pairs(emm_tp_hand, adjust = "holm")
+        }, error = function(e) NULL)
+      }
+    }
+  }
+}
+
+# RT follow-ups: Gaze-only (ui_mode * pressure) and Hand-only (pressure only)
+if (exists("df_factorial") && nrow(df_factorial) > 0) {
+  df_rt_gaze <- df_factorial %>% filter(modality == "gaze")
+  df_rt_hand <- df_factorial %>% filter(modality == "hand")
+  
+  # Gaze-only RT model
+  model_rt_gaze <- NULL
+  emm_rt_gaze <- NULL
+  pairs_rt_gaze <- NULL
+  if (nrow(df_rt_gaze) > 0 && n_distinct(df_rt_gaze$pid) >= 2) {
+    model_rt_gaze <- tryCatch({
+      lmer(log_rt ~ ui_mode * pressure + (1|pid), data = df_rt_gaze, 
+           REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+    }, error = function(e) NULL)
+    
+    if (!is.null(model_rt_gaze)) {
+      emm_rt_gaze <- tryCatch({
+        emmeans(model_rt_gaze, ~ ui_mode * pressure, type = "response")
+      }, error = function(e) NULL)
+      
+      if (!is.null(emm_rt_gaze)) {
+        pairs_rt_gaze <- tryCatch({
+          pairs(emm_rt_gaze, adjust = "holm")
+        }, error = function(e) NULL)
+      }
+    }
+  }
+  
+  # Hand-only RT model (pressure only)
+  model_rt_hand <- NULL
+  emm_rt_hand <- NULL
+  pairs_rt_hand <- NULL
+  if (nrow(df_rt_hand) > 0 && n_distinct(df_rt_hand$pid) >= 2) {
+    model_rt_hand <- tryCatch({
+      lmer(log_rt ~ pressure + (1|pid), data = df_rt_hand, 
+           REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+    }, error = function(e) NULL)
+    
+    if (!is.null(model_rt_hand)) {
+      emm_rt_hand <- tryCatch({
+        emmeans(model_rt_hand, ~ pressure, type = "response")
+      }, error = function(e) NULL)
+      
+      if (!is.null(emm_rt_hand)) {
+        pairs_rt_hand <- tryCatch({
+          pairs(emm_rt_hand, adjust = "holm")
+        }, error = function(e) NULL)
+      }
+    }
+  }
+}
+
+# Error follow-ups: Gaze-only (ui_mode * pressure) and Hand-only (pressure only, if variance sufficient)
+if (exists("df_errors_factorial") && nrow(df_errors_factorial) > 0) {
+  df_err_gaze <- df_errors_factorial %>% filter(modality == "gaze")
+  df_err_hand <- df_errors_factorial %>% filter(modality == "hand")
+  
+  # Gaze-only Error model
+  model_err_gaze <- NULL
+  emm_err_gaze <- NULL
+  pairs_err_gaze <- NULL
+  if (nrow(df_err_gaze) > 0 && n_distinct(df_err_gaze$pid) >= 2) {
+    error_rate_gaze <- mean(df_err_gaze$error, na.rm = TRUE)
+    if (error_rate_gaze >= 0.01 && error_rate_gaze <= 0.99) {
+      model_err_gaze <- tryCatch({
+        glmer(error ~ ui_mode * pressure + (1|pid), data = df_err_gaze, 
+              family = binomial, control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+      }, error = function(e) NULL)
+      
+      if (!is.null(model_err_gaze)) {
+        emm_err_gaze <- tryCatch({
+          emmeans(model_err_gaze, ~ ui_mode * pressure, type = "response")
+        }, error = function(e) NULL)
+        
+        if (!is.null(emm_err_gaze)) {
+          pairs_err_gaze <- tryCatch({
+            pairs(emm_err_gaze, adjust = "holm")
+          }, error = function(e) NULL)
+        }
+      }
+    }
+  }
+  
+  # Hand-only Error model (pressure only, if variance sufficient)
+  model_err_hand <- NULL
+  emm_err_hand <- NULL
+  pairs_err_hand <- NULL
+  if (nrow(df_err_hand) > 0 && n_distinct(df_err_hand$pid) >= 2) {
+    error_rate_hand <- mean(df_err_hand$error, na.rm = TRUE)
+    if (error_rate_hand >= 0.01 && error_rate_hand <= 0.99) {
+      model_err_hand <- tryCatch({
+        glmer(error ~ pressure + (1|pid), data = df_err_hand, 
+              family = binomial, control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+      }, error = function(e) NULL)
+      
+      if (!is.null(model_err_hand)) {
+        emm_err_hand <- tryCatch({
+          emmeans(model_err_hand, ~ pressure, type = "response")
+        }, error = function(e) NULL)
+        
+        if (!is.null(emm_err_hand)) {
+          pairs_err_hand <- tryCatch({
+            pairs(emm_err_hand, adjust = "holm")
+          }, error = function(e) NULL)
+        }
+      }
+    } else {
+      cat("⚠ **Hand error model skipped:** Insufficient variance (error rate = ", round(100 * error_rate_hand, 1), "%). Descriptive only.\n\n")
+    }
+  }
+}
+```
+
 # Data Quality & Coverage Gate
+
+<!-- [CORE] Required: QC metrics, exclusion rationale, sample size reporting -->
 
 ::: {.callout-note}
 This section prevents misleading models when cells are missing. Current data: N=`r n_distinct(df$pid)` participants.
@@ -897,29 +1202,60 @@ if (nrow(qc_block_completion) > 0) {
 }
 ```
 
+<!-- ============================================ -->
+<!-- SECTION ORGANIZATION: CORE vs SUPPLEMENT    -->
+<!-- ============================================ -->
+<!-- This report contains both CORE sections (addressing pre-registered RQs/Hs) -->
+<!-- and SUPPLEMENT sections (exploratory/descriptive analyses).                -->
+<!-- For case study writing, focus on CORE sections (3, 4, 6, 8).              -->
+<!-- For preprint, CORE sections go in main paper; SUPPLEMENT in supplement.   -->
+<!-- ============================================ -->
 
 
 # 1. Executive Summary
+
+<!-- [CORE] Critical: Overview of key findings -->
 
 This report analyzes **`r n_distinct(df$pid)`** participants performing Fitts' law pointing tasks across two input modalities (Hand, Gaze) and two UI modes (Static, Adaptive).
 
 # Results Snapshot (N = `r qc_participants_included`)
 
 ```{r results-snapshot}
-# Simple contrasts: adaptive - static within modality (averaged over pressure where available)
-contrast_table <- df_pid_cond %>%
-  group_by(modality, ui_mode) %>%
-  summarise(tp = mean(tp_mean, na.rm = TRUE),
-            rt = mean(rt_mean, na.rm = TRUE),
-            err = mean(error_rate, na.rm = TRUE),
-            .groups = "drop") %>%
+# Gaze-only: adaptive - static contrasts (optionally by pressure)
+gaze_snapshot <- df_pid_cond %>%
+  filter(modality == "gaze") %>%
+  group_by(modality, ui_mode, pressure) %>%
+  summarise(
+    tp = mean(tp_mean, na.rm = TRUE),
+    rt = mean(rt_mean, na.rm = TRUE),
+    err = mean(error_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
   pivot_wider(names_from = ui_mode, values_from = c(tp, rt, err)) %>%
   mutate(
     tp_diff_adapt_static = tp_adaptive - tp_static,
     rt_diff_adapt_static = rt_adaptive - rt_static,
     err_diff_adapt_static = err_adaptive - err_static
   ) %>%
-  select(modality, tp_diff_adapt_static, rt_diff_adapt_static, err_diff_adapt_static)
+  select(modality, pressure, tp_diff_adapt_static, rt_diff_adapt_static, err_diff_adapt_static)
+
+# Hand-only: pressure effect contrasts (ui_mode excluded by design)
+hand_snapshot <- df_pid_cond %>%
+  filter(modality == "hand") %>%
+  group_by(modality, pressure) %>%
+  summarise(
+    tp = mean(tp_mean, na.rm = TRUE),
+    rt = mean(rt_mean, na.rm = TRUE),
+    err = mean(error_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = pressure, values_from = c(tp, rt, err)) %>%
+  mutate(
+    tp_diff_p1_p0 = tp_1 - tp_0,
+    rt_diff_p1_p0 = rt_1 - rt_0,
+    err_diff_p1_p0 = err_1 - err_0
+  ) %>%
+  select(modality, tp_diff_p1_p0, rt_diff_p1_p0, err_diff_p1_p0)
 
 tlx_snapshot <- df_raw %>%
   filter(!is.na(pid)) %>%
@@ -938,11 +1274,17 @@ manip_snapshot <- df_raw %>%
     .groups = "drop"
   )
 
-contrast_table %>%
-  kable(caption = "RQ1 contrasts (adaptive - static)") %>%
+cat("\n### Gaze: Adaptive vs Static (Primary Adaptive Test)\n\n")
+gaze_snapshot %>%
+  kable(caption = "Gaze contrasts: adaptive - static (by pressure)") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-cat("\n*Note:* These contrasts are descriptive only; no inferential claims are made at N=`r n_distinct(df$pid)`.\n\n")
+cat("\n### Hand: Pressure Effect (UI Mode Not Exercised)\n\n")
+hand_snapshot %>%
+  kable(caption = "Hand contrasts: pressure ON - pressure OFF") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+cat("\n*Note:* Hand width inflation did not activate (width_scale_factor always 1); UI mode is not interpreted as an adaptive manipulation for hand. The gaze-only UI Mode × Pressure model is the primary test of adaptive vs static effects.\n\n")
 
 tlx_snapshot %>%
   kable(caption = "RQ2 snapshot: Overall TLX") %>%
@@ -952,7 +1294,7 @@ manip_snapshot %>%
   kable(caption = "RQ3 manipulation check: width scaling") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-cat("\n*Note:* In the current build, width scaling was not activated; all recorded `width_scale_factor` values equal 1.0. RQ3 will be revisited once adaptive width scaling is enabled.\n\n")
+cat("\n*Note:* Hand width inflation did not activate; all recorded `width_scale_factor` values equal 1.0. See root-cause diagnostic section for investigation of non-activation.\n\n")
 ```
 
 ## Key Findings
@@ -1059,9 +1401,11 @@ cat("Participants were primarily non-gamers (median self-reported gaming = ", ga
 
 # 3. Primary Analysis: Throughput
 
+<!-- [CORE - PRIMARY] RQ1: Core performance metric, pre-registered hypothesis -->
+
 **Research Question:** Does the Adaptive UI improve performance (Throughput) compared to Static, especially for Gaze?
 
-**Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
+**Sample Size:** `r get_n_string(df_iso %>% filter(modality == "hand"))` participants for hand modality (mouse users only), `r get_n_string(df_iso %>% filter(modality == "gaze"))` participants for gaze modality (mouse + trackpad users). See Data Quality section for input device exclusion rationale.
 
 **Analysis Note:** We observe a large main effect of modality (hand > gaze) on throughput. Interaction effects are treated as exploratory.
 
@@ -1256,7 +1600,7 @@ if (exists("emm_tp") && !is.null(emm_tp)) {
 
 #### Planned Sample Size & Power
 
-The throughput analysis was designed for a within-subjects 2×2×2 factorial (modality × UI mode × pressure). Our **primary effect of interest is the UI mode main effect** (adaptive vs static), which we expect to be medium in size (dz ≈ 0.4–0.6). Standard repeated-measures power calculations and guidelines (Cohen, 1988; Brysbaert, 2019) indicate that **N ≈ 50 participants** is sufficient for 80% power to detect dz ≈ 0.40. We therefore set **N = 48 (six complete Williams sequences)** as the primary design target, with the option to extend to **N = 64 (eight sequences)** if recruitment permits. Given the large number of trials per condition and the mixed-effects model (random intercepts per participant), this sample size is expected to provide **high power for UI mode and modality main effects**, while interactions are treated as secondary and more exploratory (Kumle et al., 2021; Matuschek et al., 2017).
+The throughput analysis was designed for a within-subjects 2×2×2 factorial (modality × UI mode × pressure). However, **the HAND adaptive manipulation (width inflation) did not execute** (width_scale_factor always 1), so UI mode is not interpretable as an adaptation for hand. The **primary adaptive test is the gaze-only UI Mode × Pressure interaction**, which evaluates whether declutter (the gaze adaptive manipulation that did execute) improves performance. Standard repeated-measures power calculations and guidelines (Cohen, 1988; Brysbaert, 2019) indicate that **N ≈ 50 participants** is sufficient for 80% power to detect dz ≈ 0.40. We therefore set **N = 48 (six complete Williams sequences)** as the primary design target, with the option to extend to **N = 64 (eight sequences)** if recruitment permits. Given the large number of trials per condition and the mixed-effects model (random intercepts per participant), this sample size is expected to provide **high power for modality main effects and gaze-only adaptive effects**, while the omnibus UI mode effect is diluted by hand non-manipulation and should be interpreted via the targeted gaze-only follow-up.
 
 ```{r tp-model}
 if (exists("model_tp") && !is.null(model_tp)) {
@@ -1352,31 +1696,87 @@ if (exists("model_tp") && !is.null(model_tp)) {
     p_ui <- ui_mode_row$`Pr(>F)`[1]
     eta_ui <- ui_mode_row$partial_eta_sq[1]
     
-    cat("**UI Mode Effect:** The main effect of UI mode was ",
+    cat("**UI Mode Effect (Omnibus):** The main effect of UI mode was ",
         ifelse(p_ui < .05, "significant", "non-significant"),
         ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
         ", η²p = ", sprintf("%.3f", eta_ui),
-        " (", interpret_eta_sq(eta_ui), " effect).", sep = "")
+        " (", interpret_eta_sq(eta_ui), " effect). ", sep = "")
+    cat("**Note:** This omnibus UI mode effect is diluted by the fact that HAND width inflation did not execute (width_scale_factor always 1), so UI mode is not interpretable as an adaptive manipulation for hand. The interpretable test of adaptation comes from the **gaze-only UI Mode × Pressure follow-up model** below.\n\n")
+  }
+  
+  # Gaze-only follow-up results
+  if (exists("model_tp_gaze") && !is.null(model_tp_gaze) && exists("emm_tp_gaze") && !is.null(emm_tp_gaze)) {
+    cat("#### Gaze-Only Follow-up: UI Mode × Pressure (Primary Adaptive Test)\n\n")
     
-        if (exists("emm_tp") && !is.null(emm_tp)) {
-          emm_ui <- emmeans(model_tp, ~ ui_mode)
-          emm_ui_df <- as.data.frame(emm_ui)
-          if (nrow(emm_ui_df) == 2) {
-            # Safely extract means
-            static_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "static")
-            adaptive_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "adaptive")
-            
-            if (!is.na(static_mean) && !is.na(adaptive_mean)) {
-              static_str <- format_mean_ci(static_mean, NA_real_, NA_real_, "%.2f", " bits/s")
-              adaptive_str <- format_mean_ci(adaptive_mean, NA_real_, NA_real_, "%.2f", " bits/s")
-              
-              cat(" Adaptive UI (", adaptive_str, ") ",
-                  ifelse(adaptive_mean > static_mean, "improved", "did not improve"),
-                  " throughput compared to Static UI (", static_str, ").", sep = "")
-            }
-          }
-        }
-    cat("\n\n")
+    # ANOVA for gaze-only model
+    anova_tp_gaze <- anova(model_tp_gaze, type = "III")
+    print(anova_tp_gaze)
+    cat("\n")
+    
+    # EMMs for gaze-only
+    emm_tp_gaze_df <- as.data.frame(emm_tp_gaze)
+    ci_lower <- if ("lower.CL" %in% names(emm_tp_gaze_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_tp_gaze_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_tp_gaze_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_tp_gaze_df)) "asymp.UCL" else NULL
+    
+    cat("**Estimated Marginal Means (Gaze-only):**\n")
+    emm_tp_gaze_table <- emm_tp_gaze_df %>%
+      mutate(
+        `UI Mode` = str_to_title(ui_mode),
+        Pressure = as.character(pressure),
+        `Mean TP (bits/s)` = round(emmean, 2),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 2) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 2) else NA_real_
+      ) %>%
+      select(`UI Mode`, Pressure, `Mean TP (bits/s)`, `95% CI Lower`, `95% CI Upper`)
+    print(knitr::kable(emm_tp_gaze_table, caption = "Estimated Marginal Means for Throughput: Gaze-only"))
+    cat("\n")
+    
+    # Key contrasts
+    if (exists("pairs_tp_gaze") && !is.null(pairs_tp_gaze)) {
+      cat("**Key Contrasts (Gaze-only, Holm-adjusted):**\n")
+      pairs_tp_gaze_df <- as.data.frame(pairs_tp_gaze)
+      # Focus on adaptive vs static under pressure ON and OFF
+      key_contrasts <- pairs_tp_gaze_df %>%
+        filter(grepl("adaptive.*static|static.*adaptive", contrast, ignore.case = TRUE))
+      if (nrow(key_contrasts) > 0) {
+        print(knitr::kable(key_contrasts %>% head(6), digits = 3))
+      }
+      cat("\n")
+    }
+  }
+  
+  # Hand-only follow-up results (pressure effect only)
+  if (exists("model_tp_hand") && !is.null(model_tp_hand) && exists("emm_tp_hand") && !is.null(emm_tp_hand)) {
+    cat("#### Hand-Only Follow-up: Pressure Effect\n\n")
+    cat("*Note:* UI mode is excluded from hand models by design because width scaling did not execute.\n\n")
+    
+    # ANOVA for hand-only model
+    anova_tp_hand <- anova(model_tp_hand, type = "III")
+    print(anova_tp_hand)
+    cat("\n")
+    
+    # EMMs for hand-only
+    emm_tp_hand_df <- as.data.frame(emm_tp_hand)
+    ci_lower <- if ("lower.CL" %in% names(emm_tp_hand_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_tp_hand_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_tp_hand_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_tp_hand_df)) "asymp.UCL" else NULL
+    
+    cat("**Estimated Marginal Means (Hand-only):**\n")
+    emm_tp_hand_table <- emm_tp_hand_df %>%
+      mutate(
+        Pressure = as.character(pressure),
+        `Mean TP (bits/s)` = round(emmean, 2),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 2) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 2) else NA_real_
+      ) %>%
+      select(Pressure, `Mean TP (bits/s)`, `95% CI Lower`, `95% CI Upper`)
+    print(knitr::kable(emm_tp_hand_table, caption = "Estimated Marginal Means for Throughput: Hand-only (pressure effect)"))
+    
+    if (exists("pairs_tp_hand") && !is.null(pairs_tp_hand)) {
+      cat("\n**Pressure Contrast (Hand-only, Holm-adjusted):**\n")
+      pairs_tp_hand_df <- as.data.frame(pairs_tp_hand)
+      print(knitr::kable(pairs_tp_hand_df, digits = 3))
+    }
+    cat("\n")
   }
   
   if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
@@ -1491,11 +1891,13 @@ if (exists("model_tp") && !is.null(model_tp)) {
 
 # 4. Movement Time Analysis (Core Confirmatory)
 
+<!-- [CORE - PRIMARY] RQ1/RQ3: Complementary performance metric to throughput -->
+
 **Research Question:** How does movement time vary across conditions?
 
 *This analysis is part of the core confirmatory battery for RQ1 and RQ3. Movement time is mathematically coupled with throughput (TP = ID/RT) and serves as a complementary performance metric.*
 
-**Sample Size:** `r get_n_string(df)` participants with valid movement time data (correct trials only).
+**Sample Size:** `r get_n_string(df %>% filter(modality == "hand"))` participants for hand modality (mouse users only), `r get_n_string(df %>% filter(modality == "gaze"))` participants for gaze modality (mouse + trackpad users).
 
 **Relationship to Throughput:** The RT patterns mirror throughput: hand is faster than gaze. Adaptive vs static and pressure do not show robust main effects on movement time at this N, consistent with the TP results.
 
@@ -1685,7 +2087,9 @@ if (exists("emm_rt") && !is.null(emm_rt)) {
 
 #### Planned Sample Size & Power
 
-The log-RT analysis uses the same 2×2×2 within-subjects design and random-intercept LMM as the throughput analysis. Because throughput and RT are mathematically coupled (TP = ID/RT) and we expect **similar medium-sized UI mode and modality effects**, the **sample-size logic is identical**: **N = 48** is sufficient for detecting dz ≈ 0.40–0.50 differences with ≈0.80 power, and **N = 64** further strengthens power for smaller effects and interactions (Cohen, 1988). Trial-level modeling with many repeated observations per participant increases precision, but our power planning is intentionally conservative and based on participant-level effects rather than naïvely counting trials.
+The log-RT analysis uses the same 2×2×2 within-subjects design and random-intercept LMM as the throughput analysis. However, **the HAND adaptive manipulation (width inflation) did not execute** (width_scale_factor always 1), so UI mode is not interpretable as an adaptation for hand. The **primary adaptive test is the gaze-only UI Mode × Pressure interaction**. Because throughput and RT are mathematically coupled (TP = ID/RT), the **sample-size logic is identical**: **N = 48** is sufficient for detecting dz ≈ 0.40–0.50 differences with ≈0.80 power, and **N = 64** further strengthens power for smaller effects and interactions (Cohen, 1988). Trial-level modeling with many repeated observations per participant increases precision, but our power planning is intentionally conservative and based on participant-level effects rather than naïvely counting trials.
+
+**Note on unbalanced design:** Same as throughput analysis: hand modality N=`r {stats_tp <- compute_input_device_stats(df_iso); stats_tp$hand_n}` (mouse users only), gaze modality N=`r stats_tp$gaze_n` (`r stats_tp$mouse_n` mouse + `r stats_tp$trackpad_n` trackpad users). Type III ANOVA with sum-to-zero contrasts handles this appropriately (Fox & Weisberg, 2019).
 
 **Random Effects Structure:** All mixed models in this report use a random intercept for participants `(1 | pid)`, which is a conservative and stable baseline. We may test richer random-effects structures (e.g., `(1 + modality | pid)`) as a robustness check.
 
@@ -1775,31 +2179,87 @@ if (exists("model_rt") && !is.null(model_rt)) {
     p_ui <- ui_mode_row$`Pr(>F)`[1]
     eta_ui <- ui_mode_row$partial_eta_sq[1]
     
-    cat("**UI Mode Effect:** The main effect of UI mode on movement time was ",
+    cat("**UI Mode Effect (Omnibus):** The main effect of UI mode on movement time was ",
         ifelse(p_ui < .05, "significant", "non-significant"),
         ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
         ", η²p = ", sprintf("%.3f", eta_ui),
-        " (", interpret_eta_sq(eta_ui), " effect).", sep = "")
+        " (", interpret_eta_sq(eta_ui), " effect). ", sep = "")
+    cat("**Note:** This omnibus UI mode effect is diluted by the fact that HAND width inflation did not execute, so UI mode is not interpretable as an adaptive manipulation for hand. The interpretable test of adaptation comes from the **gaze-only UI Mode × Pressure follow-up model** below.\n\n")
+  }
+  
+  # Gaze-only follow-up results
+  if (exists("model_rt_gaze") && !is.null(model_rt_gaze) && exists("emm_rt_gaze") && !is.null(emm_rt_gaze)) {
+    cat("#### Gaze-Only Follow-up: UI Mode × Pressure (Primary Adaptive Test)\n\n")
     
-        if (exists("emm_rt") && !is.null(emm_rt)) {
-          emm_ui <- emmeans(model_rt, ~ ui_mode, type = "response")
-          emm_ui_df <- as.data.frame(emm_ui)
-          if (nrow(emm_ui_df) == 2) {
-            # Safely extract means
-            static_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "static")
-            adaptive_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "adaptive")
-            
-            if (!is.na(static_mean) && !is.na(adaptive_mean)) {
-              static_str <- format_mean_ci(static_mean, NA_real_, NA_real_, "%.3f", " s")
-              adaptive_str <- format_mean_ci(adaptive_mean, NA_real_, NA_real_, "%.3f", " s")
-              
-              cat(" Adaptive UI (", adaptive_str, ") ",
-                  ifelse(adaptive_mean < static_mean, "reduced", "did not reduce"),
-                  " movement time compared to Static UI (", static_str, ").", sep = "")
-            }
-          }
-        }
-    cat("\n\n")
+    # ANOVA for gaze-only model
+    anova_rt_gaze <- anova(model_rt_gaze, type = "III")
+    print(anova_rt_gaze)
+    cat("\n")
+    
+    # EMMs for gaze-only
+    emm_rt_gaze_df <- as.data.frame(emm_rt_gaze)
+    ci_lower <- if ("lower.CL" %in% names(emm_rt_gaze_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_rt_gaze_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_rt_gaze_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_rt_gaze_df)) "asymp.UCL" else NULL
+    
+    cat("**Estimated Marginal Means (Gaze-only):**\n")
+    emm_rt_gaze_table <- emm_rt_gaze_df %>%
+      mutate(
+        `UI Mode` = str_to_title(ui_mode),
+        Pressure = as.character(pressure),
+        `Mean RT (s)` = round(emmean, 3),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 3) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 3) else NA_real_
+      ) %>%
+      select(`UI Mode`, Pressure, `Mean RT (s)`, `95% CI Lower`, `95% CI Upper`)
+    print(knitr::kable(emm_rt_gaze_table, caption = "Estimated Marginal Means for Movement Time: Gaze-only"))
+    cat("\n")
+    
+    # Key contrasts
+    if (exists("pairs_rt_gaze") && !is.null(pairs_rt_gaze)) {
+      cat("**Key Contrasts (Gaze-only, Holm-adjusted):**\n")
+      pairs_rt_gaze_df <- as.data.frame(pairs_rt_gaze)
+      # Focus on adaptive vs static under pressure ON and OFF
+      key_contrasts <- pairs_rt_gaze_df %>%
+        filter(grepl("adaptive.*static|static.*adaptive", contrast, ignore.case = TRUE))
+      if (nrow(key_contrasts) > 0) {
+        print(knitr::kable(key_contrasts %>% head(6), digits = 3))
+      }
+      cat("\n")
+    }
+  }
+  
+  # Hand-only follow-up results (pressure effect only)
+  if (exists("model_rt_hand") && !is.null(model_rt_hand) && exists("emm_rt_hand") && !is.null(emm_rt_hand)) {
+    cat("#### Hand-Only Follow-up: Pressure Effect\n\n")
+    cat("*Note:* UI mode is excluded from hand models by design because width scaling did not execute.\n\n")
+    
+    # ANOVA for hand-only model
+    anova_rt_hand <- anova(model_rt_hand, type = "III")
+    print(anova_rt_hand)
+    cat("\n")
+    
+    # EMMs for hand-only
+    emm_rt_hand_df <- as.data.frame(emm_rt_hand)
+    ci_lower <- if ("lower.CL" %in% names(emm_rt_hand_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_rt_hand_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_rt_hand_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_rt_hand_df)) "asymp.UCL" else NULL
+    
+    cat("**Estimated Marginal Means (Hand-only):**\n")
+    emm_rt_hand_table <- emm_rt_hand_df %>%
+      mutate(
+        Pressure = as.character(pressure),
+        `Mean RT (s)` = round(emmean, 3),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 3) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 3) else NA_real_
+      ) %>%
+      select(Pressure, `Mean RT (s)`, `95% CI Lower`, `95% CI Upper`)
+    print(knitr::kable(emm_rt_hand_table, caption = "Estimated Marginal Means for Movement Time: Hand-only (pressure effect)"))
+    
+    if (exists("pairs_rt_hand") && !is.null(pairs_rt_hand)) {
+      cat("\n**Pressure Contrast (Hand-only, Holm-adjusted):**\n")
+      pairs_rt_hand_df <- as.data.frame(pairs_rt_hand)
+      print(knitr::kable(pairs_rt_hand_df, digits = 3))
+    }
+    cat("\n")
   }
   
   if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
@@ -1863,13 +2323,15 @@ if (exists("model_rt") && !is.null(model_rt)) {
 
 # 5. Fitts' Law Modelling
 
+<!-- [CORE - VALIDATION] H4: Validation that task works as expected (manipulation check) -->
+
 **Research Question:** How well does the data fit Fitts' Law? (Linearity check).
 
 #### Planned Sample Size & Power
 
 Fitts' law analyses serve primarily to **validate the pointing task and modality differences**, not to test the core adaptation hypotheses. The ID effect on movement time is typically very large (R² > .70), and robust Fitts-law slopes are observable with as few as 10–20 participants in classic HCI work. In this study, **any final sample N ≥ 30** is more than sufficient for stable ID slopes; our planned **N = 48** places this analysis in an **over-powered, descriptive regime**. We therefore do not perform formal power calculations here and treat Fitts regression as a manipulation check and descriptive characterization of the dataset.
 
-**Sample Size:** `r get_n_string(df_iso)` participants with valid throughput data.
+**Sample Size:** `r get_n_string(df_iso %>% filter(modality == "hand"))` participants for hand modality (mouse users only), `r get_n_string(df_iso %>% filter(modality == "gaze"))` participants for gaze modality (mouse + trackpad users).
 
 *Flatter slopes indicate less sensitivity to difficulty (ballistic movement).*
 
@@ -1927,11 +2389,13 @@ if (nrow(fitts_fits) > 0) {
 
 # 6. Error Rate Analysis (Core Confirmatory)
 
+<!-- [CORE - PRIMARY] RQ1/RQ3: Error analysis, key finding (gaze errors are slips) -->
+
 **Research Question:** How do error rates differ across conditions?
 
 *This analysis is part of the core confirmatory battery for RQ1 and RQ3.*
 
-**Sample Size:** `r get_n_string(df_all_trials)` participants with all trials (correct + incorrect).
+**Sample Size:** `r get_n_string(df_all_trials %>% filter(modality == "hand"))` participants for hand modality (mouse users only), `r get_n_string(df_all_trials %>% filter(modality == "gaze"))` participants for gaze modality (mouse + trackpad users).
 
 ```{r error-analysis}
 #| fig-cap: !expr 'paste0("Error Rate by Modality and UI Mode (participant-level means). ", get_n_string(df_pid_cond %>% filter(!is.na(error_rate))), " participants. Raincloud plot: mirrored half-violins (Static←left, Adaptive→right) with boxplots inside, individual points in columns, connecting lines show paired comparisons.")'
@@ -2084,7 +2548,7 @@ print(p_err)
 
 #### Planned Sample Size & Power
 
-For the error-rate analysis we fit a binomial GLMM with random intercepts per participant. The key contrasts are again **UI mode** and **modality**, where we expect odds-ratio effects in the **small-to-medium range** (e.g., OR ≈ 0.7–0.8 for adaptive vs static, and OR ≈ 2–3 for gaze vs hand). Binary outcomes with relatively low error rates (≈10–15%) typically require **more participants than continuous outcomes** for stable mixed-effects estimation (Kumle et al., 2021). For this analysis, we therefore treat **N = 64** as a **"good" target** that yields comfortable power for medium effects, while **N = 48** remains adequate but somewhat less stable, especially for interaction terms and rare error types. Error-based interaction effects are interpreted as exploratory, even at N = 64.
+For the error-rate analysis we fit a binomial GLMM with random intercepts per participant. However, **the HAND adaptive manipulation (width inflation) did not execute** (width_scale_factor always 1), so UI mode is not interpretable as an adaptation for hand. The **primary adaptive test is the gaze-only UI Mode × Pressure interaction**. We expect odds-ratio effects in the **small-to-medium range** (e.g., OR ≈ 0.7–0.8 for adaptive vs static in gaze, and OR ≈ 2–3 for gaze vs hand). Binary outcomes with relatively low error rates (≈10–15%) typically require **more participants than continuous outcomes** for stable mixed-effects estimation (Kumle et al., 2021). For this analysis, we therefore treat **N = 64** as a **"good" target** that yields comfortable power for medium effects, while **N = 48** remains adequate but somewhat less stable, especially for interaction terms and rare error types. Error-based interaction effects are interpreted as exploratory, even at N = 64.
 
 ```{r error-model}
 if (exists("model_err") && !is.null(model_err)) {
@@ -2103,18 +2567,105 @@ if (exists("model_err") && !is.null(model_err)) {
     cat("**Note:** ", model_err_note, "\n\n")
   }
   
-  # ANOVA table
+  # ANOVA table (Type III for unbalanced design)
   if (requireNamespace("car", quietly = TRUE)) {
     library(car)
-    cat("#### ANOVA Table\n")
+    cat("#### ANOVA Table (Type III for unbalanced design)\n")
     print(Anova(model_err, type = "III"))
+  } else {
+    cat("**Note:** 'car' package not available. Using lmerTest::anova() instead.\n")
+    print(anova(model_err, type = "III"))
   }
   
-  # Pairwise comparisons
+  # Pairwise comparisons (omnibus)
   if (exists("pairs_err") && !is.null(pairs_err)) {
-    cat("\n#### Pairwise Comparisons (Holm-adjusted)\n")
+    cat("\n#### Pairwise Comparisons (Omnibus, Holm-adjusted)\n")
+    cat("*Note:* Omnibus UI mode effects are diluted by hand non-manipulation. See gaze-only follow-up below.\n\n")
     pairs_err_df <- as.data.frame(pairs_err)
     print(pairs_err_df %>% head(20))
+  }
+  
+  # Gaze-only follow-up results
+  if (exists("model_err_gaze") && !is.null(model_err_gaze) && exists("emm_err_gaze") && !is.null(emm_err_gaze)) {
+    cat("\n#### Gaze-Only Follow-up: UI Mode × Pressure (Primary Adaptive Test)\n\n")
+    
+    # ANOVA for gaze-only model
+    if (requireNamespace("car", quietly = TRUE)) {
+      cat("**ANOVA (Type III):**\n")
+      print(Anova(model_err_gaze, type = "III"))
+    } else {
+      print(anova(model_err_gaze, type = "III"))
+    }
+    cat("\n")
+    
+    # EMMs for gaze-only
+    emm_err_gaze_df <- as.data.frame(emm_err_gaze)
+    ci_lower <- if ("lower.CL" %in% names(emm_err_gaze_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_err_gaze_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_err_gaze_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_err_gaze_df)) "asymp.UCL" else NULL
+    
+    cat("**Estimated Marginal Means (Gaze-only, response scale):**\n")
+    emm_err_gaze_table <- emm_err_gaze_df %>%
+      mutate(
+        `UI Mode` = str_to_title(ui_mode),
+        Pressure = as.character(pressure),
+        `Mean Error Rate` = round(100 * prob, 1),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(100 * .data[[ci_lower]], 1) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(100 * .data[[ci_upper]], 1) else NA_real_
+      ) %>%
+      select(`UI Mode`, Pressure, `Mean Error Rate`, `95% CI Lower`, `95% CI Upper`)
+    print(knitr::kable(emm_err_gaze_table, caption = "Estimated Marginal Means for Error Rate: Gaze-only (UI Mode × Pressure)"))
+    cat("\n")
+    
+    # Key contrasts
+    if (exists("pairs_err_gaze") && !is.null(pairs_err_gaze)) {
+      cat("**Key Contrasts (Gaze-only, Holm-adjusted, odds ratio scale):**\n")
+      pairs_err_gaze_df <- as.data.frame(pairs_err_gaze)
+      # Focus on adaptive vs static under pressure ON and OFF
+      key_contrasts <- pairs_err_gaze_df %>%
+        filter(grepl("adaptive.*static|static.*adaptive", contrast, ignore.case = TRUE))
+      if (nrow(key_contrasts) > 0) {
+        print(knitr::kable(key_contrasts %>% head(6), digits = 3))
+      }
+      cat("\n")
+    }
+  }
+  
+  # Hand-only follow-up results (pressure effect only, if variance sufficient)
+  if (exists("model_err_hand") && !is.null(model_err_hand) && exists("emm_err_hand") && !is.null(emm_err_hand)) {
+    cat("#### Hand-Only Follow-up: Pressure Effect\n\n")
+    cat("*Note:* UI mode is excluded from hand models by design because width scaling did not execute.\n\n")
+    
+    # ANOVA for hand-only model
+    if (requireNamespace("car", quietly = TRUE)) {
+      cat("**ANOVA (Type III):**\n")
+      print(Anova(model_err_hand, type = "III"))
+    } else {
+      print(anova(model_err_hand, type = "III"))
+    }
+    cat("\n")
+    
+    # EMMs for hand-only
+    emm_err_hand_df <- as.data.frame(emm_err_hand)
+    ci_lower <- if ("lower.CL" %in% names(emm_err_hand_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_err_hand_df)) "asymp.LCL" else NULL
+    ci_upper <- if ("upper.CL" %in% names(emm_err_hand_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_err_hand_df)) "asymp.UCL" else NULL
+    
+    cat("**Estimated Marginal Means (Hand-only, response scale):**\n")
+    emm_err_hand_table <- emm_err_hand_df %>%
+      mutate(
+        Pressure = as.character(pressure),
+        `Mean Error Rate` = round(100 * prob, 1),
+        `95% CI Lower` = if (!is.null(ci_lower)) round(100 * .data[[ci_lower]], 1) else NA_real_,
+        `95% CI Upper` = if (!is.null(ci_upper)) round(100 * .data[[ci_upper]], 1) else NA_real_
+      ) %>%
+      select(Pressure, `Mean Error Rate`, `95% CI Lower`, `95% CI Upper`)
+    print(knitr::kable(emm_err_hand_table, caption = "Estimated Marginal Means for Error Rate: Hand-only (pressure effect)"))
+    
+    if (exists("pairs_err_hand") && !is.null(pairs_err_hand)) {
+      cat("\n**Pressure Contrast (Hand-only, Holm-adjusted, odds ratio scale):**\n")
+      pairs_err_hand_df <- as.data.frame(pairs_err_hand)
+      print(knitr::kable(pairs_err_hand_df, digits = 3))
+    }
+    cat("\n")
   }
 } else {
   cat("⚠ **Statistical model could not be fitted for Error Rate.**\n\n")
@@ -2152,11 +2703,12 @@ if (exists("model_err") && !is.null(model_err)) {
 
 # 7. Accuracy & Gaze Dynamics
 
-**Sample Size:** `r get_n_string(df_iso)` participants with valid accuracy data.
+<!-- [CORE - VALIDATION] H4: Effective Width (We) is core validation metric (ISO 9241-9). -->
+<!-- [SUPPLEMENT] Scatter plots and Midas Touch re-entries below are exploratory. -->
 
-## Effective Width ($W_e$) (Exploratory/Descriptive)
+**Sample Size:** `r get_n_string(df_iso %>% filter(modality == "hand"))` participants for hand modality (mouse users only), `r get_n_string(df_iso %>% filter(modality == "gaze"))` participants for gaze modality (mouse + trackpad users).
 
-*This analysis is exploratory/descriptive only. No formal inferential tests are run in this section.*
+## Effective Width ($W_e$)
 
 #### Planned Sample Size & Power
 
@@ -2300,6 +2852,229 @@ ggplot(df_we_plot, aes(x = ui_mode, y = We_mean, fill = ui_mode, color = ui_mode
   )
 ```
 
+### Statistical Analysis: Effective Width
+
+```{r we-statistical-tests}
+# Statistical tests for Effective Width
+if (exists("df_iso") && nrow(df_iso) > 0 && "We" %in% names(df_iso)) {
+  df_we_stats <- df_iso %>%
+    filter(!is.na(We), is.finite(We)) %>%
+    mutate(
+      modality = factor(modality, levels = c("hand", "gaze")),
+      ui_mode = factor(ui_mode, levels = c("static", "adaptive")),
+      pressure = factor(pressure),
+      pid = factor(pid)
+    )
+  
+  if (nrow(df_we_stats) > 0 && n_distinct(df_we_stats$pid) >= 2) {
+    # Check if IDe_bits is available
+    has_IDe <- "IDe_bits" %in% names(df_we_stats) && !all(is.na(df_we_stats$IDe_bits))
+    
+    # Fit mixed-effects model
+    tryCatch({
+      if (has_IDe) {
+        m_we <- lmer(We ~ modality * ui_mode * pressure + IDe_bits + (1 | pid), 
+                    data = df_we_stats)
+      } else {
+        m_we <- lmer(We ~ modality * ui_mode * pressure + (1 | pid), 
+                    data = df_we_stats)
+      }
+      
+      anova_we <- anova(m_we, type = "III")
+      
+      cat("### ANOVA: Effective Width (Type III)\n\n")
+      print(kable(anova_we, digits = 4, 
+                  caption = paste0("Mixed-effects model: We ~ Modality × UI Mode × Pressure (", 
+                                 get_n_string(df_we_stats), " participants)")))
+      cat("\n")
+      
+      # Extract and format main effects in APA style
+      if ("modality" %in% rownames(anova_we)) {
+        F_mod <- anova_we["modality", "F"]
+        df1_mod <- anova_we["modality", "NumDF"]
+        df2_mod <- anova_we["modality", "DenDF"]
+        p_mod <- anova_we["modality", "Pr(>F)"]
+        cat("**Modality effect:** ", format_F_apa(F_mod, df1_mod, df2_mod, p_mod), "\n\n")
+      }
+      
+      if ("ui_mode" %in% rownames(anova_we)) {
+        F_ui <- anova_we["ui_mode", "F"]
+        df1_ui <- anova_we["ui_mode", "NumDF"]
+        df2_ui <- anova_we["ui_mode", "DenDF"]
+        p_ui <- anova_we["ui_mode", "Pr(>F)"]
+        cat("**UI mode effect:** ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui), "\n\n")
+      }
+      
+      if ("modality:ui_mode" %in% rownames(anova_we)) {
+        F_int <- anova_we["modality:ui_mode", "F"]
+        df1_int <- anova_we["modality:ui_mode", "NumDF"]
+        df2_int <- anova_we["modality:ui_mode", "DenDF"]
+        p_int <- anova_we["modality:ui_mode", "Pr(>F)"]
+        cat("**Modality × UI mode interaction:** ", format_F_apa(F_int, df1_int, df2_int, p_int), "\n\n")
+      }
+      
+      # Estimated marginal means (include pressure)
+      emm_we <- emmeans(m_we, ~ ui_mode | modality * pressure)
+      emm_we_summary <- summary(emm_we)
+      
+      cat("### Estimated Marginal Means (by Modality × Pressure)\n\n")
+      print(kable(emm_we_summary, digits = 2, 
+                  caption = "Effective Width (px) by Modality, UI Mode, and Pressure"))
+      cat("\n")
+      
+      # Follow-up: Gaze-only and Hand-only models
+      df_we_gaze <- df_we_stats %>% filter(modality == "gaze")
+      df_we_hand <- df_we_stats %>% filter(modality == "hand")
+      
+      # Gaze-only We model
+      m_we_gaze <- NULL
+      emm_we_gaze <- NULL
+      pairs_we_gaze <- NULL
+      if (nrow(df_we_gaze) > 0 && n_distinct(df_we_gaze$pid) >= 2) {
+        if (has_IDe) {
+          m_we_gaze <- tryCatch({
+            lmer(We ~ ui_mode * pressure + IDe_bits + (1 | pid), data = df_we_gaze)
+          }, error = function(e) NULL)
+        } else {
+          m_we_gaze <- tryCatch({
+            lmer(We ~ ui_mode * pressure + (1 | pid), data = df_we_gaze)
+          }, error = function(e) NULL)
+        }
+        
+        if (!is.null(m_we_gaze)) {
+          emm_we_gaze <- tryCatch({
+            emmeans(m_we_gaze, ~ ui_mode * pressure)
+          }, error = function(e) NULL)
+          
+          if (!is.null(emm_we_gaze)) {
+            pairs_we_gaze <- pairs(emm_we_gaze, adjust = "holm")
+          }
+        }
+      }
+      
+      # Hand-only We model (pressure only)
+      m_we_hand <- NULL
+      emm_we_hand <- NULL
+      pairs_we_hand <- NULL
+      if (nrow(df_we_hand) > 0 && n_distinct(df_we_hand$pid) >= 2) {
+        if (has_IDe) {
+          m_we_hand <- tryCatch({
+            lmer(We ~ pressure + IDe_bits + (1 | pid), data = df_we_hand)
+          }, error = function(e) NULL)
+        } else {
+          m_we_hand <- tryCatch({
+            lmer(We ~ pressure + (1 | pid), data = df_we_hand)
+          }, error = function(e) NULL)
+        }
+        
+        if (!is.null(m_we_hand)) {
+          emm_we_hand <- tryCatch({
+            emmeans(m_we_hand, ~ pressure)
+          }, error = function(e) NULL)
+          
+          if (!is.null(emm_we_hand)) {
+            pairs_we_hand <- pairs(emm_we_hand, adjust = "holm")
+          }
+        }
+      }
+      
+      # Pairwise comparisons (omnibus)
+      pairs_we <- pairs(emm_we, adjust = "holm")
+      pairs_we_df <- as.data.frame(pairs_we)
+      
+      if (nrow(pairs_we_df) > 0) {
+        pairs_we_apa <- pairs_we_df %>%
+          mutate(
+            `p-value` = format_p_apa(p.value),
+            `t-ratio` = round(t.ratio, 2)
+          ) %>%
+          select(contrast, estimate, SE, `t-ratio`, `p-value`, df)
+        
+        cat("### Pairwise Comparisons (Holm-adjusted)\n\n")
+        print(kable(pairs_we_apa, digits = 3, 
+                    caption = "UI Mode comparisons within each Modality"))
+        cat("\n")
+        
+        # APA-formatted text summary
+        cat("**APA-formatted summary (omnibus):** ")
+        sig_pairs <- pairs_we_df %>% filter(p.value < 0.05)
+        if (nrow(sig_pairs) > 0) {
+          for (i in 1:min(3, nrow(sig_pairs))) {
+            mod <- sig_pairs$modality[i]
+            est <- round(sig_pairs$estimate[i], 2)
+            t_val <- round(sig_pairs$t.ratio[i], 2)
+            df_val <- round(sig_pairs$df[i], 1)
+            p_val <- sig_pairs$p.value[i]
+            cat(sprintf("In %s modality, adaptive UI %s effective width by %.2f px, %s. ", 
+                       str_to_title(mod),
+                       ifelse(est < 0, "reduced", "increased"),
+                       abs(est),
+                       format_t_apa(t_val, df_val, p_val)))
+          }
+        } else {
+          cat("No significant differences in effective width between UI modes within modalities (all p > 0.05).")
+        }
+        cat("\n\n")
+        
+        # Gaze-only follow-up
+        if (!is.null(emm_we_gaze) && !is.null(pairs_we_gaze)) {
+          cat("#### Gaze-Only Follow-up: UI Mode × Pressure\n\n")
+          cat("**Estimated Marginal Means (Gaze-only):**\n")
+          emm_we_gaze_df <- as.data.frame(emm_we_gaze)
+          emm_we_gaze_table <- emm_we_gaze_df %>%
+            mutate(
+              `UI Mode` = str_to_title(ui_mode),
+              Pressure = as.character(pressure),
+              `Mean We (px)` = round(emmean, 2)
+            ) %>%
+            select(`UI Mode`, Pressure, `Mean We (px)`)
+          print(kable(emm_we_gaze_table, digits = 2, 
+                      caption = "Effective Width: Gaze-only (UI Mode × Pressure)"))
+          
+          pairs_we_gaze_df <- as.data.frame(pairs_we_gaze)
+          key_contrasts <- pairs_we_gaze_df %>%
+            filter(grepl("adaptive.*static|static.*adaptive", contrast, ignore.case = TRUE))
+          if (nrow(key_contrasts) > 0) {
+            cat("\n**Key Contrasts (Gaze-only, Holm-adjusted):**\n")
+            print(kable(key_contrasts %>% head(6), digits = 3))
+          }
+          cat("\n")
+        }
+        
+        # Hand-only follow-up
+        if (!is.null(emm_we_hand) && !is.null(pairs_we_hand)) {
+          cat("#### Hand-Only Follow-up: Pressure Effect\n\n")
+          cat("*Note:* UI mode is excluded from hand models by design because width scaling did not execute.\n\n")
+          cat("**Estimated Marginal Means (Hand-only):**\n")
+          emm_we_hand_df <- as.data.frame(emm_we_hand)
+          emm_we_hand_table <- emm_we_hand_df %>%
+            mutate(
+              Pressure = as.character(pressure),
+              `Mean We (px)` = round(emmean, 2)
+            ) %>%
+            select(Pressure, `Mean We (px)`)
+          print(kable(emm_we_hand_table, digits = 2, 
+                      caption = "Effective Width: Hand-only (pressure effect)"))
+          
+          pairs_we_hand_df <- as.data.frame(pairs_we_hand)
+          cat("\n**Pressure Contrast (Hand-only, Holm-adjusted):**\n")
+          print(kable(pairs_we_hand_df, digits = 3))
+          cat("\n")
+        }
+      }
+    }, error = function(e) {
+      cat("⚠ Could not fit Effective Width model:", conditionMessage(e), "\n\n")
+    })
+  } else {
+    cat("⚠ Insufficient data for Effective Width statistical tests.\n\n")
+  }
+} else {
+  cat("⚠ Effective Width data not available for statistical tests.\n\n")
+}
+```
+
+<!-- [SUPPLEMENT - EXPLORATORY] Endpoint accuracy scatter plots: Visualization, not core finding -->
+
 ## Endpoint Accuracy Scatter Plot
 
 *Visualization of endpoint errors relative to target center. Each point represents one trial's endpoint position.*
@@ -2405,6 +3180,8 @@ if (nrow(gaze_accuracy) > 0) {
   cat("⚠ No gaze accuracy data available for summary table.\n")
 }
 ```
+
+<!-- [SUPPLEMENT - EXPLORATORY] Midas Touch re-entries: Interesting descriptive finding, not pre-registered -->
 
 ## The "Midas Touch" Struggle
 
@@ -2568,6 +3345,8 @@ ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, col
 
 # 8. Workload (NASA-TLX) (Core Confirmatory)
 
+<!-- [CORE - PRIMARY] RQ2: Workload assessment, pre-registered hypothesis -->
+
 *Subjective workload scores (lower is better).*
 
 **Research Question:** How does subjective workload differ across conditions? Does Adaptive UI reduce workload?
@@ -2576,7 +3355,7 @@ ggplot(df_reentry_plot, aes(x = ui_mode, y = reentries_mean, fill = ui_mode, col
 
 **Metric Definition:** We use the unweighted NASA-TLX, computed as the mean of the six subscales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration). Each subscale is rated on a 0-100 scale, and the overall TLX score is the arithmetic mean of all six subscales. Lower values indicate lower subjective workload.
 
-**Sample Size:** `r get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental)))` participants with TLX data.
+**Sample Size:** `r get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental), modality == "hand"))` participants for hand modality (mouse users only), `r get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental), modality == "gaze"))` participants for gaze modality (mouse + trackpad users).
 
 ```{r plot-tlx}
 #| fig-cap: !expr 'paste0("NASA-TLX Workload Scores by Modality and UI Mode. ", get_n_string(df_raw %>% filter(!is.na(pid), !is.na(tlx_mental))), " participants. Scores range from 0-100, where lower values indicate lower subjective workload. The six TLX scales (Mental Demand, Physical Demand, Temporal Demand, Performance, Effort, Frustration) are shown separately. White diamonds show mean values. Violin plots show the distribution shape, boxplots show quartiles.")'
@@ -2715,6 +3494,8 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx")) {
 
 NASA-TLX scores (overall and subscales) are collected at the block level and analyzed with an LMM (random intercepts per participant; fixed effects for modality and UI mode). TLX scores tend to be reasonably reliable, and we expect **medium effects** for both modality (gaze > hand) and UI mode (adaptive < static), especially on Physical Demand and Frustration. For within-subject designs with medium effects, **≈40–50 participants** typically provide ≥0.80 power (Brysbaert, 2019). We therefore treat **N = 48** as a **good, pre-planned N** for TLX analyses. An increase to **N = 64** would mostly refine confidence intervals and interaction estimates rather than change the main power conclusions.
 
+**Note on unbalanced design:** Same as other analyses: hand modality N=`r {stats_tlx <- compute_input_device_stats(df_raw %>% filter(!is.na(tlx_mental))); stats_tlx$hand_n}` (mouse users only), gaze modality N=`r stats_tlx$gaze_n` (`r stats_tlx$mouse_n` mouse + `r stats_tlx$trackpad_n` trackpad users). Type III ANOVA with sum-to-zero contrasts handles this appropriately (Fox & Weisberg, 2019).
+
 **Random Effects Structure:** All mixed models in this report use a random intercept for participants `(1 | pid)`, which is a conservative and stable baseline. We may test richer random-effects structures (e.g., `(1 + modality | pid)`) as a robustness check.
 
 ```{r tlx-model}
@@ -2755,6 +3536,45 @@ if(all(tlx_cols %in% names(df_raw))) {
       cat("### Model: overall_tlx ~ modality * ui_mode + (1 | pid)\n\n")
       cat("**Data Summary:** ", n_distinct(df_tlx_overall$pid), " participants, ", nrow(df_tlx_overall), " observations.\n\n")
       
+      # Compute emm_tlx once right after model fits
+      emm_tlx <- tryCatch({
+        emmeans(model_tlx, ~ modality * ui_mode)
+      }, error = function(e) {
+        cat("⚠ **Could not compute EMMs:** ", e$message, "\n\n")
+        NULL
+      })
+      
+      pairs_tlx <- NULL
+      if (!is.null(emm_tlx)) {
+        pairs_tlx <- tryCatch({
+          pairs(emm_tlx, adjust = "holm")
+        }, error = function(e) NULL)
+      }
+      
+      # Gaze-only TLX model
+      df_tlx_gaze <- df_tlx_overall %>% filter(modality == "gaze")
+      model_tlx_gaze <- NULL
+      emm_tlx_gaze <- NULL
+      pairs_tlx_gaze <- NULL
+      if (nrow(df_tlx_gaze) > 0 && n_distinct(df_tlx_gaze$pid) >= 2) {
+        model_tlx_gaze <- tryCatch({
+          lmer(overall_tlx ~ ui_mode + (1|pid), data = df_tlx_gaze, 
+               REML = FALSE, control = lmerControl(optimizer = "bobyqa"))
+        }, error = function(e) NULL)
+        
+        if (!is.null(model_tlx_gaze)) {
+          emm_tlx_gaze <- tryCatch({
+            emmeans(model_tlx_gaze, ~ ui_mode)
+          }, error = function(e) NULL)
+          
+          if (!is.null(emm_tlx_gaze)) {
+            pairs_tlx_gaze <- tryCatch({
+              pairs(emm_tlx_gaze, adjust = "holm")
+            }, error = function(e) NULL)
+          }
+        }
+      }
+      
       # ANOVA table
       cat("#### ANOVA Table\n")
       anova_tlx <- anova(model_tlx, type = "III")
@@ -2789,7 +3609,7 @@ if(all(tlx_cols %in% names(df_raw))) {
             ", η²p = ", sprintf("%.3f", eta_mod), 
             " (", interpret_eta_sq(eta_mod), " effect). ", sep = "")
         
-        if (exists("emm_tlx") && !is.null(emm_tlx)) {
+        if (!is.null(emm_tlx)) {
           emm_mod <- emmeans(model_tlx, ~ modality)
           emm_mod_df <- as.data.frame(emm_mod)
           if (nrow(emm_mod_df) == 2) {
@@ -2825,31 +3645,45 @@ if(all(tlx_cols %in% names(df_raw))) {
         p_ui <- ui_mode_row$`Pr(>F)`[1]
         eta_ui <- ui_mode_row$partial_eta_sq[1]
         
-        cat("**UI Mode Effect:** The main effect of UI mode on workload was ",
+        cat("**UI Mode Effect (Omnibus):** The main effect of UI mode on workload was ",
             ifelse(p_ui < .05, "significant", "non-significant"),
             ", ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui),
             ", η²p = ", sprintf("%.3f", eta_ui),
-            " (", interpret_eta_sq(eta_ui), " effect).", sep = "")
+            " (", interpret_eta_sq(eta_ui), " effect). ", sep = "")
+        cat("**Note:** This omnibus UI mode effect is diluted by the fact that HAND width inflation did not execute, so UI mode is not interpretable as an adaptive manipulation for hand. The interpretable test of adaptation comes from the **gaze-only UI Mode follow-up model** below.\n\n")
+      }
+      
+      # Gaze-only follow-up results
+      if (!is.null(model_tlx_gaze) && !is.null(emm_tlx_gaze)) {
+        cat("#### Gaze-Only Follow-up: UI Mode (Primary Adaptive Test)\n\n")
         
-        if (exists("emm_tlx") && !is.null(emm_tlx)) {
-          emm_ui <- emmeans(model_tlx, ~ ui_mode)
-          emm_ui_df <- as.data.frame(emm_ui)
-          if (nrow(emm_ui_df) == 2) {
-            # Safely extract means
-            static_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "static")
-            adaptive_mean <- safe_extract_mean(emm_ui_df, "ui_mode", "adaptive")
-            
-            if (!is.na(static_mean) && !is.na(adaptive_mean)) {
-              static_str <- format_mean_ci(static_mean, NA_real_, NA_real_, "%.1f", "")
-              adaptive_str <- format_mean_ci(adaptive_mean, NA_real_, NA_real_, "%.1f", "")
-              
-              cat(" Adaptive UI (", adaptive_str, ") ",
-                  ifelse(adaptive_mean < static_mean, "reduced", "did not reduce"),
-                  " workload compared to Static UI (", static_str, ").", sep = "")
-            }
-          }
+        # ANOVA for gaze-only model
+        anova_tlx_gaze <- anova(model_tlx_gaze, type = "III")
+        print(anova_tlx_gaze)
+        cat("\n")
+        
+        # EMMs for gaze-only
+        emm_tlx_gaze_df <- as.data.frame(emm_tlx_gaze)
+        ci_lower <- if ("lower.CL" %in% names(emm_tlx_gaze_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_tlx_gaze_df)) "asymp.LCL" else NULL
+        ci_upper <- if ("upper.CL" %in% names(emm_tlx_gaze_df)) "upper.CL" else if ("asymp.UCL" %in% names(emm_tlx_gaze_df)) "asymp.UCL" else NULL
+        
+        cat("**Estimated Marginal Means (Gaze-only):**\n")
+        emm_tlx_gaze_table <- emm_tlx_gaze_df %>%
+          mutate(
+            `UI Mode` = str_to_title(ui_mode),
+            `Mean TLX` = round(emmean, 1),
+            `95% CI Lower` = if (!is.null(ci_lower)) round(.data[[ci_lower]], 1) else NA_real_,
+            `95% CI Upper` = if (!is.null(ci_upper)) round(.data[[ci_upper]], 1) else NA_real_
+          ) %>%
+          select(`UI Mode`, `Mean TLX`, `95% CI Lower`, `95% CI Upper`)
+        print(knitr::kable(emm_tlx_gaze_table, caption = "Estimated Marginal Means for Overall TLX: Gaze-only"))
+        
+        if (!is.null(pairs_tlx_gaze)) {
+          cat("\n**Contrast (Gaze-only, Holm-adjusted):**\n")
+          pairs_tlx_gaze_df <- as.data.frame(pairs_tlx_gaze)
+          print(knitr::kable(pairs_tlx_gaze_df, digits = 3))
         }
-        cat("\n\n")
+        cat("\n")
       }
       
       if (nrow(mod_ui_int) > 0 && !is.na(mod_ui_int$`F value`[1])) {
@@ -2873,16 +3707,8 @@ if(all(tlx_cols %in% names(df_raw))) {
         cat("\n\n")
       }
       
-      # EMMs with 95% CIs
-      if (requireNamespace("emmeans", quietly = TRUE)) {
-        emm_tlx <- tryCatch({
-          emmeans(model_tlx, ~ modality * ui_mode)
-        }, error = function(e) {
-          cat("⚠ **Could not compute EMMs:** ", e$message, "\n\n")
-          NULL
-        })
-        
-        if (!is.null(emm_tlx)) {
+      # EMMs with 95% CIs (already computed above)
+      if (!is.null(emm_tlx)) {
           cat("\n#### Estimated Marginal Means (Overall TLX by Modality × UI Mode)\n")
           emm_tlx_df <- as.data.frame(emm_tlx)
           ci_lower <- if ("lower.CL" %in% names(emm_tlx_df)) "lower.CL" else if ("asymp.LCL" %in% names(emm_tlx_df)) "asymp.LCL" else NULL
@@ -2929,7 +3755,6 @@ if(all(tlx_cols %in% names(df_raw))) {
       }
     }
   }
-}
 ```
 
 ### Advanced TLX Analysis: UX Insights
@@ -3167,6 +3992,8 @@ if(all(tlx_cols %in% names(df_raw)) && exists("df_tlx_overall")) {
 -----
 
 # 9. Participant Awareness & Strategy (Debrief Analysis)
+
+<!-- [SUPPLEMENT] Qualitative/Supplementary: Participant awareness, not core RQ -->
 
 **Research Question:** Did participants notice the adaptive interface? Did they change their strategy? How do awareness and strategy relate to performance?
 
@@ -3412,6 +4239,8 @@ if (all(debrief_cols %in% names(df_raw))) {
 -----
 
 # 10. Learning Curves & Practice Effects
+
+<!-- [SUPPLEMENT - EXPLORATORY] Practice effects over time, not primary outcome -->
 
 **Research Question:** How does performance change within each condition? Do learning rates differ by condition?
 
@@ -3705,6 +4534,8 @@ if (nrow(df_learning_aligned) > 0) {
 -----
 
 # 11. Movement Quality Metrics
+
+<!-- [SUPPLEMENT - ADVANCED/EXPLORATORY] Submovements, verification time: Advanced movement analysis -->
 
 ## Submovement Analysis
 
@@ -4490,6 +5321,8 @@ if ("verification_time_ms" %in% names(df)) {
 
 # 12. Error Patterns & Types
 
+<!-- [SUPPLEMENT - DESCRIPTIVE] Error type breakdown (miss, timeout, slip): Descriptive analysis -->
+
 **Research Question:** What types of errors occur? Do error patterns differ by condition?
 
 **Sample Size:** `r get_n_string(df_raw %>% filter((practice == 'false' | practice == FALSE | is.na(practice)), !is.na(err_type), err_type != ''))` participants with error type data.
@@ -4576,6 +5409,8 @@ if ("err_type" %in% names(df_raw)) {
 -----
 
 # 13. Block Order & Temporal Effects
+
+<!-- [SUPPLEMENT - EXPLORATORY] Temporal patterns, not pre-registered -->
 
 **Research Question:** Are there order effects? Does performance improve or degrade over blocks?
 
@@ -4747,15 +5582,15 @@ print(p3)
 
 -----
 
-# 14. Spatial Patterns & Heatmaps (Exploratory/Descriptive)
+# 14. Spatial Patterns & Heatmaps
 
-**Research Question:** Are there spatial biases in performance? Do some screen regions show better/worse performance?
+<!-- [SUPPLEMENT - VISUALIZATION/EXPLORATORY] Spatial distribution of endpoints: Descriptive visualization -->
 
-*This analysis is exploratory/descriptive visualization only. No formal inferential tests are run in this section.*
+**Research Question:** Are there spatial biases in performance? Do some screen regions show better/worse performance? Do error patterns differ between conditions?
 
 **Sample Size:** `r get_n_string(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)))` participants with spatial position data.
 
-**Note:** These spatial visualizations are exploratory and serve as descriptive quality checks. They are not treated as primary inferential outcomes. At N=`r n_distinct(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)) %>% pull(pid))`, interpretation is limited, but these plots may be useful for understanding XR-specific spatial patterns (e.g., top vs bottom of visual field).
+**Note:** This section includes both descriptive visualizations and inferential statistical tests. At N=`r n_distinct(df_all_trials %>% filter(!is.na(target_center_x), !is.na(target_center_y)) %>% pull(pid))`, spatial analyses provide insights into XR-specific patterns (e.g., top vs bottom of visual field) and condition differences.
 
 ## Performance by Target Position
 
@@ -4857,6 +5692,144 @@ if ("target_center_x" %in% names(df_all_trials) && "target_center_y" %in% names(
       )
     
     print(p2)
+    
+    # Statistical tests for spatial position effects
+    cat("\n### Statistical Tests: Spatial Position Effects\n\n")
+    
+    # Prepare data for statistical tests
+    df_spatial_tests <- df_all_trials %>%
+      filter(!is.na(target_center_x), !is.na(target_center_y)) %>%
+      mutate(
+        # Create screen regions: center vs periphery
+        screen_region = case_when(
+          target_center_x < quantile(target_center_x, 0.33, na.rm = TRUE) ~ "Left",
+          target_center_x > quantile(target_center_x, 0.67, na.rm = TRUE) ~ "Right",
+          TRUE ~ "Center"
+        ),
+        vertical_region = case_when(
+          target_center_y < quantile(target_center_y, 0.33, na.rm = TRUE) ~ "Top",
+          target_center_y > quantile(target_center_y, 0.67, na.rm = TRUE) ~ "Bottom",
+          TRUE ~ "Middle"
+        ),
+        screen_region = factor(screen_region, levels = c("Left", "Center", "Right")),
+        vertical_region = factor(vertical_region, levels = c("Top", "Middle", "Bottom"))
+      )
+    
+    if (nrow(df_spatial_tests) > 0 && n_distinct(df_spatial_tests$screen_region) >= 2) {
+      # Test 1: Does performance vary by screen region (horizontal)?
+      tryCatch({
+        df_spatial_rt_data <- df_spatial_tests %>% 
+          filter(is_correct == TRUE | is_correct == 1)
+        # Include IDe_bits if available
+        if ("IDe_bits" %in% names(df_spatial_rt_data) && !all(is.na(df_spatial_rt_data$IDe_bits))) {
+          m_spatial_rt <- lmer(log(rt_ms) ~ screen_region * modality * ui_mode + IDe_bits + 
+                                (1 | pid), data = df_spatial_rt_data)
+        } else {
+          m_spatial_rt <- lmer(log(rt_ms) ~ screen_region * modality * ui_mode + 
+                                (1 | pid), data = df_spatial_rt_data)
+        }
+        anova_spatial_rt <- anova(m_spatial_rt)
+        
+        cat("**Movement Time by Screen Region (Horizontal):**\n")
+        print(kable(anova_spatial_rt, digits = 4, caption = "ANOVA: RT ~ Screen Region × Modality × UI Mode"))
+        cat("\n")
+        
+        # APA-formatted summary
+        if ("screen_region" %in% rownames(anova_spatial_rt)) {
+          F_reg <- anova_spatial_rt["screen_region", "F"]
+          df1_reg <- anova_spatial_rt["screen_region", "NumDF"]
+          df2_reg <- anova_spatial_rt["screen_region", "DenDF"]
+          p_reg <- anova_spatial_rt["screen_region", "Pr(>F)"]
+          cat("**Screen region effect:** ", format_F_apa(F_reg, df1_reg, df2_reg, p_reg), "\n\n")
+        }
+        
+        # Post-hoc comparisons if significant
+        if (any(anova_spatial_rt$`Pr(>F)` < 0.05, na.rm = TRUE)) {
+          emm_spatial <- emmeans(m_spatial_rt, ~ screen_region | modality * ui_mode)
+          pairs_spatial <- pairs(emm_spatial, adjust = "holm")
+          pairs_spatial_df <- as.data.frame(pairs_spatial)
+          
+          pairs_spatial_apa <- pairs_spatial_df %>%
+            mutate(`p-value` = format_p_apa(p.value)) %>%
+            select(contrast, modality, ui_mode, estimate, SE, `p-value`, df)
+          
+          cat("**Pairwise Comparisons (Holm-adjusted):**\n")
+          print(kable(pairs_spatial_apa, digits = 4))
+          cat("\n")
+        }
+      }, error = function(e) {
+        cat("⚠ Could not fit spatial RT model:", conditionMessage(e), "\n\n")
+      })
+      
+      # Test 2: Does error rate vary by screen region?
+      tryCatch({
+        df_spatial_errors_test <- df_spatial_tests %>%
+          filter(!is.na(is_correct))
+        
+        if (nrow(df_spatial_errors_test) > 0 && 
+            mean(df_spatial_errors_test$is_correct, na.rm = TRUE) > 0.01 &&
+            mean(df_spatial_errors_test$is_correct, na.rm = TRUE) < 0.99) {
+          # Include IDe_bits if available
+          if ("IDe_bits" %in% names(df_spatial_errors_test) && !all(is.na(df_spatial_errors_test$IDe_bits))) {
+            m_spatial_err <- glmer(is_correct ~ screen_region * modality * ui_mode + IDe_bits + 
+                                    (1 | pid),
+                                  data = df_spatial_errors_test, family = binomial)
+          } else {
+            m_spatial_err <- glmer(is_correct ~ screen_region * modality * ui_mode + 
+                                    (1 | pid),
+                                  data = df_spatial_errors_test, family = binomial)
+          }
+          anova_spatial_err <- anova(m_spatial_err)
+          
+          cat("**Error Rate by Screen Region (Horizontal):**\n")
+          print(kable(anova_spatial_err, digits = 4, caption = "ANOVA: Error Rate ~ Screen Region × Modality × UI Mode"))
+          cat("\n")
+          
+          # APA-formatted summary
+          if ("screen_region" %in% rownames(anova_spatial_err)) {
+            F_reg <- anova_spatial_err["screen_region", "F"]
+            df1_reg <- anova_spatial_err["screen_region", "NumDF"]
+            df2_reg <- anova_spatial_err["screen_region", "DenDF"]
+            p_reg <- anova_spatial_err["screen_region", "Pr(>F)"]
+            cat("**Screen region effect:** ", format_chisq_apa(F_reg, df1_reg, p_reg), "\n\n")
+          }
+        }
+      }, error = function(e) {
+        cat("⚠ Could not fit spatial error model:", conditionMessage(e), "\n\n")
+      })
+      
+      # Test 3: Vertical region effects
+      tryCatch({
+        df_spatial_rt_v_data <- df_spatial_tests %>% 
+          filter(is_correct == TRUE | is_correct == 1)
+        # Include IDe_bits if available
+        if ("IDe_bits" %in% names(df_spatial_rt_v_data) && !all(is.na(df_spatial_rt_v_data$IDe_bits))) {
+          m_spatial_rt_v <- lmer(log(rt_ms) ~ vertical_region * modality * ui_mode + IDe_bits + 
+                                  (1 | pid), data = df_spatial_rt_v_data)
+        } else {
+          m_spatial_rt_v <- lmer(log(rt_ms) ~ vertical_region * modality * ui_mode + 
+                                  (1 | pid), data = df_spatial_rt_v_data)
+        }
+        anova_spatial_rt_v <- anova(m_spatial_rt_v)
+        
+        cat("**Movement Time by Screen Region (Vertical):**\n")
+        print(kable(anova_spatial_rt_v, digits = 4, caption = "ANOVA: RT ~ Vertical Region × Modality × UI Mode"))
+        cat("\n")
+        
+        # APA-formatted summary
+        if ("vertical_region" %in% rownames(anova_spatial_rt_v)) {
+          F_reg <- anova_spatial_rt_v["vertical_region", "F"]
+          df1_reg <- anova_spatial_rt_v["vertical_region", "NumDF"]
+          df2_reg <- anova_spatial_rt_v["vertical_region", "DenDF"]
+          p_reg <- anova_spatial_rt_v["vertical_region", "Pr(>F)"]
+          cat("**Vertical region effect:** ", format_F_apa(F_reg, df1_reg, df2_reg, p_reg), "\n\n")
+        }
+      }, error = function(e) {
+        cat("⚠ Could not fit vertical spatial RT model:", conditionMessage(e), "\n\n")
+      })
+    } else {
+      cat("⚠ Insufficient data for spatial statistical tests.\n\n")
+    }
   } else {
     cat("⚠ Insufficient spatial data for heatmap visualization.\n")
   }
@@ -4995,6 +5968,161 @@ if (nrow(df_error_gaze) > 0) {
       )
     
     print(p3)
+    
+    # Statistical tests for error density differences
+    cat("\n### Statistical Tests: Error Density Differences\n\n")
+    
+    if (nrow(df_error_gaze) > 0 && n_distinct(df_error_gaze$ui_mode) >= 2) {
+      # Test 1: Compare error magnitude (distance from target) between UI modes
+      df_error_gaze <- df_error_gaze %>%
+        mutate(
+          error_distance = sqrt(err_x^2 + err_y^2),
+          error_abs_x = abs(err_x),
+          error_abs_y = abs(err_y)
+        )
+      
+      # Filter extreme outliers for statistical tests
+      df_error_test <- df_error_gaze %>%
+        filter(error_distance <= quantile(error_distance, 0.99, na.rm = TRUE))
+      
+      if (nrow(df_error_test) > 0) {
+        # Test error distance
+        tryCatch({
+          # Include IDe_bits if available, otherwise use simpler model
+          if ("IDe_bits" %in% names(df_error_test) && !all(is.na(df_error_test$IDe_bits))) {
+            m_error_dist <- lmer(log(error_distance + 1) ~ ui_mode + IDe_bits + (1 | pid),
+                                data = df_error_test)
+          } else {
+            m_error_dist <- lmer(log(error_distance + 1) ~ ui_mode + (1 | pid),
+                                data = df_error_test)
+          }
+          anova_error_dist <- anova(m_error_dist)
+          
+          cat("**Error Distance (Magnitude) Comparison:**\n")
+          print(kable(anova_error_dist, digits = 4, caption = "ANOVA: Error Distance ~ UI Mode"))
+          cat("\n")
+          
+          # Estimated marginal means
+          emm_error <- emmeans(m_error_dist, ~ ui_mode, type = "response")
+          cat("**Estimated Marginal Means (Error Distance, px):**\n")
+          print(kable(summary(emm_error), digits = 3))
+          cat("\n")
+          
+          # Pairwise comparison
+          pairs_error <- pairs(emm_error, adjust = "none")
+          pairs_error_df <- as.data.frame(pairs_error)
+          
+          pairs_error_apa <- pairs_error_df %>%
+            mutate(
+              `p-value` = format_p_apa(p.value),
+              `t-ratio` = round(t.ratio, 2)
+            ) %>%
+            select(contrast, estimate, SE, `t-ratio`, `p-value`, df)
+          
+          cat("**Pairwise Comparison:**\n")
+          print(kable(pairs_error_apa, digits = 4))
+          cat("\n")
+          
+          # APA-formatted text summary
+          if (nrow(pairs_error_df) > 0 && pairs_error_df$p.value[1] < 0.05) {
+            est <- round(pairs_error_df$estimate[1], 2)
+            t_val <- round(pairs_error_df$t.ratio[1], 2)
+            df_val <- round(pairs_error_df$df[1], 1)
+            p_val <- pairs_error_df$p.value[1]
+            cat("**APA summary:** Adaptive UI ", ifelse(est < 0, "reduced", "increased"), 
+                " error distance by ", abs(est), " px, ", format_t_apa(t_val, df_val, p_val), ".\n\n")
+          }
+        }, error = function(e) {
+          cat("⚠ Could not fit error distance model:", conditionMessage(e), "\n\n")
+        })
+        
+        # Test 2: Compare error bias (systematic offset) in X and Y directions
+        tryCatch({
+          # X-direction bias
+          if ("IDe_bits" %in% names(df_error_test) && !all(is.na(df_error_test$IDe_bits))) {
+            m_error_x <- lmer(err_x ~ ui_mode + IDe_bits + (1 | pid), data = df_error_test)
+          } else {
+            m_error_x <- lmer(err_x ~ ui_mode + (1 | pid), data = df_error_test)
+          }
+          anova_error_x <- anova(m_error_x)
+          
+          cat("**Error Bias in X-Direction:**\n")
+          print(kable(anova_error_x, digits = 4, caption = "ANOVA: Error X ~ UI Mode"))
+          cat("\n")
+          
+          emm_error_x <- emmeans(m_error_x, ~ ui_mode)
+          emm_error_x_summary <- summary(emm_error_x)
+          cat("**Estimated Marginal Means (Error X, px):**\n")
+          print(kable(emm_error_x_summary, digits = 3))
+          cat("\n")
+          
+          # APA-formatted summary for X-bias
+          if ("ui_mode" %in% rownames(anova_error_x)) {
+            F_ui <- anova_error_x["ui_mode", "F"]
+            df1_ui <- anova_error_x["ui_mode", "NumDF"]
+            df2_ui <- anova_error_x["ui_mode", "DenDF"]
+            p_ui <- anova_error_x["ui_mode", "Pr(>F)"]
+            cat("**X-direction bias:** ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui), "\n\n")
+          }
+          
+          # Y-direction bias
+          if ("IDe_bits" %in% names(df_error_test) && !all(is.na(df_error_test$IDe_bits))) {
+            m_error_y <- lmer(err_y ~ ui_mode + IDe_bits + (1 | pid), data = df_error_test)
+          } else {
+            m_error_y <- lmer(err_y ~ ui_mode + (1 | pid), data = df_error_test)
+          }
+          anova_error_y <- anova(m_error_y)
+          
+          cat("**Error Bias in Y-Direction:**\n")
+          print(kable(anova_error_y, digits = 4, caption = "ANOVA: Error Y ~ UI Mode"))
+          cat("\n")
+          
+          emm_error_y <- emmeans(m_error_y, ~ ui_mode)
+          emm_error_y_summary <- summary(emm_error_y)
+          cat("**Estimated Marginal Means (Error Y, px):**\n")
+          print(kable(emm_error_y_summary, digits = 3))
+          cat("\n")
+          
+          # APA-formatted summary for Y-bias
+          if ("ui_mode" %in% rownames(anova_error_y)) {
+            F_ui <- anova_error_y["ui_mode", "F"]
+            df1_ui <- anova_error_y["ui_mode", "NumDF"]
+            df2_ui <- anova_error_y["ui_mode", "DenDF"]
+            p_ui <- anova_error_y["ui_mode", "Pr(>F)"]
+            cat("**Y-direction bias:** ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui), "\n\n")
+          }
+        }, error = function(e) {
+          cat("⚠ Could not fit error bias models:", conditionMessage(e), "\n\n")
+        })
+        
+        # Test 3: Kolmogorov-Smirnov test for distribution differences
+        tryCatch({
+          static_dist <- df_error_test %>% filter(str_to_lower(ui_mode) == "static") %>% pull(error_distance)
+          adaptive_dist <- df_error_test %>% filter(str_to_lower(ui_mode) == "adaptive") %>% pull(error_distance)
+          
+          if (length(static_dist) > 10 && length(adaptive_dist) > 10) {
+            ks_test <- ks.test(static_dist, adaptive_dist)
+            cat("**Kolmogorov-Smirnov Test: Error Distance Distributions**\n")
+            cat(sprintf("D = %.4f, p = %.4f\n", ks_test$statistic, ks_test$p.value))
+            if (ks_test$p.value < 0.05) {
+              cat("✓ Distributions differ significantly (p < 0.05)\n")
+            } else {
+              cat("○ No significant difference in distributions\n")
+            }
+            cat("\n")
+          }
+        }, error = function(e) {
+          cat("⚠ Could not perform KS test:", conditionMessage(e), "\n\n")
+        })
+        
+        # Test 4: 2D Kolmogorov-Smirnov test for spatial error patterns
+        # Note: This is more complex and may require additional packages
+        cat("**Note:** 2D spatial pattern comparisons (e.g., 2D KS test) would require specialized packages.\n")
+        cat("Current analysis focuses on univariate comparisons (distance, X-bias, Y-bias).\n\n")
+      }
+    } else {
+      cat("⚠ Insufficient data for error density statistical tests.\n\n")
+    }
   } else {
     cat("⚠ No error data available after filtering.\n")
   }
@@ -5006,6 +6134,196 @@ if (nrow(df_error_gaze) > 0) {
 -----
 
 # 15. Adaptive UI Mechanism Analysis
+
+<!-- [SUPPLEMENT - EXPLORATORY] How adaptations activated (if at all): Policy engine analysis -->
+
+## Root-Cause Diagnostic: Width Scaling Non-Activation
+
+**Research Question:** Why did hand width inflation (width_scale_factor) fail to activate? Was this due to strict thresholds/gates or a bug/misconfiguration?
+
+```{r root-cause-diagnostic}
+# Root-cause diagnostic for width scaling non-activation
+cat("### Diagnostic: Why Did Hand Width Scaling Not Activate?\n\n")
+
+# 1. Check for trigger/threshold/policy columns in df_raw
+trigger_cols <- grep("trigger|threshold|hyster|policy|adapt|scale", names(df_raw), ignore.case = TRUE, value = TRUE)
+cat("**Trigger-related columns in df_raw:**\n")
+if (length(trigger_cols) > 0) {
+  cat(paste("-", trigger_cols, collapse = "\n"), "\n\n")
+  
+  # Summarize trigger occurrences by modality/ui_mode/pressure (focus on hand/adaptive/pressure ON)
+  df_hand_adapt_p1 <- df_raw %>%
+    filter(
+      modality == "hand",
+      ui_mode == "adaptive",
+      pressure == 1 | pressure == "1",
+      (practice == "false" | practice == FALSE | is.na(practice)),
+      !is.na(rt_ms),
+      rt_ms > 0
+    )
+  
+  if (nrow(df_hand_adapt_p1) > 0) {
+    cat("**Trigger summary for HAND/Adaptive/Pressure ON:**\n")
+    for (col in trigger_cols) {
+      if (col %in% names(df_hand_adapt_p1)) {
+        cat("\n-", col, ":\n")
+        # Check if column is numeric
+        is_numeric_col <- is.numeric(df_hand_adapt_p1[[col]]) || 
+                          all(grepl("^[0-9.]+$", as.character(df_hand_adapt_p1[[col]])), na.rm = TRUE)
+        
+        if (is_numeric_col) {
+          # Convert to numeric if needed
+          df_hand_adapt_p1[[col]] <- as.numeric(df_hand_adapt_p1[[col]])
+          summary_data <- df_hand_adapt_p1 %>%
+            group_by(pid) %>%
+            summarise(
+              mean_val = mean(.data[[col]], na.rm = TRUE),
+              median_val = median(.data[[col]], na.rm = TRUE),
+              max_val = max(.data[[col]], na.rm = TRUE),
+              pct_nonzero = 100 * mean(.data[[col]] != 0, na.rm = TRUE),
+              .groups = "drop"
+            )
+          print(knitr::kable(summary_data %>% head(10), digits = 2))
+        } else {
+          # For character columns, show unique values and counts
+          summary_data <- df_hand_adapt_p1 %>%
+            group_by(pid) %>%
+            summarise(
+              unique_vals = paste(unique(.data[[col]][!is.na(.data[[col]])]), collapse = ", "),
+              n_non_na = sum(!is.na(.data[[col]])),
+              .groups = "drop"
+            ) %>%
+            filter(n_non_na > 0)
+          if (nrow(summary_data) > 0) {
+            print(knitr::kable(summary_data %>% head(10)))
+          } else {
+            cat("  (All values are NA)\n")
+          }
+        }
+      }
+    }
+    
+    # Check if scaling followed triggers
+    if ("width_scale_factor" %in% names(df_hand_adapt_p1)) {
+      scaling_by_trigger <- df_hand_adapt_p1 %>%
+        group_by(across(any_of(trigger_cols))) %>%
+        summarise(
+          n_trials = n(),
+          mean_width_scale = mean(width_scale_factor, na.rm = TRUE),
+          pct_scaled = 100 * mean(width_scale_factor != 1, na.rm = TRUE),
+          .groups = "drop"
+        )
+      cat("\n**Scaling following triggers:**\n")
+      print(knitr::kable(scaling_by_trigger %>% head(10), digits = 2))
+    }
+  }
+} else {
+  cat("No trigger/threshold/policy columns found in df_raw.\n\n")
+  
+  # 2. Reconstruct candidate triggers from RT and error streaks
+  cat("**Reconstructing candidate triggers from RT and error patterns...**\n\n")
+  
+  df_hand_adapt_p1 <- df_raw %>%
+    filter(
+      modality == "hand",
+      ui_mode == "adaptive",
+      pressure == 1 | pressure == "1",
+      (practice == "false" | practice == FALSE | is.na(practice)),
+      !is.na(rt_ms),
+      rt_ms > 0,
+      !is.na(correct)
+    ) %>%
+    arrange(pid, trial_number) %>%
+    mutate(
+      correct_bool = (correct == TRUE | correct == "true" | correct == 1),
+      error = !correct_bool
+    )
+  
+  if (nrow(df_hand_adapt_p1) > 0) {
+    # Compute per-participant p75 RT
+    p75_rt_by_pid <- df_hand_adapt_p1 %>%
+      group_by(pid) %>%
+      summarise(p75_rt = quantile(rt_ms, 0.75, na.rm = TRUE), .groups = "drop")
+    
+    # Merge p75 RT back
+    df_hand_adapt_p1 <- df_hand_adapt_p1 %>%
+      left_join(p75_rt_by_pid, by = "pid") %>%
+      mutate(
+        is_slow = rt_ms > p75_rt
+      )
+    
+    # Compute rolling slow streak lengths and rolling consecutive error lengths
+    df_candidate_triggers <- df_hand_adapt_p1 %>%
+      group_by(pid) %>%
+      arrange(trial_number) %>%
+      mutate(
+        slow_streak = sequence(rle(is_slow)$lengths) * is_slow,
+        error_streak = sequence(rle(error)$lengths) * error
+      ) %>%
+      ungroup() %>%
+      mutate(
+        candidate_trigger_n2 = (slow_streak >= 2) | (error_streak >= 2),
+        candidate_trigger_n3 = (slow_streak >= 3) | (error_streak >= 2)
+      )
+    
+    # Count candidate triggers per participant
+    trigger_summary <- df_candidate_triggers %>%
+      group_by(pid) %>%
+      summarise(
+        n_trials = n(),
+        n_candidate_n2 = sum(candidate_trigger_n2, na.rm = TRUE),
+        n_candidate_n3 = sum(candidate_trigger_n3, na.rm = TRUE),
+        n_observed_scaling = sum(width_scale_factor != 1, na.rm = TRUE),
+        pct_candidate_n2 = 100 * mean(candidate_trigger_n2, na.rm = TRUE),
+        pct_candidate_n3 = 100 * mean(candidate_trigger_n3, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    cat("**Candidate triggers per participant (N=2: slow_streak>=2 OR error_streak>=2; N=3: slow_streak>=3 OR error_streak>=2):**\n")
+    print(knitr::kable(trigger_summary %>% head(20), digits = 2))
+    
+    # Overall summary
+    overall_summary <- df_candidate_triggers %>%
+      summarise(
+        total_trials = n(),
+        total_candidate_n2 = sum(candidate_trigger_n2, na.rm = TRUE),
+        total_candidate_n3 = sum(candidate_trigger_n3, na.rm = TRUE),
+        total_observed_scaling = sum(width_scale_factor != 1, na.rm = TRUE),
+        pct_candidate_n2 = 100 * mean(candidate_trigger_n2, na.rm = TRUE),
+        pct_candidate_n3 = 100 * mean(candidate_trigger_n3, na.rm = TRUE),
+        pct_scaled = 100 * mean(width_scale_factor != 1, na.rm = TRUE)
+      )
+    
+    cat("\n**Overall summary (HAND/Adaptive/Pressure ON):**\n")
+    print(knitr::kable(overall_summary, digits = 2))
+    
+    # Conclusion
+    cat("\n**Conclusion:**\n")
+    if (overall_summary$total_candidate_n2 > 0 || overall_summary$total_candidate_n3 > 0) {
+      if (overall_summary$total_observed_scaling == 0) {
+        cat("**Evidence favors bug/misconfig:** ", 
+            overall_summary$total_candidate_n2, " candidate triggers (N=2) and ",
+            overall_summary$total_candidate_n3, " candidate triggers (N=3) exist, but NO scaling was observed (width_scale_factor always 1). ",
+            "This suggests the adaptation policy logic may not be executing correctly, or there is a configuration issue.\n", sep = "")
+      } else {
+        cat("**Evidence favors strict thresholds:** Some candidate triggers exist (",
+            overall_summary$total_candidate_n2, " with N=2, ", overall_summary$total_candidate_n3, " with N=3), ",
+            "but only ", overall_summary$total_observed_scaling, " trials showed scaling. ",
+            "This suggests hysteresis gates (N consecutive triggers required) or strict threshold settings.\n", sep = "")
+      }
+    } else {
+      cat("**Insufficient evidence:** No candidate triggers detected. This could indicate either:\n")
+      cat("(1) Participants performed well (RTs did not exceed p75, errors did not form streaks)\n")
+      cat("(2) Thresholds are set very strictly\n")
+      cat("(3) RT/error data not available for trigger reconstruction\n")
+    }
+  } else {
+    cat("⚠ No HAND/Adaptive/Pressure ON trials found for diagnostic.\n")
+  }
+}
+
+cat("\n")
+```
 
 ## Width Scaling (Target Size Adaptation)
 
@@ -6390,19 +7708,17 @@ if (exists("df_drag") && nrow(df_drag) > 0 && "pid" %in% names(df_drag)) {
 
 -----
 
-# 16. Gaze-Specific Analysis: Hover/Dwell Time (Exploratory/Descriptive)
+# 16. Gaze-Specific Analysis: Hover/Dwell Time
+
+<!-- [SUPPLEMENT - EXPLORATORY] Gaze-specific metrics (hover/dwell): Not core outcome -->
 
 **Research Question:** How does hover/dwell time vary across gaze conditions? Does adaptive UI affect dwell time before confirmation?
-
-*This analysis is exploratory/descriptive only. No formal inferential tests are run in this section at this stage.*
 
 #### Planned Sample Size & Power
 
 Hover/dwell time is modeled only for **gaze trials** with fixed effects for UI mode and pressure. Because this shrinks the effective dataset and the expected UI-mode effects may be **small-to-medium** (dz ≈ 0.3–0.5), we treat this analysis as **exploratory unless N ≥ 64**. At **N = 48**, the study is adequately powered for medium effects but underpowered for smaller ones; at **N = 64**, we expect ≈0.80 power even if the UI-mode effect is closer to dz ≈ 0.35, based on standard repeated-measures calculations and mixed-model heuristics (Cohen, 1988; Kumle et al., 2021).
 
 **Sample Size:** `r get_n_string(df_raw %>% filter((practice == "false" | practice == FALSE | is.na(practice)), modality == "gaze", !is.na(hover_ms), hover_ms > 0))` participants with gaze hover/dwell data.
-
-**Note:** This analysis is exploratory. CIs may be wide and results should be treated as preliminary.
 
 *Hover/dwell time represents the duration the cursor remains in the target before confirmation in gaze trials. This metric is specific to gaze modality and reflects the "Midas touch" problem—the need for deliberate confirmation to avoid unintended selections.*
 
@@ -6590,6 +7906,115 @@ if (exists("df_hover") && nrow(df_hover) > 0) {
 }
 ```
 
+### Statistical Analysis: Hover/Dwell Time
+
+```{r hover-statistical-tests}
+# Statistical tests for hover/dwell time
+if (exists("df_hover") && nrow(df_hover) > 0 && n_distinct(df_hover$pid) >= 2) {
+  # Check if IDe_bits is available
+  has_IDe <- "IDe_bits" %in% names(df_hover) && !all(is.na(df_hover$IDe_bits))
+  
+  tryCatch({
+    # Fit mixed-effects model (log transform for normality)
+    if (has_IDe) {
+      m_hover <- lmer(log(hover_ms) ~ ui_mode * pressure + IDe_bits + (1 | pid), 
+                     data = df_hover)
+    } else {
+      m_hover <- lmer(log(hover_ms) ~ ui_mode * pressure + (1 | pid), 
+                     data = df_hover)
+    }
+    
+    anova_hover <- anova(m_hover)
+    
+    cat("### ANOVA: Hover/Dwell Time\n\n")
+    print(kable(anova_hover, digits = 4, 
+                caption = paste0("Mixed-effects model: log(Hover Time) ~ UI Mode × Pressure (", 
+                               get_n_string(df_hover), " participants)")))
+    cat("\n")
+    
+    # Extract and format main effects in APA style
+    if ("ui_mode" %in% rownames(anova_hover)) {
+      F_ui <- anova_hover["ui_mode", "F"]
+      df1_ui <- anova_hover["ui_mode", "NumDF"]
+      df2_ui <- anova_hover["ui_mode", "DenDF"]
+      p_ui <- anova_hover["ui_mode", "Pr(>F)"]
+      cat("**UI mode effect:** ", format_F_apa(F_ui, df1_ui, df2_ui, p_ui), "\n\n")
+    }
+    
+    if ("pressure" %in% rownames(anova_hover)) {
+      F_press <- anova_hover["pressure", "F"]
+      df1_press <- anova_hover["pressure", "NumDF"]
+      df2_press <- anova_hover["pressure", "DenDF"]
+      p_press <- anova_hover["pressure", "Pr(>F)"]
+      cat("**Pressure effect:** ", format_F_apa(F_press, df1_press, df2_press, p_press), "\n\n")
+    }
+    
+    if ("ui_mode:pressure" %in% rownames(anova_hover)) {
+      F_int <- anova_hover["ui_mode:pressure", "F"]
+      df1_int <- anova_hover["ui_mode:pressure", "NumDF"]
+      df2_int <- anova_hover["ui_mode:pressure", "DenDF"]
+      p_int <- anova_hover["ui_mode:pressure", "Pr(>F)"]
+      cat("**UI mode × Pressure interaction:** ", format_F_apa(F_int, df1_int, df2_int, p_int), "\n\n")
+    }
+    
+    # Estimated marginal means (back-transformed to ms)
+    emm_hover <- emmeans(m_hover, ~ ui_mode | pressure, type = "response")
+    emm_hover_summary <- summary(emm_hover)
+    
+    cat("### Estimated Marginal Means\n\n")
+    print(kable(emm_hover_summary, digits = 1, 
+                caption = "Hover/Dwell Time (ms) by UI Mode and Pressure"))
+    cat("\n")
+    
+    # Pairwise comparisons
+    pairs_hover <- pairs(emm_hover, adjust = "holm")
+    pairs_hover_df <- as.data.frame(pairs_hover)
+    
+    if (nrow(pairs_hover_df) > 0) {
+      pairs_hover_apa <- pairs_hover_df %>%
+        mutate(
+          `p-value` = format_p_apa(p.value),
+          `t-ratio` = round(t.ratio, 2),
+          `Ratio` = round(ratio, 3)
+        ) %>%
+        select(contrast, `Ratio`, SE, `t-ratio`, `p-value`, df)
+      
+      cat("### Pairwise Comparisons (Holm-adjusted)\n\n")
+      print(kable(pairs_hover_apa, digits = 3, 
+                  caption = "UI Mode comparisons within each Pressure condition (ratio scale)"))
+      cat("\n")
+      
+      # APA-formatted text summary
+      cat("**APA-formatted summary:** ")
+      sig_pairs <- pairs_hover_df %>% filter(p.value < 0.05)
+      if (nrow(sig_pairs) > 0) {
+        for (i in 1:min(2, nrow(sig_pairs))) {
+          press <- sig_pairs$pressure[i]
+          ratio <- sig_pairs$ratio[i]
+          t_val <- round(sig_pairs$t.ratio[i], 2)
+          df_val <- round(sig_pairs$df[i], 1)
+          p_val <- sig_pairs$p.value[i]
+          pct_change <- round((ratio - 1) * 100, 1)
+          cat(sprintf("Under %s pressure, adaptive UI %s hover time by %.1f%% (ratio = %.3f), %s. ", 
+                     ifelse(press == "1" || press == 1, "ON", "OFF"),
+                     ifelse(ratio < 1, "reduced", "increased"),
+                     abs(pct_change),
+                     ratio,
+                     format_t_apa(t_val, df_val, p_val)))
+        }
+      } else {
+        cat("No significant differences in hover/dwell time between UI modes (all p > 0.05).")
+      }
+      cat("\n\n")
+    }
+  }, error = function(e) {
+    cat("⚠ Could not fit Hover/Dwell Time model:", conditionMessage(e), "\n\n")
+  })
+} else {
+  cat("⚠ Insufficient data for Hover/Dwell Time statistical tests.\n\n")
+}
+```
+
 -----
 
 ::: {.callout-note collapse=true}
@@ -6608,6 +8033,8 @@ if (exists("df_hover") && nrow(df_hover) > 0) {
 -----
 
 # 17. Linear Ballistic Accumulator (LBA) Analysis
+
+<!-- [SUPPLEMENT - ADVANCED/EXPLORATORY] Cognitive modeling: Advanced decision process modeling -->
 
 **Research Question:** Can we model the verification phase (time from target entry to selection) using LBA parameters? Do adaptive conditions show different decision thresholds?
 
@@ -6725,6 +8152,8 @@ if (file.exists("analysis/figures/exgauss_overall.png")) {
 -----
 
 # 18. Control Theory Analysis: Submovement Models
+
+<!-- [SUPPLEMENT - ADVANCED/EXPLORATORY] Movement kinematics modeling: Advanced control theory analysis -->
 
 **Research Question:** How does the control loop efficiency differ across conditions? Do adaptive interventions reduce movement corrections?
 
@@ -7231,6 +8660,8 @@ if (!is.null(submov_col) && exists("df_ct") && nrow(df_ct) > 0) {
 
 # 19. Summary & Conclusions
 
+<!-- [CORE] Critical: Final summary of findings -->
+
 ## Key Findings Summary
 
 ```{r summary-table}
@@ -7290,6 +8721,14 @@ summary_table %>%
 
 **Target Sample:** N=64 participants for enhanced power in advanced analyses (LBA, control-theory kinematics).
 
-For detailed exclusion criteria, see `EXCLUSION_CRITERIA.md`. For technical audit details, see `AUDIT_REPORT.md`.
+### Input Device Exclusion
+
+Participants reported their input device during demographics collection (mouse, trackpad, or other). For hand modality analyses, we excluded trials from participants who used trackpads (n=`r {stats_demog <- compute_input_device_stats(df_raw); stats_demog$trackpad_n}`, `r round(100 * stats_demog$trackpad_n / (stats_demog$mouse_n + stats_demog$trackpad_n), 1)`% of sample), as trackpad vs mouse is a known confound in pointing task performance (MacKenzie & Jusoh, 2001; Karam et al., 2009). Trackpads have different acceleration curves, precision characteristics, and motor control requirements that can significantly affect hand modality performance.
+
+For gaze modality analyses, we included all participants regardless of input device, as our physiologically-informed gaze simulation converts raw input (mouse or trackpad) into gaze-like coordinates with Gaussian jitter, lag, and saccadic suppression. Once converted, the input device should not affect the gaze interaction characteristics we're measuring. This approach maximized data utilization while maintaining validity: hand modality comparisons use only mouse users (standardized device), while gaze modality comparisons use all participants (simulation-normalized input).
+
+**Exclusion impact:** Approximately `r {stats_excl <- compute_input_device_stats(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice))); stats_excl$trackpad_hand_trials}` hand trials from trackpad users were excluded (`r round(100 * stats_excl$trackpad_hand_trials / nrow(df_raw %>% filter(practice == "false" | practice == FALSE | is.na(practice))), 1)`% of total trials). All `r stats_excl$trackpad_gaze_trials` gaze trials from trackpad users were retained. Hand modality analyses include N=`r stats_excl$hand_n` participants (mouse users only); gaze modality analyses include N=`r stats_excl$gaze_n` participants (`r stats_excl$mouse_n` mouse + `r stats_excl$trackpad_n` trackpad users).
+
+For detailed exclusion criteria, see `EXCLUSION_CRITERIA.md` and `INPUT_DEVICE_EXCLUSION_STRATEGY.md`. For technical audit details, see `AUDIT_REPORT.md`.
 
 *Report generated on `r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`*
