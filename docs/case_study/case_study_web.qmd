@@ -1,0 +1,1582 @@
+---
+title: "XR Adaptive Modality: Case Study"
+author: "Mohammad Dastgheib"
+date: last-modified
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    embed-resources: false
+    self-contained: false
+    lightbox: true
+    html-math-method: katex
+    fig-width: 10
+    fig-height: 6
+    css: docs/assets/css/case-study.css
+---
+
+```{=html}
+<style>
+/* Hover help: small "i" circle */
+.tip-i{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; margin-left:6px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,.25);
+  font-size:11px; font-weight:700; line-height:1;
+  color: rgba(0,0,0,.65);
+  background: rgba(255,255,255,.85);
+  cursor: help;
+}
+.tip-i:hover{ background:#f3f0ff; border-color:#d9d0ff; }
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  if (window.bootstrap) {
+    const triggers = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    triggers.forEach(function (el) {
+      new bootstrap.Tooltip(el, { html: true, placement: 'top', trigger: 'hover focus' });
+    });
+  }
+});
+</script>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+
+# Load gt for beautiful tables
+if (requireNamespace("gt", quietly = TRUE)) {
+  library(gt)
+  has_gt <- TRUE
+  
+  # Helper function for consistent gt table styling
+  format_gt_portfolio <- function(tbl, title = NULL, subtitle = NULL, footnote = NULL) {
+    result <- tbl %>%
+      opt_table_font(font = "system-ui, -apple-system") %>%
+      opt_table_lines(extent = "none") %>%
+      tab_options(
+        table.border.top.style = "solid",
+        table.border.top.width = px(2),
+        table.border.top.color = "#6d28d9",
+        heading.background.color = "#f8f9fa",
+        column_labels.border.bottom.width = px(2),
+        column_labels.border.bottom.color = "#e5e7eb",
+        table_body.hlines.color = "#f1f3f5",
+        table_body.vlines.color = "#f1f3f5"
+      )
+    
+    if (!is.null(title)) {
+      if (!is.null(subtitle)) {
+        result <- result %>% tab_header(title = title, subtitle = subtitle)
+      } else {
+        result <- result %>% tab_header(title = title)
+      }
+    }
+    
+    if (!is.null(footnote)) {
+      result <- result %>% tab_footnote(footnote = footnote, locations = cells_title(groups = "subtitle"))
+    }
+    
+    return(result)
+  }
+} else {
+  has_gt <- FALSE
+  cat("Note: Install 'gt' for enhanced tables: install.packages('gt')\n")
+}
+
+# Load interactive plotting libraries
+# Note: plotly R package is still available and maintained, but Highcharter is a great alternative
+if (requireNamespace("highcharter", quietly = TRUE)) {
+  library(highcharter)
+  options(highcharter.theme = hc_theme_smpl())
+  has_highcharter <- TRUE
+} else {
+  has_highcharter <- FALSE
+  cat("Note: Install 'highcharter' for interactive plots: install.packages('highcharter')\n")
+}
+
+# Load htmltools for tooltip helper
+if (requireNamespace("htmltools", quietly = TRUE)) {
+  library(htmltools)
+  
+  # Helper function for inline tooltips
+  tip_i <- function(text) {
+    htmltools::HTML(sprintf(
+      '<span class="tip-i" data-bs-toggle="tooltip" data-bs-title="%s">i</span>',
+      htmltools::htmlEscape(text)
+    ))
+  }
+} else {
+  tip_i <- function(text) {
+    return("")
+  }
+  cat("Note: Install 'htmltools' for tooltips: install.packages('htmltools')\n")
+}
+
+# Load data for interactive plots
+data_paths <- c("data/clean/trial_data.csv", "../data/clean/trial_data.csv")
+df_raw_interactive <- NULL
+for (path in data_paths) {
+  if (file.exists(path)) {
+    df_raw_interactive <- read_csv(path, show_col_types = FALSE)
+    break
+  }
+}
+
+if (!is.null(df_raw_interactive)) {
+  # Column normalization
+  if ("participant_id" %in% names(df_raw_interactive) && !"pid" %in% names(df_raw_interactive)) {
+    df_raw_interactive <- df_raw_interactive %>% rename(pid = participant_id)
+  }
+  
+  # Apply QC filter
+  df_raw_interactive <- df_raw_interactive %>%
+    mutate(
+      trial_qc_ok = (
+        (practice == FALSE | practice == "false" | is.na(practice)) &
+        (is.na(zoom_pct) | zoom_pct == 100) &
+        (is.na(is_fullscreen) | is_fullscreen == TRUE) &
+        (is.na(tab_hidden_ms) | tab_hidden_ms < 500) &
+        (is.na(focus_blur_count) | focus_blur_count == 0)
+      )
+    )
+  
+  # Input device exclusion
+  if ("input_device" %in% names(df_raw_interactive)) {
+    df_raw_interactive <- df_raw_interactive %>%
+      filter(
+        input_device == "mouse" |
+        (input_device == "trackpad" & modality == "gaze")
+      )
+  }
+  
+  # Create participant-level summaries for interactive plots
+  df_all_trials_int <- df_raw_interactive %>%
+    filter(trial_qc_ok) %>%
+    mutate(
+      rt_s = rt_ms / 1000,
+      is_correct = !is.na(correct) & (correct == TRUE | correct == "true" | correct == 1)
+    )
+  
+  df_int <- df_all_trials_int %>%
+    filter(
+      is_correct == TRUE,
+      rt_ms >= 150,
+      rt_ms <= 6000
+    )
+  
+  df_factorial_int <- df_int %>%
+    group_by(pid) %>%
+    filter(n_distinct(pressure, na.rm = TRUE) == 2) %>%
+    ungroup()
+  
+  df_iso_int <- df_factorial_int %>%
+    group_by(pid, modality, ui_mode, pressure, A, W) %>%
+    filter(n() >= 3) %>%
+    summarise(
+      We = sd(projected_error_px, na.rm = TRUE) * 4.133,
+      MT_avg = mean(rt_s, na.rm = TRUE),
+      IDe = log2((mean(A, na.rm = TRUE) / We) + 1),
+      TP = IDe / MT_avg,
+      .groups = "drop"
+    ) %>%
+    filter(
+      !is.na(TP),
+      is.finite(TP),
+      TP > 0,
+      TP < 20
+    )
+  
+  df_pid_cond_int <- df_int %>%
+    group_by(pid, modality, ui_mode, pressure) %>%
+    summarise(
+      rt_mean = mean(rt_s, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(
+      df_all_trials_int %>%
+        group_by(pid, modality, ui_mode, pressure) %>%
+        summarise(
+          error_rate = mean(!is_correct, na.rm = TRUE),
+          .groups = "drop"
+        ),
+      by = c("pid", "modality", "ui_mode", "pressure")
+    ) %>%
+    left_join(
+      df_iso_int %>%
+        group_by(pid, modality, ui_mode, pressure) %>%
+        summarise(tp_mean = mean(TP, na.rm = TRUE), .groups = "drop"),
+      by = c("pid", "modality", "ui_mode", "pressure")
+    )
+  
+  # Prepare error type data for interactive plots
+  if ("err_type" %in% names(df_raw_interactive)) {
+    df_err_type_int <- df_raw_interactive %>%
+      filter(trial_qc_ok) %>%
+      mutate(
+        is_correct_err = !is.na(correct) & (correct == TRUE | correct == "true" | correct == 1)
+      ) %>%
+      filter(!is_correct_err) %>%
+      filter(!is.na(err_type), err_type != "", err_type != "NA") %>%
+      mutate(
+        err_category = case_when(
+          grepl("timeout|timed", err_type, ignore.case = TRUE) ~ "Timeout",
+          grepl("miss|missclick", err_type, ignore.case = TRUE) ~ "Miss",
+          grepl("slip|click", err_type, ignore.case = TRUE) ~ "Slip",
+          TRUE ~ "Other"
+        ),
+        modality = factor(modality, levels = c("hand", "gaze"))
+      )
+  } else {
+    df_err_type_int <- NULL
+  }
+  
+  # Prepare spatial error data for interactive heatmap
+  if ("target_x" %in% names(df_raw_interactive) && "target_y" %in% names(df_raw_interactive)) {
+    df_spatial_int <- df_raw_interactive %>%
+      filter(trial_qc_ok, !is.na(target_x), !is.na(target_y)) %>%
+      mutate(
+        is_correct_spatial = !is.na(correct) & (correct == TRUE | correct == "true" | correct == 1),
+        x_bin = cut(target_x, breaks = 10, labels = FALSE),
+        y_bin = cut(target_y, breaks = 10, labels = FALSE),
+        is_error = !is_correct_spatial
+      ) %>%
+      group_by(modality, x_bin, y_bin) %>%
+      summarise(
+        error_rate = mean(is_error, na.rm = TRUE) * 100,
+        n_trials = n(),
+        .groups = "drop"
+      ) %>%
+      filter(n_trials >= 5)
+  } else {
+    df_spatial_int <- NULL
+  }
+  
+  # Prepare endpoint density data for interactive heatmap
+  if (all(c("endpoint_x", "endpoint_y", "target_center_x", "target_center_y") %in% names(df_raw_interactive))) {
+    df_endpoint_raw <- df_raw_interactive %>%
+      filter(
+        trial_qc_ok,
+        modality == "gaze",  # Focus on gaze (most interesting for endpoint patterns)
+        !is.na(endpoint_x), !is.na(endpoint_y),
+        !is.na(target_center_x), !is.na(target_center_y)
+      ) %>%
+      mutate(
+        error_x = endpoint_x - target_center_x,
+        error_y = endpoint_y - target_center_y
+      ) %>%
+      filter(
+        is.finite(error_x), is.finite(error_y)
+      )
+    
+    # Calculate appropriate axis ranges (use 95th percentile to exclude extreme outliers)
+    if (nrow(df_endpoint_raw) > 0) {
+      x_range <- quantile(df_endpoint_raw$error_x, c(0.025, 0.975), na.rm = TRUE)
+      y_range <- quantile(df_endpoint_raw$error_y, c(0.025, 0.975), na.rm = TRUE)
+      
+      # Round to nice numbers, but keep reasonable bounds
+      x_min <- max(-80, floor(x_range[1] / 10) * 10)
+      x_max <- min(40, ceiling(x_range[2] / 10) * 10)
+      y_min <- max(-50, floor(y_range[1] / 10) * 10)
+      y_max <- min(50, ceiling(y_range[2] / 10) * 10)  # Much tighter than 100!
+      
+      # Create bins (20x20 grid for good resolution)
+      n_bins <- 20
+      x_breaks <- seq(x_min, x_max, length.out = n_bins + 1)
+      y_breaks <- seq(y_min, y_max, length.out = n_bins + 1)
+      
+      # Bin the data and calculate density
+      df_endpoint_int <- df_endpoint_raw %>%
+        filter(
+          error_x >= x_min, error_x <= x_max,
+          error_y >= y_min, error_y <= y_max
+        ) %>%
+        mutate(
+          x_bin = cut(error_x, breaks = x_breaks, labels = FALSE, include.lowest = TRUE),
+          y_bin = cut(error_y, breaks = y_breaks, labels = FALSE, include.lowest = TRUE)
+        ) %>%
+        filter(!is.na(x_bin), !is.na(y_bin)) %>%
+        group_by(ui_mode, x_bin, y_bin) %>%
+        summarise(
+          density = n(),
+          .groups = "drop"
+        ) %>%
+        mutate(
+          # Calculate center of bin for display
+          x_center = (x_breaks[x_bin] + x_breaks[x_bin + 1]) / 2,
+          y_center = (y_breaks[y_bin] + y_breaks[y_bin + 1]) / 2
+        ) %>%
+        filter(density >= 1)
+      
+      # Store axis info for later use
+      endpoint_axis_info <- list(
+        x_min = x_min, x_max = x_max,
+        y_min = y_min, y_max = y_max,
+        x_breaks = x_breaks, y_breaks = y_breaks
+      )
+    } else {
+      df_endpoint_int <- NULL
+      endpoint_axis_info <- NULL
+    }
+  } else {
+    df_endpoint_int <- NULL
+    endpoint_axis_info <- NULL
+  }
+  
+  # Compute sample sizes dynamically
+  n_hand <- df_raw_interactive %>%
+    filter(trial_qc_ok, modality == "hand") %>%
+    pull(pid) %>%
+    n_distinct()
+  
+  n_gaze <- df_raw_interactive %>%
+    filter(trial_qc_ok, modality == "gaze") %>%
+    pull(pid) %>%
+    n_distinct()
+  
+  n_total <- df_raw_interactive %>%
+    filter(trial_qc_ok) %>%
+    pull(pid) %>%
+    n_distinct()
+} else {
+  n_hand <- NA
+  n_gaze <- NA
+  n_total <- NA
+}
+```
+
+```{=html}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+
+<style>
+/* --- Minimal portfolio theme (inline; matches surgeon style) --- */
+:root{
+  --ink:#0b1526; --muted:#4b5563; --bg:#f7f9fc; --card:#ffffff;
+  --accent:#6d28d9; --border:#e5e7eb; --soft:#f8fafc;
+}
+body{ color:var(--ink); background:var(--bg); }
+a{ color:var(--accent); }
+.quarto-title-banner{ background:var(--card); border-bottom:1px solid var(--border); }
+.figure img, video{ border:1px solid var(--border); border-radius:12px; }
+
+/* --- Hero / TL;DR card (same pattern as surgeon TLDR) --- */
+.tldr-card{
+  background:#ffffff;border:1px solid #e5e7eb;border-left:4px solid var(--accent);
+  border-radius:12px;padding:12px 14px;margin:10px 0 14px;
+  box-shadow:0 1px 1px rgba(16,24,40,.02)
+}
+.tldr-title{font-weight:750;letter-spacing:.2px;margin-bottom:.25rem}
+.tldr-text{margin:.15rem 0 .6rem;color:#111827}
+.tldr-kpis{display:flex;flex-wrap:wrap;gap:10px;margin:.35rem 0 .55rem}
+.kpi{background:var(--soft);border:1px solid #d7dee6;border-radius:12px;padding:8px 10px;min-width:170px}
+.kpi .lbl{font-size:.78rem;color:var(--muted);margin-bottom:2px}
+.kpi .val{font-weight:750;font-variant-numeric:tabular-nums}
+.tldr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tldr-chips a{
+  display:inline-flex;align-items:center;gap:.35rem;font-size:.86rem;
+  padding:.18rem .5rem;border-radius:999px;border:1px solid #d7dee6;
+  background:#f8fafc;text-decoration:none;color:#0b1526
+}
+.tldr-chips a:hover{background:#f3f0ff;border-color:#d9d0ff}
+.tldr-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.tldr-actions a.btn{
+  display:inline-flex;align-items:center;gap:.45rem;font-size:.88rem;
+  padding:.32rem .68rem;border-radius:10px;border:1px solid #d7dee6;
+  background:#ffffff;color:#0b1526;text-decoration:none
+}
+.tldr-actions a.btn.primary{background:#f3e8ff;border-color:#e9d5ff}
+.tldr-actions a.btn.disabled{opacity:.55;cursor:not-allowed;pointer-events:none}
+
+/* --- Repo card (same pattern as surgeon repo-grid) --- */
+.repo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:.4rem 0 1rem}
+.repo-card{
+  background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px 14px 12px;
+  box-shadow:0 1px 1px rgba(16,24,40,.02);transition:transform .16s ease,box-shadow .16s ease
+}
+.repo-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(16,24,40,.06);border-color:#e9d5ff}
+.repo-card:focus-within{outline:2px solid #e9d5ff;outline-offset:2px}
+.repo-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.repo-head .stack{display:flex;align-items:center;gap:8px}
+.repo-head i{font-size:1.05rem;color:var(--accent)}
+.repo-title{font-weight:650}
+.repo-desc{color:#4b5563;margin:.35rem 0 .5rem;font-size:.95rem}
+.repo-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.repo-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.repo-badges img{height:18px;border-radius:6px;border:1px solid #edf0f3;display:block}
+.repo-badges a{display:inline-flex;align-items:center;line-height:0}
+.repo-actions{display:flex;gap:8px;flex-wrap:wrap}
+.repo-actions a.btn{
+  display:inline-flex;align-items:center;gap:.45rem;font-size:.85rem;padding:.30rem .62rem;border-radius:8px;
+  border:1px solid #d7dee6;background:#f8fafc;color:#0b1526;text-decoration:none
+}
+.repo-actions a.btn.primary{background:#f3e8ff;border-color:#e9d5ff}
+.repo-actions a.btn i{font-size:1rem}
+</style>
+
+<div class="tldr-card" role="note" aria-label="TL;DR">
+  <div class="tldr-title">TL;DR</div>
+  <div class="tldr-text">
+    I built a remote XR interaction testbed and evaluated whether a <b>context-aware adaptive system</b> can reduce gaze failure modes (e.g., <em>Midas Touch</em>) and workload under time pressure.
+  </div>
+
+  <!-- KPI placeholders (you can update values later; keep format) -->
+  <div class="tldr-kpis">
+    <div class="kpi">
+      <div class="lbl">Design</div>
+      <div class="val">2×2×2 within-subjects</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Participants</div>
+      <div class="val">N=`r if(!is.na(n_hand)) n_hand else "—"` hand / N=`r if(!is.na(n_gaze)) n_gaze else "—"` gaze</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Core metrics</div>
+      <div class="val">TP`r tip_i("Throughput: speed–accuracy efficiency metric for target acquisition. Higher TP means users acquire targets faster without sacrificing precision.")` · Error · MT · TLX`r tip_i("NASA Task Load Index: standard workload survey (0–100). Higher = more workload. Captures perceived effort and frustration.")`</div>
+    </div>
+  </div>
+
+  <div class="tldr-actions">
+    <!-- Demo placeholder -->
+    <a class="btn primary disabled" aria-disabled="true"><i class="bi bi-play-circle"></i> Live demo (soon)</a>
+    <!-- Screenshot anchor -->
+    <a class="btn" href="#screenshots"><i class="bi bi-images"></i> Screenshots</a>
+    <!-- Report placeholder: set href once you publish -->
+    <a class="btn" href="#appendix"><i class="bi bi-file-earmark-text"></i> Appendix</a>
+  </div>
+
+  <div class="tldr-chips">
+    <a href="#key-results-60-seconds"><i class="bi bi-graph-up-arrow"></i> Key results</a>
+    <a href="#failure-modes-xr-specific"><i class="bi bi-bullseye"></i> Failure modes</a>
+    <a href="#what-i-built"><i class="bi bi-boxes"></i> What I built</a>
+    <a href="#design--methods"><i class="bi bi-diagram-3"></i> Methods</a>
+    <a href="#limitations--lessons"><i class="bi bi-exclamation-triangle"></i> Limitations</a>
+  </div>
+</div>
+
+<div class="repo-grid">
+  <div class="repo-card" role="group" aria-label="XR Adaptive Modality repository">
+    <div class="repo-head">
+      <div class="stack">
+        <i class="bi bi-vr" aria-hidden="true"></i>
+        <div class="repo-title">xr-adaptive-modality-2025</div>
+      </div>
+      <i class="bi bi-github" aria-hidden="true" title="GitHub repository"></i>
+    </div>
+
+    <div class="repo-desc">
+      React/TypeScript XR pointing testbed + policy-driven adaptation + analysis pipeline.
+    </div>
+
+    <div class="repo-bar">
+      <div class="repo-badges">
+        <a href="https://vercel.com" target="_blank" rel="noopener">
+          <img alt="Vercel" loading="lazy"
+               src="https://vercelbadge.vercel.app/api/mohdasti/xr-adaptive-modality-2025">
+        </a>
+        <img alt="License" loading="lazy"
+             src="https://img.shields.io/badge/license-GPLv3-blue.svg">
+        <img alt="DOI" loading="lazy"
+             src="https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg">
+        <img alt="React" loading="lazy"
+             src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white">
+        <img alt="TypeScript" loading="lazy"
+             src="https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white">
+        <img alt="R" loading="lazy"
+             src="https://img.shields.io/badge/R-4.4.0-276DC3?logo=r&logoColor=white">
+      </div>
+
+      <div class="repo-actions">
+        <a class="btn primary" href="https://github.com/mohdasti/xr-adaptive-modality-2025"
+           target="_blank" rel="noopener">
+          <i class="bi bi-github" aria-hidden="true"></i> Open repo
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+## Screenshots {#screenshots}
+
+::: {.callout-note}
+**Coming soon.** I'll add UI screenshots + short annotated clips from the experiment flow (hand vs gaze, pressure on/off, declutter trigger).
+:::
+
+## What I Built {#what-i-built}
+
+**Research Platform:**
+
+- **Web Application:** React 18 + TypeScript, deployed on Vercel
+- **Telemetry Schema:** Comprehensive event logging (trial start/end, policy changes, display violations, movement samples)
+- **Adaptation Policy Engine:** Threshold-based triggers with hysteresis (`app/src/lib/policy.ts`)
+- **Automated Report:** Quarto-based reproducible analysis pipeline (`Report.qmd` → `Report.html`)
+
+**Key Features:**
+
+- Remote data collection (N=`r if(!is.na(n_total)) n_total else "—"` participants total)
+- ISO 9241-9`r tip_i("International standard for evaluating pointing devices. Defines Fitts' Law task structure, effective width calculation (We = 4.133 × SD), and Throughput metric.")` compliant Fitts' Law`r tip_i("Standard HCI benchmark for target acquisition. Difficulty (ID) increases with distance and decreases with target width. Widely used to compare input methods.")` task
+- Real-time adaptation engine with hysteresis
+- Comprehensive telemetry (movement kinematics, display metadata, policy state)
+- Automated quality control (invalid trial detection, exclusion criteria)
+
+## Key Results (60 Seconds) {#key-results-60-seconds}
+
+```{r results-dashboard-interactive, eval=has_highcharter && !is.null(df_raw_interactive)}
+#| fig-cap: "Results Dashboard: Interactive comparison of key metrics by modality (hover for values, zoom/pan enabled)"
+if (has_highcharter && !is.null(df_raw_interactive)) {
+  # Prepare portfolio data
+  df_portfolio_int <- bind_rows(
+    df_pid_cond_int %>%
+      filter(!is.na(tp_mean)) %>%
+      group_by(modality) %>%
+      summarise(
+        metric = "Throughput",
+        mean_val = mean(tp_mean, na.rm = TRUE),
+        se = sd(tp_mean, na.rm = TRUE) / sqrt(n()),
+        ci_lower = mean_val - 1.96 * se,
+        ci_upper = mean_val + 1.96 * se,
+        .groups = "drop"
+      ),
+    df_pid_cond_int %>%
+      filter(!is.na(error_rate)) %>%
+      group_by(modality) %>%
+      summarise(
+        metric = "Error Rate",
+        mean_val = mean(error_rate, na.rm = TRUE) * 100,
+        se = sd(error_rate, na.rm = TRUE) / sqrt(n()) * 100,
+        ci_lower = mean_val - 1.96 * se,
+        ci_upper = mean_val + 1.96 * se,
+        .groups = "drop"
+      ),
+    df_pid_cond_int %>%
+      filter(!is.na(rt_mean)) %>%
+      group_by(modality) %>%
+      summarise(
+        metric = "Movement Time",
+        mean_val = mean(rt_mean, na.rm = TRUE),
+        se = sd(rt_mean, na.rm = TRUE) / sqrt(n()),
+        ci_lower = mean_val - 1.96 * se,
+        ci_upper = mean_val + 1.96 * se,
+        .groups = "drop"
+      ),
+    if (all(c("tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration") %in% names(df_raw_interactive))) {
+      df_raw_interactive %>%
+        filter(!is.na(pid), trial_qc_ok) %>%
+        group_by(pid, modality) %>%
+        summarise(overall_tlx = mean(c_across(starts_with("tlx_")), na.rm = TRUE), .groups = "drop") %>%
+        group_by(modality) %>%
+        summarise(
+          metric = "NASA-TLX",
+          mean_val = mean(overall_tlx, na.rm = TRUE),
+          se = sd(overall_tlx, na.rm = TRUE) / sqrt(n()),
+          ci_lower = mean_val - 1.96 * se,
+          ci_upper = mean_val + 1.96 * se,
+          .groups = "drop"
+        )
+    } else {
+      NULL
+    }
+  ) %>%
+    mutate(
+      modality = str_to_title(modality),
+      metric = factor(metric, levels = c("Throughput", "Error Rate", "Movement Time", "NASA-TLX"))
+    )
+  
+  colors_int <- list(hand = "#E64B35", gaze = "#4DBBD5")
+  
+  # Create grouped column chart
+  hc_dashboard <- highchart() %>%
+    hc_chart(type = "column") %>%
+    hc_xAxis(categories = as.character(unique(df_portfolio_int$metric))) %>%
+    hc_yAxis(title = list(text = "Value")) %>%
+    hc_title(text = "Results Dashboard") %>%
+    hc_legend(enabled = TRUE) %>%
+    hc_plotOptions(
+      column = list(
+        grouping = FALSE,
+        pointPadding = 0.2,
+        borderWidth = 0
+      )
+    ) %>%
+    hc_tooltip(
+      shared = TRUE,
+      pointFormat = "<span style='color:{point.color}'>\u25CF</span> {series.name}: <b>{point.y:.2f}</b><br/>"
+    )
+  
+  # Add series for each modality
+  for (mod in unique(df_portfolio_int$modality)) {
+    mod_data <- df_portfolio_int %>% filter(modality == mod)
+    hc_dashboard <- hc_dashboard %>%
+      hc_add_series(
+        name = mod,
+        data = mod_data$mean_val,
+        color = colors_int[[tolower(mod)]],
+        dataLabels = list(enabled = TRUE, format = "{y:.2f}")
+      )
+  }
+  
+  hc_dashboard
+} else {
+  # Fallback to static image
+  knitr::include_graphics("docs/assets/case_study/portfolio/results_dashboard.png", dpi = 200)
+}
+```
+
+We measured subjective workload using **NASA-TLX** (0–100). It's widely used in HCI because it captures perceived effort and frustration that can increase even when average performance looks similar.
+
+**Three Takeaways:**
+
+1. **Hand input outperformed gaze:** Higher throughput`r tip_i("Throughput (TP): speed–accuracy efficiency metric. TP = IDe / MT, where IDe is effective difficulty and MT is movement time. Higher TP = better efficiency.")` (5.15 vs 4.70 bits/s), lower error rate (1.7% vs 18.6%), lower workload (40.4 vs 47.0 NASA-TLX`r tip_i("NASA Task Load Index: 6 subscales (Mental, Physical, Temporal, Performance, Effort, Frustration). We report unweighted average (0–100). Higher = more workload. Useful when performance differences are small but users feel the task is harder.")`)
+2. **Gaze errors are predominantly slips (99.2%),** not timeouts—validating the Midas Touch problem in XR gaze interaction
+3. **Adaptive UI (declutter) showed modest benefits** in gaze: slightly lower error rate (18.2% vs 19.1%)
+
+### Explore the data (interactive)
+
+
+```{r results-table}
+results <- read_csv("docs/assets/case_study/results_at_a_glance.csv", show_col_types = FALSE)
+
+if (has_gt) {
+  results %>%
+    gt() %>%
+    cols_label(
+      metric = "Metric",
+      Hand = "Hand",
+      Hand_N = "N",
+      Gaze = "Gaze",
+      Gaze_N = "N"
+    ) %>%
+    cols_align(align = "left", columns = metric) %>%
+    cols_align(align = "center", columns = c(Hand, Hand_N, Gaze, Gaze_N)) %>%
+    tab_spanner(
+      label = "Hand Modality",
+      columns = c(Hand, Hand_N)
+    ) %>%
+    tab_spanner(
+      label = "Gaze Modality",
+      columns = c(Gaze, Gaze_N)
+    ) %>%
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_column_labels()
+    ) %>%
+    tab_style(
+      style = cell_text(color = "#6d28d9", weight = "bold"),
+      locations = cells_column_spanners()
+    ) %>%
+    tab_style(
+      style = cell_fill(color = "#f8f9fa"),
+      locations = cells_body(rows = seq(1, nrow(results), by = 2))
+    ) %>%
+    format_gt_portfolio(
+      title = "Results at a Glance",
+      subtitle = "Mean [95% CI] by Modality",
+      footnote = "Error rate, throughput, movement time, and NASA-TLX workload scores. We measured subjective workload using NASA-TLX (0–100). It's widely used in HCI because it captures perceived effort and frustration that can increase even when average performance looks similar."
+    )
+} else {
+  results %>%
+    kable(caption = "Results at a Glance (Mean [95% CI])") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+}
+```
+
+## Failure Modes (XR-specific) {#failure-modes-xr-specific}
+
+### Error Type Breakdown
+
+**Gaze errors:** 99.2% slips (accidental activations), 0.8% timeouts  
+**Hand errors:** 95.7% misses, 4.3% timeouts
+
+This validates a core UX failure mode: gaze interaction suffers from intent ambiguity (looking to see vs. looking to select). The Midas Touch problem is real and measurable.
+
+```{r error-type-table}
+if (file.exists("docs/assets/case_study/error_types_by_modality.csv")) {
+  err_types <- read_csv("docs/assets/case_study/error_types_by_modality.csv", show_col_types = FALSE)
+  
+  if (has_gt && nrow(err_types) > 0) {
+    # Reshape data properly
+    err_wide <- err_types %>%
+      select(modality, err_category, n, pct) %>%
+      mutate(
+        modality = str_to_title(modality),
+        err_category = str_to_title(err_category),
+        pct_formatted = sprintf("%.1f%%", pct)
+      ) %>%
+      pivot_wider(
+        id_cols = err_category,
+        names_from = modality,
+        values_from = c(n, pct_formatted),
+        values_fill = list(n = 0, pct_formatted = "0.0%")
+      )
+    
+    # Ensure all columns exist
+    if (!"n_Hand" %in% names(err_wide)) err_wide$n_Hand <- 0
+    if (!"pct_formatted_Hand" %in% names(err_wide)) err_wide$pct_formatted_Hand <- "0.0%"
+    if (!"n_Gaze" %in% names(err_wide)) err_wide$n_Gaze <- 0
+    if (!"pct_formatted_Gaze" %in% names(err_wide)) err_wide$pct_formatted_Gaze <- "0.0%"
+    
+    err_wide %>%
+      select(err_category, 
+             Hand_N = n_Hand, Hand_Pct = pct_formatted_Hand,
+             Gaze_N = n_Gaze, Gaze_Pct = pct_formatted_Gaze) %>%
+      gt() %>%
+      tab_header(
+        title = "Error Type Breakdown",
+        subtitle = "Distribution of error types by modality"
+      ) %>%
+      cols_label(
+        err_category = "Error Type",
+        Hand_N = "N",
+        Hand_Pct = "%",
+        Gaze_N = "N",
+        Gaze_Pct = "%"
+      ) %>%
+      tab_spanner(
+        label = "Hand Modality",
+        columns = c(Hand_N, Hand_Pct)
+      ) %>%
+      tab_spanner(
+        label = "Gaze Modality",
+        columns = c(Gaze_N, Gaze_Pct)
+      ) %>%
+      cols_align(align = "left", columns = err_category) %>%
+      cols_align(align = "center", columns = c(Hand_N, Hand_Pct, Gaze_N, Gaze_Pct)) %>%
+      tab_style(
+        style = cell_text(weight = "bold", color = "#E64B35"),
+        locations = cells_body(rows = err_category == "Slip")
+      ) %>%
+      tab_style(
+        style = cell_text(weight = "bold", color = "#4DBBD5"),
+        locations = cells_body(rows = err_category == "Miss")
+      ) %>%
+      tab_style(
+        style = cell_text(weight = "bold", color = "#00A087"),
+        locations = cells_body(rows = err_category == "Timeout")
+      ) %>%
+      opt_table_font(font = "system-ui, -apple-system") %>%
+      opt_table_lines(extent = "none") %>%
+      tab_options(
+        table.border.top.style = "solid",
+        table.border.top.width = px(2),
+        table.border.top.color = "#6d28d9",
+        heading.background.color = "#f8f9fa",
+        column_labels.border.bottom.width = px(2),
+        column_labels.border.bottom.color = "#e5e7eb"
+      )
+  } else {
+    err_types %>%
+      select(modality, err_category, n, pct) %>%
+      kable(caption = "Error Type Breakdown") %>%
+      kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+  }
+}
+```
+
+```{r error-type-fig-interactive, eval=has_highcharter && !is.null(df_err_type_int)}
+#| fig-cap: "Error Type Composition by Modality (interactive stacked bar - hover for percentages)"
+if (has_highcharter && !is.null(df_err_type_int) && nrow(df_err_type_int) > 0) {
+  df_err_type_summary <- df_err_type_int %>%
+    group_by(modality, err_category) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    group_by(modality) %>%
+    mutate(
+      pct = 100 * n / sum(n),
+      err_category = factor(err_category, levels = c("Slip", "Miss", "Timeout", "Other"))
+    ) %>%
+    arrange(modality, err_category)
+  
+  colors_err <- list(
+    "Slip" = "#E64B35",
+    "Miss" = "#4DBBD5", 
+    "Timeout" = "#00A087",
+    "Other" = "#8491B4"
+  )
+  
+  # Create stacked bar chart
+  hc_err_type <- highchart() %>%
+    hc_chart(type = "column") %>%
+    hc_xAxis(categories = c("Hand", "Gaze")) %>%
+    hc_yAxis(title = list(text = "Percentage of Errors (%)"), max = 100) %>%
+    hc_plotOptions(
+      column = list(
+        stacking = "percent",
+        dataLabels = list(
+          enabled = TRUE,
+          format = "{point.percentage:.1f}%",
+          style = list(fontSize = "10px", fontWeight = "normal")
+        )
+      )
+    ) %>%
+    hc_tooltip(
+      shared = FALSE,
+      pointFormat = "<b>{series.name}</b><br/>{point.percentage:.1f}% of errors<br/>({point.n} errors)"
+    ) %>%
+    hc_title(text = "Error Type Composition by Modality") %>%
+    hc_legend(enabled = TRUE, align = "right", verticalAlign = "top")
+  
+  # Add series for each error category
+  for (err_cat in c("Slip", "Miss", "Timeout", "Other")) {
+    err_data <- df_err_type_summary %>%
+      filter(err_category == err_cat) %>%
+      arrange(modality)
+    
+    if (nrow(err_data) > 0) {
+      # Create data vector: [hand_value, gaze_value] with metadata
+      data_list <- list()
+      if (any(err_data$modality == "hand")) {
+        hand_row <- err_data[err_data$modality == "hand", ]
+        data_list[[1]] <- list(y = hand_row$pct, n = hand_row$n)
+      } else {
+        data_list[[1]] <- list(y = 0, n = 0)
+      }
+      if (any(err_data$modality == "gaze")) {
+        gaze_row <- err_data[err_data$modality == "gaze", ]
+        data_list[[2]] <- list(y = gaze_row$pct, n = gaze_row$n)
+      } else {
+        data_list[[2]] <- list(y = 0, n = 0)
+      }
+      
+      hc_err_type <- hc_err_type %>%
+        hc_add_series(
+          name = err_cat,
+          data = data_list,
+          color = colors_err[[err_cat]]
+        )
+    }
+  }
+  
+  hc_err_type
+} else {
+  knitr::include_graphics("docs/assets/case_study/error_type_composition.png", dpi = 200)
+}
+```
+
+### Spatial Error Patterns
+
+::: {.panel-tabset}
+
+#### Endpoint Density Heatmap
+
+::: {.panel-tabset}
+
+##### Static
+
+```{r endpoint-heatmap-static, eval=has_highcharter && !is.null(df_endpoint_int)}
+#| fig-cap: "Endpoint Density: Static condition (interactive - hover for exact density values, zoom/pan enabled). White dashed lines mark target center (0,0)."
+if (has_highcharter && !is.null(df_endpoint_int) && !is.null(endpoint_axis_info)) {
+  # Prepare data for static condition only
+  df_endpoint_static_data <- df_raw_interactive %>%
+    filter(
+      trial_qc_ok,
+      modality == "gaze",
+      ui_mode == "static",
+      !is.na(endpoint_x), !is.na(endpoint_y),
+      !is.na(target_center_x), !is.na(target_center_y)
+    ) %>%
+    mutate(
+      error_x = endpoint_x - target_center_x,
+      error_y = endpoint_y - target_center_y
+    ) %>%
+    filter(
+      is.finite(error_x), is.finite(error_y),
+      error_x >= endpoint_axis_info$x_min, error_x <= endpoint_axis_info$x_max,
+      error_y >= endpoint_axis_info$y_min, error_y <= endpoint_axis_info$y_max
+    )
+  
+  if (nrow(df_endpoint_static_data) > 0) {
+    # Create fine grid (50x50 for smooth appearance)
+    n_bins_smooth <- 50
+    x_breaks_smooth <- seq(endpoint_axis_info$x_min, endpoint_axis_info$x_max, length.out = n_bins_smooth + 1)
+    y_breaks_smooth <- seq(endpoint_axis_info$y_min, endpoint_axis_info$y_max, length.out = n_bins_smooth + 1)
+    
+    # Calculate density
+    df_density_static <- df_endpoint_static_data %>%
+      mutate(
+        x_bin = cut(error_x, breaks = x_breaks_smooth, labels = FALSE, include.lowest = TRUE),
+        y_bin = cut(error_y, breaks = y_breaks_smooth, labels = FALSE, include.lowest = TRUE)
+      ) %>%
+      filter(!is.na(x_bin), !is.na(y_bin)) %>%
+      group_by(x_bin, y_bin) %>%
+      summarise(
+        density = n(),
+        x_center = (x_breaks_smooth[x_bin] + x_breaks_smooth[x_bin + 1]) / 2,
+        y_center = (y_breaks_smooth[y_bin] + y_breaks_smooth[y_bin + 1]) / 2,
+        .groups = "drop"
+      ) %>%
+      filter(density > 0)
+    
+    max_density_static <- max(df_density_static$density, na.rm = TRUE)
+    
+    # Create heatmap
+    highchart() %>%
+      hc_chart(type = "heatmap") %>%
+      hc_xAxis(
+        title = list(text = "Error X (px)"),
+        min = endpoint_axis_info$x_min,
+        max = endpoint_axis_info$x_max,
+        gridLineWidth = 0,
+        plotLines = list(
+          list(value = 0, color = "#FFFFFF", width = 1.5, zIndex = 5, dashStyle = "Dash")
+        )
+      ) %>%
+      hc_yAxis(
+        title = list(text = "Error Y (px)"),
+        min = endpoint_axis_info$y_min,
+        max = endpoint_axis_info$y_max,
+        gridLineWidth = 0,
+        plotLines = list(
+          list(value = 0, color = "#FFFFFF", width = 1.5, zIndex = 5, dashStyle = "Dash")
+        )
+      ) %>%
+      hc_colorAxis(
+        min = 0,
+        max = max_density_static,
+        minColor = "#0D0887",
+        maxColor = "#F0F921",
+        stops = list(
+          list(0, "#0D0887"),
+          list(0.15, "#6A00A8"),
+          list(0.3, "#B12A90"),
+          list(0.5, "#E16462"),
+          list(0.7, "#FCA636"),
+          list(1, "#F0F921")
+        )
+      ) %>%
+      hc_add_series(
+        name = "Endpoint Density",
+        data = list_parse2(df_density_static %>% select(x = x_center, y = y_center, value = density)),
+        borderWidth = 0,
+        borderColor = "transparent"
+      ) %>%
+      hc_title(text = "Endpoint Density: Static") %>%
+      hc_subtitle(text = "Where selection endpoints cluster relative to target center (0,0)") %>%
+      hc_tooltip(
+        pointFormat = "Error X: <b>{point.x:.1f} px</b><br/>Error Y: <b>{point.y:.1f} px</b><br/>Density: <b>{point.value}</b> endpoints"
+      ) %>%
+      hc_legend(
+        enabled = TRUE,
+        align = "right",
+        layout = "vertical",
+        title = list(text = "Density")
+      )
+  } else {
+    knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_endpoint_density.png", dpi = 200)
+  }
+} else {
+  knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_endpoint_density.png", dpi = 200)
+}
+```
+
+##### Adaptive
+
+```{r endpoint-heatmap-adaptive, eval=has_highcharter && !is.null(df_endpoint_int)}
+#| fig-cap: "Endpoint Density: Adaptive condition (interactive - hover for exact density values, zoom/pan enabled)"
+if (has_highcharter && !is.null(df_endpoint_int) && !is.null(endpoint_axis_info)) {
+  # Get raw data for adaptive condition
+  df_endpoint_both <- df_raw_interactive %>%
+    filter(
+      trial_qc_ok,
+      modality == "gaze",
+      ui_mode %in% c("static", "adaptive"),
+      !is.na(endpoint_x), !is.na(endpoint_y),
+      !is.na(target_center_x), !is.na(target_center_y)
+    ) %>%
+    mutate(
+      error_x = endpoint_x - target_center_x,
+      error_y = endpoint_y - target_center_y
+    ) %>%
+    filter(
+      is.finite(error_x), is.finite(error_y),
+      error_x >= endpoint_axis_info$x_min, error_x <= endpoint_axis_info$x_max,
+      error_y >= endpoint_axis_info$y_min, error_y <= endpoint_axis_info$y_max
+    )
+  
+  if (nrow(df_endpoint_both) > 0) {
+    # Create fine grid for smooth heatmap (50x50 for good balance)
+    n_bins_smooth <- 50
+    x_breaks_smooth <- seq(endpoint_axis_info$x_min, endpoint_axis_info$x_max, length.out = n_bins_smooth + 1)
+    y_breaks_smooth <- seq(endpoint_axis_info$y_min, endpoint_axis_info$y_max, length.out = n_bins_smooth + 1)
+    
+    # Calculate density for adaptive condition
+    df_density_adaptive <- df_endpoint_both %>%
+      filter(ui_mode == "adaptive") %>%
+      mutate(
+        x_bin = cut(error_x, breaks = x_breaks_smooth, labels = FALSE, include.lowest = TRUE),
+        y_bin = cut(error_y, breaks = y_breaks_smooth, labels = FALSE, include.lowest = TRUE)
+      ) %>%
+      filter(!is.na(x_bin), !is.na(y_bin)) %>%
+      group_by(x_bin, y_bin) %>%
+      summarise(
+        density = n(),
+        x_center = (x_breaks_smooth[x_bin] + x_breaks_smooth[x_bin + 1]) / 2,
+        y_center = (y_breaks_smooth[y_bin] + y_breaks_smooth[y_bin + 1]) / 2,
+        .groups = "drop"
+      ) %>%
+      filter(density > 0)
+    
+    # Get max density for consistent color scale (use same as static)
+    df_density_static <- df_endpoint_both %>%
+      filter(ui_mode == "static") %>%
+      mutate(
+        x_bin = cut(error_x, breaks = x_breaks_smooth, labels = FALSE, include.lowest = TRUE),
+        y_bin = cut(error_y, breaks = y_breaks_smooth, labels = FALSE, include.lowest = TRUE)
+      ) %>%
+      filter(!is.na(x_bin), !is.na(y_bin)) %>%
+      group_by(x_bin, y_bin) %>%
+      summarise(density = n(), .groups = "drop")
+    
+    max_density <- max(c(df_density_adaptive$density, df_density_static$density), na.rm = TRUE)
+    
+    if (nrow(df_density_adaptive) > 0) {
+      hc_endpoint_adaptive <- highchart() %>%
+        hc_chart(type = "heatmap") %>%
+        hc_xAxis(
+          title = list(text = "Error X (px)"),
+          min = endpoint_axis_info$x_min,
+          max = endpoint_axis_info$x_max,
+          gridLineWidth = 0,
+          plotLines = list(
+            list(value = 0, color = "#FFFFFF", width = 1, zIndex = 5, dashStyle = "Dash")
+          )
+        ) %>%
+        hc_yAxis(
+          title = list(text = "Error Y (px)"),
+          min = endpoint_axis_info$y_min,
+          max = endpoint_axis_info$y_max,
+          gridLineWidth = 0,
+          plotLines = list(
+            list(value = 0, color = "#FFFFFF", width = 1, zIndex = 5, dashStyle = "Dash")
+          )
+        ) %>%
+        hc_colorAxis(
+          min = 0,
+          max = max_density,
+          minColor = "#0D0887",
+          maxColor = "#F0F921",
+          stops = list(
+            list(0, "#0D0887"),
+            list(0.15, "#6A00A8"),
+            list(0.3, "#B12A90"),
+            list(0.5, "#E16462"),
+            list(0.7, "#FCA636"),
+            list(1, "#F0F921")
+          )
+        ) %>%
+        hc_add_series(
+          name = "Endpoint Density",
+          data = list_parse2(df_density_adaptive %>% select(x = x_center, y = y_center, value = density)),
+          borderWidth = 0,
+          borderColor = "transparent"
+        ) %>%
+        hc_title(text = "Endpoint Density: Adaptive") %>%
+        hc_subtitle(text = "Selection endpoints relative to target center (0,0)") %>%
+        hc_tooltip(
+          pointFormat = "Error X: <b>{point.x:.1f} px</b><br/>Error Y: <b>{point.y:.1f} px</b><br/>Density: <b>{point.value}</b> endpoints"
+        ) %>%
+        hc_legend(
+          enabled = TRUE,
+          align = "right",
+          layout = "vertical",
+          title = list(text = "Density")
+        ) %>%
+        hc_plotOptions(
+          heatmap = list(
+            borderWidth = 0,
+            borderColor = "transparent"
+          )
+        )
+      
+      hc_endpoint_adaptive
+    } else {
+      knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_endpoint_density.png", dpi = 200)
+    }
+  } else {
+    knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_endpoint_density.png", dpi = 200)
+  }
+} else {
+  knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_endpoint_density.png", dpi = 200)
+}
+```
+
+:::
+
+**What to look for:** Density clusters show where selection endpoints actually land relative to target center (0,0). The white dashed lines mark the target center. Bright yellow/orange indicates high density (many endpoints), dark purple indicates low density. Compare Adaptive vs Static to see if declutter affects endpoint clustering patterns. Hover over cells to see exact density values.
+
+#### Spatial Error Rate Heatmap
+
+::: {.panel-tabset}
+
+##### Hand
+
+```{r spatial-heatmap-hand, eval=has_highcharter && !is.null(df_spatial_int)}
+#| fig-cap: "Spatial Error Rate: Hand modality (interactive - hover for exact error rates, zoom/pan enabled)"
+if (has_highcharter && !is.null(df_spatial_int) && nrow(df_spatial_int) > 0) {
+  df_hand_spatial <- df_spatial_int %>% filter(modality == "hand")
+  
+  if (nrow(df_hand_spatial) > 0) {
+    max_err <- max(df_spatial_int$error_rate, na.rm = TRUE)  # Use max across both for consistency
+    
+    highchart() %>%
+      hc_chart(type = "heatmap") %>%
+      hc_xAxis(
+        categories = sort(unique(df_spatial_int$x_bin)),
+        title = list(text = "Screen X Position (binned)")
+      ) %>%
+      hc_yAxis(
+        categories = sort(unique(df_spatial_int$y_bin)),
+        title = list(text = "Screen Y Position (binned)")
+      ) %>%
+      hc_colorAxis(
+        min = 0,
+        max = max_err,
+        minColor = "#FFFFFF",
+        maxColor = "#E64B35",
+        stops = list(
+          list(0, "#FFFFFF"),
+          list(0.3, "#FFE5E5"),
+          list(0.6, "#FFB6C1"),
+          list(1, "#E64B35")
+        )
+      ) %>%
+      hc_add_series(
+        name = "Error Rate",
+        data = list_parse2(df_hand_spatial %>% mutate(x = x_bin - 1, y = y_bin - 1) %>% select(x, y, value = error_rate, n_trials)),
+        borderWidth = 0.5,
+        borderColor = "#CCCCCC"
+      ) %>%
+      hc_title(text = "Spatial Error Rate: Hand") %>%
+      hc_subtitle(text = "Error rate by screen position (warmer colors = higher error rate)") %>%
+      hc_tooltip(
+        pointFormat = "X: {point.x}, Y: {point.y}<br/>Error Rate: <b>{point.value:.1f}%</b><br/>Trials: {point.n_trials}"
+      ) %>%
+      hc_legend(enabled = TRUE)
+  } else {
+    knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_spatial_errors.png", dpi = 200)
+  }
+} else {
+  knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_spatial_errors.png", dpi = 200)
+}
+```
+
+##### Gaze
+
+```{r spatial-heatmap-gaze, eval=has_highcharter && !is.null(df_spatial_int)}
+#| fig-cap: "Spatial Error Rate: Gaze modality (interactive - hover for exact error rates, zoom/pan enabled)"
+if (has_highcharter && !is.null(df_spatial_int) && nrow(df_spatial_int) > 0) {
+  df_gaze_spatial <- df_spatial_int %>% filter(modality == "gaze")
+  
+  if (nrow(df_gaze_spatial) > 0) {
+    max_err <- max(df_spatial_int$error_rate, na.rm = TRUE)  # Use max across both for consistency
+    
+    highchart() %>%
+      hc_chart(type = "heatmap") %>%
+      hc_xAxis(
+        categories = sort(unique(df_spatial_int$x_bin)),
+        title = list(text = "Screen X Position (binned)")
+      ) %>%
+      hc_yAxis(
+        categories = sort(unique(df_spatial_int$y_bin)),
+        title = list(text = "Screen Y Position (binned)")
+      ) %>%
+      hc_colorAxis(
+        min = 0,
+        max = max_err,
+        minColor = "#FFFFFF",
+        maxColor = "#4DBBD5",  # Blue for gaze (different from hand's red)
+        stops = list(
+          list(0, "#FFFFFF"),
+          list(0.3, "#E0F7FA"),
+          list(0.6, "#B2EBF2"),
+          list(1, "#4DBBD5")
+        )
+      ) %>%
+      hc_add_series(
+        name = "Error Rate",
+        data = list_parse2(df_gaze_spatial %>% mutate(x = x_bin - 1, y = y_bin - 1) %>% select(x, y, value = error_rate, n_trials)),
+        borderWidth = 0.5,
+        borderColor = "#CCCCCC"
+      ) %>%
+      hc_title(text = "Spatial Error Rate: Gaze") %>%
+      hc_subtitle(text = "Error rate by screen position (warmer colors = higher error rate)") %>%
+      hc_tooltip(
+        pointFormat = "X: {point.x}, Y: {point.y}<br/>Error Rate: <b>{point.value:.1f}%</b><br/>Trials: {point.n_trials}"
+      ) %>%
+      hc_legend(enabled = TRUE)
+  } else {
+    knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_spatial_errors.png", dpi = 200)
+  }
+} else {
+  knitr::include_graphics("docs/assets/case_study/portfolio/heatmap_spatial_errors.png", dpi = 200)
+}
+```
+
+:::
+
+**What to look for:** Warmer colors indicate higher error rates. Hover over cells to see exact percentages. Compare Hand vs Gaze to see if certain screen regions show consistently higher errors—this could indicate UI layout issues or visual attention patterns.
+
+:::
+
+
+## Design & Methods {#design--methods}
+
+### Why a Fitts' Law pointing task (and why TP)?
+
+To compare hand vs gaze fairly, we used an ISO 9241-9`r tip_i("International standard for evaluating pointing devices. Defines Fitts' Law task structure, effective width calculation (We = 4.133 × SD), and Throughput metric.")` style Fitts' Law`r tip_i("Standard HCI benchmark for target acquisition. Difficulty (ID) increases with distance and decreases with target width. Widely used to compare input methods.")` pointing task — the standard HCI benchmark for target acquisition (selection). It's widely used because it isolates the core interaction loop ("move → acquire → confirm") while letting us systematically control difficulty via target size and distance. That makes it ideal for studying XR selection failure modes (e.g., gaze slips / Midas Touch) and testing UI assistance policies under time pressure. Selection is one of the highest-frequency actions in XR UI; benchmarking target acquisition gives direct insight into practical UI reliability.
+
+Rather than looking at speed and errors separately, we report **Throughput (TP)**`r tip_i("Speed–accuracy efficiency metric: TP = IDe / MT. Higher TP means users acquire targets faster without sacrificing precision. Prevents misleading 'accuracy by slowing down' interpretations.")` as the primary performance metric. TP summarizes how efficiently users can acquire targets by combining **movement time** and **effective accuracy** into a single value (higher is better). In practice, TP helps avoid misleading conclusions like "faster, but much sloppier" or "more accurate, but only because users slowed down."
+
+::: {.callout-tip}
+**TP is a speed–accuracy efficiency score:** It rises when users get faster *without* sacrificing precision. Adaptations can "improve accuracy" by slowing people down; TP makes that tradeoff explicit.
+:::
+
+::: {.callout-note collapse="true"}
+## Metric cheat sheet (optional)
+
+**Fitts' Law difficulty (standard form):**  
+\[
+ID=\log_2\left(\frac{A}{W}+1\right)
+\]
+
+**Effective width (ISO 9241-9):**  
+\[
+W_e = 4.133 \cdot SD(\text{endpoint error})
+\]
+
+**Effective difficulty:**  
+\[
+ID_e=\log_2\left(\frac{A}{W_e}+1\right)
+\]
+
+**Throughput (TP):**  
+\[
+TP=\frac{ID_e}{MT}
+\]
+Higher TP = better speed–accuracy efficiency.
+:::
+
+**Task:** Fitts' law pointing with varying target distances (A) and widths (W).  
+**Design:** 2×2×2 within-subjects factorial (modality × UI mode × pressure)
+
+**Conditions:** 
+- Modality: Hand (mouse) vs. Gaze (simulated)
+- UI Mode: Static vs. Adaptive (declutter`r tip_i("Declutter: adaptive UI policy that removes non-essential visual elements (e.g., background decorations, secondary buttons) to reduce visual noise and improve target visibility.")` for gaze; width inflation`r tip_i("Width inflation: adaptive UI policy that increases target width (width_scale_factor > 1.0) to make targets easier to acquire. Not activated in this dataset.")` for hand, but not activated)
+- Pressure: Low (0) vs. High (1) cognitive load
+
+**Participants:** N = `r if(!is.na(n_hand)) n_hand else "—"` hand (mouse users), N = `r if(!is.na(n_gaze)) n_gaze else "—"` gaze (mouse + trackpad users). Trackpad users excluded from hand modality due to device confound.
+
+**Trials:** ~200 per participant, balanced across conditions using Williams sequences`r tip_i("Williams sequences: counterbalancing method that ensures each condition appears equally often in each position across participants. Reduces order effects.")`.
+
+**Metrics:** Throughput (bits/s), Movement Time (s), Error Rate (%), NASA-TLX`r tip_i("NASA Task Load Index: 6 subscales (Mental, Physical, Temporal, Performance, Effort, Frustration). We report unweighted average (0–100). Higher = more workload.")` workload (6 subscales)
+
+**Analysis:** Linear mixed-effects models`r tip_i("Mixed-effects models: statistical models with both fixed effects (conditions) and random effects (participant-level variation). Handles repeated measures and individual differences.")` (LMM) for continuous outcomes, generalized LMM`r tip_i("GLMM: Generalized Linear Mixed Model. Used for binary outcomes (like error rates). Extends LMM to handle non-normal distributions.")` (GLMM) for error rates, with random intercepts per participant. Type III ANOVA`r tip_i("Type III ANOVA: uses sum-to-zero contrasts, appropriate for unbalanced designs. Tests main effects and interactions after accounting for other terms.")` with sum-to-zero contrasts.
+
+::: {.callout-note}
+## Adaptive System: What Was Evaluable vs Not {#adaptive-system-evaluable}
+
+**Gaze adaptive UI (declutter) was evaluated:** PolicyEngine activated declutter based on performance triggers (RT p75 thresholds, error bursts). Results show modest error reduction (18.2% vs 19.1%) but no significant throughput benefit.
+
+**Hand adaptive UI (width inflation) did not activate:** PolicyEngine emitted 243 `inflate_width` actions (17 participants), but `width_scale_factor``r tip_i("width_scale_factor: multiplier applied to target width. 1.0 = no change, >1.0 = wider targets. Remained 1.0 throughout, indicating width inflation never activated.")` remained 1.0 throughout. Root cause: UI integration issue—policy actions were emitted but not applied to rendered targets. See [Appendix](#appendix) for full diagnostic analysis.
+
+## Implications for XR Product Teams {#implications}
+
+### For Gaze Interaction: Slip-Prevention Beats Declutter
+
+The dominant gaze failure mode is slips (99.2%), not simple misses. Decluttering UI helps, but the bigger opportunity is **intent disambiguation**—confirmation mechanisms, stabilization, snapping, dwell tuning, and clear state feedback. Prioritize reducing the verification burden rather than just reducing visual chrome.
+
+### For Hand Interaction: Instrumentation Caught Non-Activation
+
+Hand width inflation did not activate in this dataset; instrumentation and validated logging caught this early. The feature was instrumented but not exercised, so its benefit is unconfirmed.
+
+### For Adaptation Policy: Thresholds Must Be Validated
+
+The concept is sound, but adaptation effects were small because triggers and mechanisms need tuning. **Key insight:** Not all "adaptive" changes are meaningful—decluttering UI can be helpful, but targeting the dominant failure mode (slips) is more impactful. Policy thresholds must be calibrated through iterative testing, not assumed.
+
+## Limitations & Lessons {#limitations--lessons}
+
+::: {.callout-note}
+## Limitations
+
+- **Hand adaptive UI not exercised:** Width inflation did not activate (width_scale_factor always 1.0), so hand UI-mode effects cannot be interpreted as adaptation effectiveness. Root cause: PolicyEngine emitted actions but UI integration did not apply them.
+- **Unbalanced design:** Hand N=75 (mouse only), Gaze N=81 (mouse + trackpad). Type III ANOVA handles this appropriately.
+- **Gaze simulation:** Gaze input uses physiologically-informed simulation, not eye tracking hardware.
+:::
+
+::: {.callout-tip}
+## Lessons Learned
+
+- **Device standardization matters:** Trackpad vs. mouse differences required exclusion of trackpad users from hand modality.
+- **Policy integration critical:** PolicyEngine logic executed correctly, but UI integration failed to apply width scaling actions.
+- **Gaze errors are slips, not timeouts:** 99.2% of gaze errors are slips (accidental activations), validating the Midas Touch problem. This suggests intent disambiguation (confirmation, stabilization) is more important than reducing UI chrome.
+- **Adaptive UI benefits modest:** Declutter showed small error reduction in gaze, but throughput effects were minimal. Targeting the dominant failure mode (slips) may be more impactful than general UI simplification.
+:::
+
+## Appendix {#appendix}
+
+<details>
+<summary><strong>Technical Details & Statistical Analysis</strong> (Click to expand)</summary>
+
+::: {.panel-tabset}
+
+### Statistical details
+
+#### Omnibus Models (2×2×2)
+
+**Model Specifications:**
+
+- **Throughput:** `TP ~ modality × ui_mode × pressure + (1 | pid)`  
+- **Error Rate:** `error ~ modality × ui_mode × pressure + (1 | pid)` (binomial GLMM)  
+- **Movement Time:** `log(RT) ~ modality × ui_mode × pressure + (1 | pid)`  
+- **NASA-TLX:** `TLX ~ modality × ui_mode × pressure + (1 | pid)`
+
+All models use Type III ANOVA with sum-to-zero contrasts. Random intercepts per participant.
+
+**Key Interpretation Rule:** UI-mode effects reflect declutter in gaze; width inflation not exercised in hand, so any hand UI-mode effects are treated as noise/non-causal.
+
+#### Gaze-Only Follow-up
+
+**Gaze-only models** (ui_mode × pressure, random intercept pid):
+
+- **Throughput:** `TP ~ ui_mode × pressure + (1 | pid)`  
+- **Error Rate:** `error ~ ui_mode × pressure + (1 | pid)`  
+- **Movement Time:** `log(RT) ~ ui_mode × pressure + (1 | pid)`  
+- **NASA-TLX:** `TLX ~ ui_mode × pressure + (1 | pid)`
+
+**Estimated Marginal Means (EMMs) with Holm-adjusted pairwise contrasts** for ui_mode within each pressure level.
+
+#### Hand: UI-Mode Not Exercised
+
+**Manipulation Check:**
+
+```{r hand-manipulation-check}
+if (file.exists("outputs/width_inflation_diagnostics_summary.csv")) {
+  width_diag <- read_csv("outputs/width_inflation_diagnostics_summary.csv", show_col_types = FALSE)
+  
+  if (has_gt && nrow(width_diag) > 0) {
+    width_diag %>%
+      gt() %>%
+      tab_header(
+        title = "Hand Width Inflation: Manipulation Check",
+        subtitle = "width_scale_factor == 1.0 throughout (no activation)"
+      ) %>%
+      opt_table_font(font = "system-ui, -apple-system") %>%
+      opt_table_lines(extent = "none") %>%
+      tab_options(
+        table.border.top.style = "solid",
+        table.border.top.width = px(2),
+        table.border.top.color = "#6d28d9"
+      )
+  } else {
+    cat("**Hand UI-mode manipulation not exercised** (width_scale_factor always 1.0).\n\n")
+    cat("H3/RQ3-hand cannot be tested in this dataset.\n")
+  }
+} else {
+  cat("**Hand UI-mode manipulation not exercised** (width_scale_factor always 1.0).\n\n")
+  cat("H3/RQ3-hand cannot be tested in this dataset.\n")
+}
+```
+
+### Policy replay diagnostics
+
+**Data-backed conclusion:**
+- Width inflation never activated: 0 trials with `width_scale_factor != 1.0`
+- PolicyEngine emitted 243 `inflate_width` actions (17 participants), but UI integration did not apply them
+- Root cause: UI integration issue—policy actions were emitted but not applied to rendered targets
+
+**Adaptation activation summary:**
+
+```{r policy-replay-summary}
+if (file.exists("outputs/policy_replay_summary.csv")) {
+  policy_summary <- read_csv("outputs/policy_replay_summary.csv", show_col_types = FALSE)
+  
+  if (has_gt && nrow(policy_summary) > 0) {
+    # Create a more readable, compact table with proper column names
+    policy_display <- policy_summary %>%
+      transmute(
+        `Total Participants` = n_participants,
+        `Width Inflation Activated` = n_ever_inflate_width,
+        `% Activated` = sprintf("%.1f%%", pct_ever_inflate_width),
+        `Bad Streak ≥5` = n_max_streak_ge5,
+        `% Bad Streak` = sprintf("%.1f%%", pct_max_streak_ge5),
+        `Inflation Events` = total_inflate_width_events,
+        `Total Policy Events` = total_policy_events,
+        `Top Reason` = top_reason,
+        `Reason Count` = top_reason_count
+      )
+    
+    # Create a more compact, readable format
+    policy_display %>%
+      gt() %>%
+      tab_spanner(
+        label = "Width Inflation Activation",
+        columns = c(`Width Inflation Activated`, `% Activated`)
+      ) %>%
+      tab_spanner(
+        label = "Bad Streak (≥5 consecutive)",
+        columns = c(`Bad Streak ≥5`, `% Bad Streak`)
+      ) %>%
+      tab_spanner(
+        label = "Policy Events",
+        columns = c(`Inflation Events`, `Total Policy Events`)
+      ) %>%
+      tab_spanner(
+        label = "Most Common Trigger Reason",
+        columns = c(`Top Reason`, `Reason Count`)
+      ) %>%
+      cols_align(align = "left", columns = `Total Participants`) %>%
+      cols_align(align = "right", columns = c(`Width Inflation Activated`, `Bad Streak ≥5`, `Inflation Events`, `Total Policy Events`, `Reason Count`)) %>%
+      cols_align(align = "center", columns = c(`% Activated`, `% Bad Streak`)) %>%
+      fmt_number(
+        columns = c(`Total Participants`, `Width Inflation Activated`, `Bad Streak ≥5`, `Inflation Events`, `Total Policy Events`, `Reason Count`),
+        decimals = 0,
+        use_seps = TRUE
+      ) %>%
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_column_labels()
+      ) %>%
+      tab_style(
+        style = cell_fill(color = "#f8f9fa"),
+        locations = cells_body(rows = 1)
+      ) %>%
+      format_gt_portfolio(
+        title = "Policy Replay Summary",
+        subtitle = "Hand width inflation: activation diagnostics"
+      )
+  } else {
+    cat("Policy replay diagnostics available in `outputs/policy_replay_summary.csv`\n")
+  }
+} else {
+  cat("Policy replay diagnostics not available.\n")
+}
+```
+
+### Data quality & QC
+
+**Before/after counts:**
+
+```{r qc-summary}
+if (file.exists("docs/assets/case_study/qc_exclusions_summary.csv")) {
+  qc <- read_csv("docs/assets/case_study/qc_exclusions_summary.csv", show_col_types = FALSE)
+  
+  if (has_gt && nrow(qc) > 0) {
+    qc %>%
+      gt() %>%
+      cols_label(
+        Rule = "Exclusion Rule",
+        Trials_Removed = "Trials Removed",
+        Pct_Removed = "% Removed"
+      ) %>%
+      cols_align(align = "left", columns = Rule) %>%
+      cols_align(align = "right", columns = c(Trials_Removed, Pct_Removed)) %>%
+      fmt_number(columns = Trials_Removed, decimals = 0, use_seps = TRUE) %>%
+      fmt_number(columns = Pct_Removed, decimals = 2, pattern = "{x}%") %>%
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_column_labels()
+      ) %>%
+      tab_style(
+        style = cell_fill(color = "#f8f9fa"),
+        locations = cells_body(rows = seq(1, nrow(qc), by = 2))
+      ) %>%
+      tab_style(
+        style = cell_text(color = "#dc2626", weight = "bold"),
+        locations = cells_body(
+          columns = Trials_Removed,
+          rows = Trials_Removed > 1000
+        )
+      ) %>%
+      tab_style(
+        style = cell_text(color = "#dc2626", weight = "bold"),
+        locations = cells_body(
+          columns = Pct_Removed,
+          rows = Pct_Removed > 5
+        )
+      ) %>%
+      format_gt_portfolio(
+        title = "Quality Control Exclusions",
+        subtitle = "Trials removed by exclusion rule"
+      )
+  } else {
+    qc %>%
+      kable(caption = "Quality Control Exclusions") %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  }
+}
+```
+
+### Implementation
+
+**System Overview:**
+
+- **Stack:** React 18 + TypeScript, deployed on Vercel
+- **Experiment Engine:** Block/condition assignment using Williams counterbalancing sequences
+- **Telemetry Schema:** Per-trial logging includes: trial metadata (modality, ui_mode, pressure), performance metrics (RT, correctness, error type), Fitts' parameters (A, W, ID), endpoint coordinates, movement samples (trajectory), display state (zoom, fullscreen, tab visibility), policy state (adaptation triggers, actions)
+- **QC Signals:** Zoom level, fullscreen mode, tab hidden duration, focus/blur events, RT bounds, input device type
+- **Deployment:** Vercel with automated CI/CD
+
+**Architecture:**
+
+```{r architecture-placeholder}
+if (file.exists("docs/assets/case_study/portfolio/architecture.png")) {
+  knitr::include_graphics("docs/assets/case_study/portfolio/architecture.png", dpi = 200)
+} else {
+  cat("Architecture diagram placeholder: `docs/assets/case_study/portfolio/architecture.png`\n")
+}
+```
+
+**Telemetry Schema:**
+
+```{r telemetry-schema-placeholder}
+cat("Telemetry schema table placeholder (key fields: trial metadata, performance metrics, Fitts' parameters, endpoint data, movement samples, display state, policy state)\n")
+```
+
+### Gaze proxy (psychophysics + calibration + reliability guards)
+
+Gaze input uses a physiologically-informed simulation rather than eye tracking hardware. This approach allows controlled comparison of hand vs gaze interaction patterns while maintaining ecological validity for XR selection tasks.
+
+**Psychophysics model:**
+
+- **Gaussian jitter** (σ ≈ 1–2° visual angle): Simulates natural eye movement variability. Real eye tracking has inherent noise; Gaussian jitter captures this uncertainty in gaze position estimation.
+- **Saccadic suppression**: Temporary input masking during rapid eye movements (saccades). Prevents false selections during eye movements, mimicking how real eye trackers suppress input during saccades.
+- **Latency injection** (50–150ms delay): Approximates real-world eye tracking system delays. Commercial eye trackers have processing latency; injected delay makes simulation more realistic.
+
+**Calibration:**
+
+- **Pixels-per-degree conversion**: Based on screen dimensions and viewing distance assumptions. Converts screen pixels to visual angle degrees, enabling consistent difficulty across different display sizes.
+
+**Reliability guards (QC gates):**
+
+- **Zoom level check**: Must be 100% (prevents scaling artifacts that would distort target sizes)
+- **Fullscreen mode**: Required (ensures consistent viewport and eliminates browser chrome interference)
+- **Tab visibility**: Hidden duration <500ms threshold (filters trials where user switched tabs)
+- **Focus/blur events**: Zero tolerance (ensures window had focus throughout trial)
+- **RT bounds**: 150–6000ms (filters non-physiological responses: too fast = accidental clicks, too slow = disengagement)
+
+These guards ensure data quality and prevent confounds from display state or user disengagement.
+
+### Planned: LBA modeling
+
+**What LBA adds:**
+
+Linear Ballistic Accumulator (LBA) modeling provides latent parameter interpretation: **drift rate** (information accumulation speed), **threshold** (decision boundary), and **non-decision time** (NDT, encoding + motor execution). This decomposes RT into cognitive components, revealing how modality and pressure affect decision-making processes.
+
+**Inputs needed:**
+
+Trial-level RT + correctness data, separated by modality × pressure conditions.
+
+**Planned output:**
+
+Forest plot of LBA parameters (drift, threshold, NDT) by modality × pressure, showing how gaze vs hand differ in information accumulation and decision thresholds.
+
+**Status:** Planned / in progress
+
+:::
+
+</details>

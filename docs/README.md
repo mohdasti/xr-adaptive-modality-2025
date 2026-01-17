@@ -31,11 +31,58 @@ docs/
 │   ├── COMMIT_SUMMARY.md
 │   ├── COMPREHENSION_CHECK_STATUS.md
 │   └── PRE_AUDIT_CHECKLIST.md
+├── case_study/                  # Case study documentation
+│   ├── CASE_STUDY.md
+│   ├── CASE_STUDY_EXECUTIVE_SUMMARY.md
+│   ├── CASE_STUDY_REVIEW_PROMPT.md
+│   ├── CASE_STUDY_TALKING_POINTS.md
+│   ├── CHANGELOG_CASE_STUDY.md
+│   └── case_study_web.qmd
+├── analysis/                    # Analysis and report documentation
+│   ├── AUDIT_REPORT.md
+│   ├── REPORT_GAPS_ANALYSIS.md
+│   ├── REPORT_IMPROVEMENTS_SUMMARY.md
+│   ├── REPORT_INPUT_DEVICE_EXCLUSION.md
+│   ├── REPORT_REORGANIZATION_PLAN.md
+│   ├── REPORT_SECTION_AUDIT.md
+│   └── power/                   # Power analysis documentation
+│       ├── DYNAMIC_SAMPLE_SIZE_SUMMARY.md
+│       ├── POWER_ANALYSIS_EXPERT_RESPONSE.md
+│       ├── POWER_ANALYSIS_PROMPT.md
+│       ├── POWER_ANALYSIS_QUICK_REFERENCE.md
+│       └── SAMPLE_SIZE_POWER_STATUS.md
+├── manuscript/                  # Manuscript and publication files
+│   ├── MANUSCRIPT_CHANGES.md
+│   ├── MANUSCRIPT_README.md
+│   ├── Manuscript.qmd
+│   ├── Manuscript.tex
+│   ├── preamble.tex
+│   ├── references.bib
+│   └── apa-7th-edition.csl
+├── checklists/                  # Project checklists
+│   ├── COMPILE_CHECKLIST.md
+│   ├── MINIMAL_PILOT_CHECKLIST.md
+│   └── PRE_COLLECTION_CHECKLIST.md
+├── data/                        # Data verification and status
+│   ├── CSV_DATA_SUFFICIENCY_PROMPT.md
+│   ├── CSV_SINGLE_FILE_VERIFICATION.md
+│   ├── CSV_VERIFICATION_REPORT.md
+│   └── DATA_AVAILABILITY_STATUS.md
+├── visualization/               # Visualization documentation
+│   ├── DRAG_DISTANCE_VISUALIZATION_PROMPT.md
+│   ├── INTERACTIVE_PLOTS_SUMMARY.md
+│   └── VISUALIZATION_BRAINSTORM.md
 ├── [Study documentation files]  # Preregistration, hypotheses, methods, etc.
 │   ├── preregistration.md
 │   ├── hypotheses.md
 │   ├── methods_detail.md
-│   └── ...
+│   ├── EXCLUSION_CRITERIA.md
+│   ├── INPUT_DEVICE_EXCLUSION_STRATEGY.md
+│   ├── DECLUTTER_ANALYSIS.md
+│   ├── TESTING_WITH_P040.md
+│   ├── CRITICAL_FIXES_APPLIED.md
+│   ├── NEXT_STEPS.md
+│   └── REPO_CLEANUP_PLAN.md
 ```
 
 ## Quick Links
@@ -98,7 +145,14 @@ If you need to add new documentation:
 1. **User guides** → `docs/guides/`
 2. **Troubleshooting/ops** → `docs/ops/`
 3. **Development notes** → `docs/dev/`
-4. **Study/research docs** → `docs/` (root of docs directory)
+4. **Case study docs** → `docs/case_study/`
+5. **Analysis/report docs** → `docs/analysis/`
+6. **Power analysis** → `docs/analysis/power/`
+7. **Manuscript files** → `docs/manuscript/`
+8. **Checklists** → `docs/checklists/`
+9. **Data verification** → `docs/data/`
+10. **Visualization docs** → `docs/visualization/`
+11. **Study/research docs** → `docs/` (root of docs directory)
 
 ## See Also
 

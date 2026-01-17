@@ -1,0 +1,9 @@
+modality,ui_mode,err_category,n,pct,total
+hand,static,miss,53,94.64285714285714,56
+hand,static,timeout,3,5.357142857142857,56
+hand,adaptive,miss,57,96.61016949152543,59
+hand,adaptive,timeout,2,3.389830508474576,59
+gaze,static,slip,751,98.8157894736842,760
+gaze,static,timeout,9,1.1842105263157894,760
+gaze,adaptive,slip,704,99.57567185289957,707
+gaze,adaptive,timeout,3,0.4243281471004243,707

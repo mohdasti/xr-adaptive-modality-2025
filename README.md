@@ -1,6 +1,7 @@
 # XR Adaptive Modality (Hand vs Gaze-Confirm) — ISO 9241-9 Study
 
 ![CI Status](https://img.shields.io/github/actions/workflow/status/mohdasti/xr-adaptive-modality-2025/ci.yml?branch=main&logo=github)
+[![Vercel](https://vercelbadge.vercel.app/api/mohdasti/xr-adaptive-modality-2025)](https://vercel.com)
 ![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg)](https://doi.org/10.5281/zenodo.18204915)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
@@ -418,7 +419,7 @@ This script:
 - See `docs/ops/EMAILJS_SIZE_LIMIT.md` for EmailJS size limit handling details
 
 **Data Verification:**
-- All critical metrics verified and working (see `CSV_VERIFICATION_REPORT.md` for detailed verification)
+- All critical metrics verified and working (see `docs/data/CSV_VERIFICATION_REPORT.md` for detailed verification)
 - ISO 9241-9 compliant projected error calculation for rigorous Fitts' Law analysis
 - Gaze-specific metrics (target re-entries, verification time) captured for interaction analysis
 
@@ -603,7 +604,7 @@ Lightweight pub/sub system for inter-component communication:
 - ✅ **Timing Precision**: Using `performance.now()` for critical psychophysics timing measurements
 - ✅ **Gaze Simulation**: Physiologically-accurate simulation with normalized jitter based on calibration (angular velocity in deg/s)
 - ✅ **ISO 9241-9 Compliance**: Projected error calculation along task axis for rigorous Fitts' Law analysis
-- ✅ **Critical Metrics Logging**: All scientific metrics verified - `projected_error_px`, `target_reentry_count`, `verification_time_ms`, `submovement_count`, `pixels_per_mm`, `pixels_per_degree` (see `CSV_VERIFICATION_REPORT.md`)
+- ✅ **Critical Metrics Logging**: All scientific metrics verified - `projected_error_px`, `target_reentry_count`, `verification_time_ms`, `submovement_count`, `pixels_per_mm`, `pixels_per_degree` (see `docs/data/CSV_VERIFICATION_REPORT.md`)
 - ✅ **Hybrid Analysis**: Movement quality metrics (submovement count, control stability, verification time) for quantifying control loop costs
 - ✅ **LBA Migration**: Switched from DDM to Linear Ballistic Accumulator for verification phase modeling (DDM error rate too low for convergence)
 - ✅ **TLX Form Improvements**: Added clear descriptions for all 6 NASA-TLX dimensions to improve participant understanding

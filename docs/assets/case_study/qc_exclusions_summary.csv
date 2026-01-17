@@ -1,0 +1,10 @@
+Rule,Trials_Removed,Pct_Removed
+Practice trials,1640,8.59
+Zoom != 100%,68,0.36
+Not fullscreen,1819,9.53
+Tab hidden > 500ms,0,0
+Focus/blur events,0,0
+RT < 150ms,24,0.13
+RT > 6000ms,63,0.33
+Incorrect trials (for performance metrics),0,0
+Trackpad users (hand modality only),708,3.71

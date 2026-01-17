@@ -1,0 +1,59 @@
+/* Case Study Web Page Styling */
+
+/* Limit figure width for readability */
+figure img {
+  max-width: 750px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Clean caption styling */
+figure figcaption {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 0.5em;
+  text-align: center;
+}
+
+/* Spacing for sections */
+section {
+  margin-bottom: 2em;
+}
+
+/* Hero section styling */
+.hero {
+  background: #f8f9fa;
+  padding: 1.5em;
+  border-radius: 8px;
+  margin-bottom: 2em;
+}
+
+.hero ul {
+  margin-top: 0.5em;
+}
+
+/* Portfolio figure container */
+.portfolio-figure {
+  text-align: center;
+  margin: 1.5em 0;
+}
+
+/* Tabset styling */
+.quarto-layout-panel .tab-content {
+  padding: 1em 0;
+}
+
+/* Appendix collapse */
+details {
+  margin-top: 1em;
+  padding: 1em;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+details summary {
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 0.5em;
+}
