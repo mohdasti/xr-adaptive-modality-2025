@@ -12,8 +12,10 @@ echo ""
 echo "Starting analysis..."
 echo ""
 
-# Change to project directory
-cd "$(dirname "$0")"
+# Change to project root directory (parent of scripts/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # Run the analysis with python3
 python3 analysis/py/lba.py --input data/clean/ --output analysis/results/
