@@ -371,23 +371,40 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         except:
             available_cores = multiprocessing.cpu_count()
         
-        # Use optimal number of chains (match cores, but cap at 4 for diagnostics)
-        n_chains = min(4, available_cores)
-        n_cores = available_cores  # Use all available cores
+        # Optimize chains and cores for high-performance VMs
+        # For VMs with many cores (>=32), use more chains for better diagnostics
+        # PyMC parallelizes chains, so we want enough chains to utilize cores
+        # but not so many that overhead dominates
+        if available_cores >= 32:
+            # High-core VM: use 8 chains (better diagnostics, good parallelization)
+            n_chains = 8
+            # Use all cores - PyMC will distribute chains across them
+            n_cores = available_cores
+        elif available_cores >= 8:
+            # Medium VM: use 4 chains
+            n_chains = 4
+            n_cores = available_cores
+        else:
+            # Small VM: match chains to cores
+            n_chains = min(4, available_cores)
+            n_cores = available_cores
         
         print("\n" + "="*60)
         print("Starting MCMC Sampling...")
         print("="*60)
         print(f"Configuration:")
         print(f"  - Available CPU cores: {available_cores}")
-        print(f"  - Chains: {n_chains}")
+        print(f"  - Chains: {n_chains} (optimized for {available_cores}-core VM)")
         print(f"  - Cores used: {n_cores}")
         print(f"  - Draws: 1000 per chain")
         print(f"  - Tune (warmup): 2000 per chain")
         print(f"  - Total iterations: {n_chains * 3000} ({3000} per chain)")
         print(f"  - Target accept rate: 0.90 (balanced for speed/convergence)")
         print(f"  - Max tree depth: 15")
-        print(f"  - Estimated time: 30-60 minutes (optimized settings)")
+        if available_cores >= 32:
+            print(f"  - Estimated time: 20-40 minutes (high-performance VM)")
+        else:
+            print(f"  - Estimated time: 30-60 minutes")
         print("="*60)
         print("\nProgress will be shown below. This may take a while...\n")
         
@@ -410,7 +427,7 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
             draws=1000,
             tune=2000,  # Warmup iterations
             target_accept=0.90,  # Balanced: faster than 0.95, still good convergence
-            chains=n_chains,  # Use detected optimal number
+            chains=n_chains,  # Optimized for VM size
             cores=n_cores,  # Use all available cores for parallelization
             return_inferencedata=True,
             progressbar=True,  # Use PyMC's built-in progress bar
