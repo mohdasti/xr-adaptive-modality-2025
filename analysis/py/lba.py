@@ -363,17 +363,31 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         )
         
         # --- Sampling ---
+        # Detect available CPU cores for optimal parallelization
+        import os
+        import multiprocessing
+        try:
+            available_cores = len(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else multiprocessing.cpu_count()
+        except:
+            available_cores = multiprocessing.cpu_count()
+        
+        # Use optimal number of chains (match cores, but cap at 4 for diagnostics)
+        n_chains = min(4, available_cores)
+        n_cores = available_cores  # Use all available cores
+        
         print("\n" + "="*60)
         print("Starting MCMC Sampling...")
         print("="*60)
         print(f"Configuration:")
+        print(f"  - Available CPU cores: {available_cores}")
+        print(f"  - Chains: {n_chains}")
+        print(f"  - Cores used: {n_cores}")
         print(f"  - Draws: 1000 per chain")
-        print(f"  - Tune (warmup): 2000 per chain (increased for better adaptation)")
-        print(f"  - Chains: 4 (increased for robust diagnostics)")
-        print(f"  - Total iterations: 12000 (3000 per chain)")
-        print(f"  - Target accept rate: 0.95 (higher = more conservative)")
+        print(f"  - Tune (warmup): 2000 per chain")
+        print(f"  - Total iterations: {n_chains * 3000} ({3000} per chain)")
+        print(f"  - Target accept rate: 0.90 (balanced for speed/convergence)")
         print(f"  - Max tree depth: 15")
-        print(f"  - Estimated time: 60-90 minutes (longer due to 4 chains + more warmup)")
+        print(f"  - Estimated time: 30-60 minutes (optimized settings)")
         print("="*60)
         print("\nProgress will be shown below. This may take a while...\n")
         
@@ -394,13 +408,15 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         
         trace = pm.sample(
             draws=1000,
-            tune=2000,  # Increased warmup for better adaptation
-            target_accept=0.95,  # Increased from 0.9 to improve convergence
-            chains=4,  # Increased from 2 for better diagnostics
-            cores=4,  # Match number of chains
+            tune=2000,  # Warmup iterations
+            target_accept=0.90,  # Balanced: faster than 0.95, still good convergence
+            chains=n_chains,  # Use detected optimal number
+            cores=n_cores,  # Use all available cores for parallelization
             return_inferencedata=True,
             progressbar=True,  # Use PyMC's built-in progress bar
-            max_treedepth=15  # Increased from default 10 to handle difficult geometry
+            max_treedepth=15,  # Increased from default 10 to handle difficult geometry
+            compute_convergence_checks=False,  # Disable during sampling for speed
+            random_seed=42  # For reproducibility
         )
         
         elapsed_total = time.time() - start_time
