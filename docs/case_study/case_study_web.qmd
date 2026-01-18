@@ -473,10 +473,10 @@ a{ color:var(--accent); }
   </div>
 
   <div class="tldr-chips">
+    <a href="#design--methods"><i class="bi bi-diagram-3"></i> Methods</a>
+    <a href="#what-i-built"><i class="bi bi-boxes"></i> What I built</a>
     <a href="#key-results-60-seconds"><i class="bi bi-graph-up-arrow"></i> Key results</a>
     <a href="#failure-modes-xr-specific"><i class="bi bi-bullseye"></i> Failure modes</a>
-    <a href="#what-i-built"><i class="bi bi-boxes"></i> What I built</a>
-    <a href="#design--methods"><i class="bi bi-diagram-3"></i> Methods</a>
     <a href="#limitations--lessons"><i class="bi bi-exclamation-triangle"></i> Limitations</a>
   </div>
 </div>
@@ -511,6 +511,8 @@ a{ color:var(--accent); }
              src="https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white">
         <img alt="R" loading="lazy"
              src="https://img.shields.io/badge/R-4.4.0-276DC3?logo=r&logoColor=white">
+        <img alt="Python" loading="lazy"
+             src="https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white">
       </div>
 
       <div class="repo-actions">
@@ -524,7 +526,9 @@ a{ color:var(--accent); }
 </div>
 ```
 
-## Experimental Procedure & Participant Journey {#screenshots}
+## Design & Methods {#design--methods}
+
+### Experimental Procedure & Participant Journey
 
 This visualization outlines the complete participant journey from
 onboarding through data collection, showing the factorial design
@@ -591,7 +595,7 @@ knitr::opts_knit$set(root.dir = old_root)
 -   Automated quality control (invalid trial detection, exclusion
     criteria)
 
-## Key Results (60 Seconds) {#key-results-60-seconds}
+## Key Results {#key-results-60-seconds}
 
 ```{r results-dashboard-interactive, eval=has_highcharter && !is.null(df_raw_interactive)}
 #| fig-cap: "Results Dashboard: Interactive comparison of key metrics by modality (hover for values, zoom/pan enabled)"
@@ -1305,8 +1309,6 @@ over cells to see exact percentages. Compare Hand vs Gaze to see if
 certain screen regions show consistently higher errors—this could
 indicate UI layout issues or visual attention patterns.
 :::::
-
-## Design & Methods {#design--methods}
 
 ### Why a Fitts' Law pointing task (and why TP)?
 
