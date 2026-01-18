@@ -35,14 +35,24 @@ check_warning() {
     fi
 }
 
+# Detect which Python to use (prefer python3, fallback to python)
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    echo -e "${RED}✗${NC} No Python interpreter found"
+    exit 1
+fi
+
 # Check 1: Python version
 echo "1. Checking Python version..."
-PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
 PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
 PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
 
 if [ "$PYTHON_MAJOR" -ge 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
-    check_status 0 "Python version: $PYTHON_VERSION (>= 3.8 required)"
+    check_status 0 "Python version: $PYTHON_VERSION (>= 3.8 required) [using $PYTHON_CMD]"
 else
     check_status 1 "Python version: $PYTHON_VERSION (need >= 3.8)"
 fi
@@ -50,16 +60,16 @@ fi
 # Check 2: Required Python packages
 echo ""
 echo "2. Checking Python dependencies..."
-python3 -c "import pymc" 2>/dev/null
+$PYTHON_CMD -c "import pymc" 2>/dev/null
 check_status $? "PyMC installed"
 
-python3 -c "import arviz" 2>/dev/null
+$PYTHON_CMD -c "import arviz" 2>/dev/null
 check_status $? "ArviZ installed"
 
-python3 -c "import pandas" 2>/dev/null
+$PYTHON_CMD -c "import pandas" 2>/dev/null
 check_status $? "pandas installed"
 
-python3 -c "import numpy" 2>/dev/null
+$PYTHON_CMD -c "import numpy" 2>/dev/null
 check_status $? "numpy installed"
 
 # Check 3: Data file exists
@@ -76,7 +86,7 @@ fi
 echo ""
 echo "4. Checking data file structure..."
 if [ -f "data/clean/trial_data.csv" ]; then
-    python3 -c "
+    $PYTHON_CMD -c "
 import pandas as pd
 import sys
 try:
