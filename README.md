@@ -330,7 +330,7 @@ git commit -m "Lock adaptation thresholds post-pilot"
 - Automatic email re-submission when strategy questions are submitted
 - Automatic CSV download fallback when data exceeds EmailJS 50KB limit
 - Email includes trial CSV, block CSV, and debrief responses (JSON)
-- See `EMAILJS_TEMPLATE.txt` for template configuration
+- See `docs/ops/EMAILJS_TEMPLATE.txt` for template configuration
 
 ### NASA-TLX Workload Assessment
 
@@ -657,7 +657,7 @@ In the `app/` directory:
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+Please read [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
