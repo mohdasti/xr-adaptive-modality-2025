@@ -8,15 +8,14 @@ format:
   html:
     theme: cosmo
     toc: true
-    toc-depth: 2
+    toc-depth: 3
     code-fold: true
     embed-resources: true
-    self-contained: false
+    self-contained: true
     lightbox: true
     html-math-method: katex
     fig-width: 10
     fig-height: 6
-    css: ../assets/css/case-study.css
     fig-dir: figures
 editor: 
   markdown: 
@@ -37,6 +36,65 @@ editor:
   cursor: help;
 }
 .tip-i:hover{ background:#f3f0ff; border-color:#d9d0ff; }
+
+/* Case Study Web Page Styling */
+/* Limit figure width for readability */
+figure img {
+  max-width: 750px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Clean caption styling */
+figure figcaption {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 0.5em;
+  text-align: center;
+}
+
+/* Spacing for sections */
+section {
+  margin-bottom: 2em;
+}
+
+/* Hero section styling */
+.hero {
+  background: #f8f9fa;
+  padding: 1.5em;
+  border-radius: 8px;
+  margin-bottom: 2em;
+}
+
+.hero ul {
+  margin-top: 0.5em;
+}
+
+/* Portfolio figure container */
+.portfolio-figure {
+  text-align: center;
+  margin: 1.5em 0;
+}
+
+/* Tabset styling */
+.quarto-layout-panel .tab-content {
+  padding: 1em 0;
+}
+
+/* Appendix collapse */
+details {
+  margin-top: 1em;
+  padding: 1em;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+details summary {
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 0.5em;
+}
 </style>
 
 <script>
@@ -49,6 +107,108 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 });
 </script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  if (!window.bootstrap || !bootstrap.Tooltip) return;
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    if (!el.dataset.bsCustomClass) el.dataset.bsCustomClass = 'tt-wide';
+    new bootstrap.Tooltip(el, { container: 'body', trigger: 'hover focus', html: true });
+  });
+});
+</script>
+
+<style>
+/* Cards + chips (surgeon-style) */
+.tldr-card{background:#ffffff;border:1px solid #e5e7eb;border-left:4px solid #0ea5e9;border-radius:12px;padding:12px 14px;margin:8px 0 14px;box-shadow:0 1px 1px rgba(16,24,40,.02)}
+.tldr-title{font-weight:700;letter-spacing:.2px;margin-bottom:.25rem}
+.tldr-text{margin:.15rem 0 .6rem;color:#111827}
+.tldr-body{margin:.15rem 0 .6rem;color:#111827;line-height:1.5}
+.tldr-chips{display:flex;flex-wrap:wrap;gap:6px}
+.tldr-chips a{display:inline-flex;align-items:center;gap:.35rem;font-size:.86rem;padding:.18rem .5rem;border-radius:999px;border:1px solid #d7dee6;background:#f8fafc;text-decoration:none;color:#0b1526}
+.tldr-chips a:hover{background:#eef6fb;border-color:#b7e1f0}
+
+.build-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:.4rem 0 1rem}
+.build-card{background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;box-shadow:0 1px 1px rgba(16,24,40,.02)}
+.build-head{display:flex;align-items:center;gap:.55rem;margin-bottom:.35rem}
+.build-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#e6f6ff;border:1px solid #bfe9ff;color:#0369a1}
+.build-title{font-weight:700;margin:0}
+.build-sub{color:#4b5563;margin:.1rem 0 0;font-size:.92rem}
+.build-list{margin:.55rem 0 0;padding-left:1.05rem}
+.build-list li{margin:.2rem 0}
+.build-kicker{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:.4rem}
+.build-card h3{font-weight:700;font-size:1.05rem;margin:.2rem 0 .4rem;color:#111827}
+.muted{color:#6b7280;font-size:.92rem;line-height:1.5;margin:.3rem 0}
+
+.help-icon{display:inline-flex;align-items:center;justify-content:center;width:1.05em;height:1.05em;border-radius:999px;border:1px solid #e5e7eb;color:#0ea5e9;font-size:.8em;margin-left:.25rem;cursor:help;vertical-align:baseline}
+.help-icon:hover{background:#e6f6ff;border-color:#bfe9ff}
+.tt-wide .tooltip-inner{max-width:360px;text-align:left;line-height:1.25;padding:.45rem .55rem}
+.small-muted{color:#6b7280;font-size:.92rem}
+
+/* Option 1: Minimalist underline with animated expand */
+details.tech-details{
+  margin:1.5rem 0;
+  border:none;
+  background:transparent;
+}
+details.tech-details summary{
+  cursor:pointer;
+  font-weight:600;
+  color:#111827;
+  list-style:none;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 0;
+  user-select:none;
+  position:relative;
+  font-size:1.1rem;
+  transition:color .2s ease;
+}
+details.tech-details summary::-webkit-details-marker{display:none}
+details.tech-details summary::marker{display:none}
+details.tech-details summary::before{
+  content:"";
+  position:absolute;
+  bottom:0;
+  left:0;
+  width:0;
+  height:2px;
+  background:#6d28d9;
+  transition:width .3s ease;
+}
+details.tech-details summary:hover::before,
+details.tech-details[open] summary::before{
+  width:100%;
+}
+details.tech-details summary::after{
+  content:"▼";
+  color:#6b7280;
+  font-size:.75em;
+  transition:transform .3s ease, color .2s ease;
+  margin-left:4px;
+}
+details.tech-details[open] summary::after{
+  transform:rotate(180deg);
+  color:#6d28d9;
+}
+details.tech-details summary:hover{
+  color:#6d28d9;
+}
+details.tech-details > *:not(summary){
+  margin-top:1.5rem;
+  padding-top:1.5rem;
+  border-top:1px solid #e5e7eb;
+  animation:fadeIn .3s ease;
+}
+@keyframes fadeIn{
+  from{opacity:0;transform:translateY(-10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+</style>
 ```
 
 ```{r setup, include=FALSE}
@@ -441,6 +601,7 @@ a{ color:var(--accent); }
 .repo-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .repo-badges img{height:18px;border-radius:6px;border:1px solid #edf0f3;display:block}
 .repo-badges a{display:inline-flex;align-items:center;line-height:0}
+.repo-badges a img{display:block}
 .repo-actions{display:flex;gap:8px;flex-wrap:wrap}
 .repo-actions a.btn{
   display:inline-flex;align-items:center;gap:.45rem;font-size:.85rem;padding:.30rem .62rem;border-radius:8px;
@@ -453,7 +614,7 @@ a{ color:var(--accent); }
 <div class="tldr-card" role="note" aria-label="TL;DR">
   <div class="tldr-title">TL;DR</div>
   <div class="tldr-text">
-    I built a remote XR interaction testbed and evaluated whether a <b>context-aware adaptive system</b> can reduce gaze failure modes (e.g., <em>Midas Touch</em>) and workload under time pressure.
+    I built a remote XR interaction testbed and evaluated whether a <b>context-aware adaptive system</b> can reduce gaze failure modes (e.g., <em>Midas Touch slips: accidental activations</em>) and workload under time pressure.
   </div>
 
   <!-- KPI placeholders (you can update values later; keep format) -->
@@ -468,7 +629,7 @@ a{ color:var(--accent); }
     </div>
     <div class="kpi">
       <div class="lbl">Core metrics</div>
-      <div class="val">TP`r tip_tp` · Error · MT · TLX`r tip_tlx`</div>
+      <div class="val">TP (throughput) · Error · MT (movement time) · TLX (workload)</div>
     </div>
   </div>
 
@@ -503,8 +664,10 @@ a{ color:var(--accent); }
         </a>
         <img alt="License" loading="lazy"
              src="https://img.shields.io/badge/license-GPLv3-blue.svg">
-        <img alt="DOI" loading="lazy"
-             src="https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg">
+        <a href="https://doi.org/10.5281/zenodo.18204915" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;line-height:0;">
+          <img alt="DOI" loading="lazy"
+               src="https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg" style="height:18px;border-radius:6px;border:1px solid #edf0f3;display:block;">
+        </a>
         <img alt="React" loading="lazy"
              src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white">
         <img alt="TypeScript" loading="lazy"
@@ -524,6 +687,140 @@ a{ color:var(--accent); }
     </div>
   </div>
 </div>
+```
+
+## What I Built {#what-i-built}
+
+```{=html}
+<div class="tldr-card" role="note" aria-label="What I built">
+  <div class="tldr-title">What I shipped (end-to-end)</div>
+  <div class="tldr-body">
+    I built a remote XR interaction research platform—from task UI to analysis—so I could quantify speed–accuracy tradeoffs, surface XR-specific failure modes (e.g., Midas Touch slips), and evaluate adaptive UI policies with full replayable telemetry.
+  </div>
+  <div class="tldr-chips">
+    <a href="https://github.com/mohdasti/xr-adaptive-modality-2025" target="_blank" rel="noopener">GitHub repo</a>
+    <a href="#appendix">Appendix</a>
+  </div>
+</div>
+
+<div class="build-grid">
+  <div class="build-card">
+    <div class="build-kicker">Study application</div>
+    <h3>React + TypeScript experiment UI</h3>
+    <p class="muted">Responsive Fitts' Law task + HUD, two modalities, pressure manipulation, and block-level workload collection.</p>
+  </div>
+
+  <div class="build-card">
+    <div class="build-kicker">Gaze simulation</div>
+    <h3>Psychophysics-inspired gaze proxy</h3>
+    <p class="muted">Fixation-state Gaussian jitter, saccadic suppression, and confirmation behavior to reproduce gaze failure modes in remote testing.</p>
+  </div>
+
+  <div class="build-card">
+    <div class="build-kicker">Adaptive system</div>
+    <h3>Policy engine + replayable diagnostics</h3>
+    <p class="muted">Threshold triggers with hysteresis, policy state logging, and replay summaries to verify when adaptation did (or didn't) execute.</p>
+  </div>
+
+  <div class="build-card">
+    <div class="build-kicker">Analysis</div>
+    <h3>Reproducible reporting pipeline</h3>
+    <p class="muted">Mixed-effects models + LBA cognitive modeling + Quarto-based reproducible analysis. All figures and tables regenerate from raw logs with consistent QC and model specifications.</p>
+  </div>
+</div>
+```
+
+<details>
+<summary><strong>Implementation notes (optional)</strong> — for engineers</summary>
+
+**Development approach:** Despite not being a software/web developer by training, I delivered this full-stack research platform efficiently using **Cursor AI** for code generation and iteration, enabling rapid prototyping and deployment. The entire system—from React UI to analysis pipeline—was built and deployed to **Vercel** in a matter of weeks, demonstrating that modern AI-assisted development tools can bridge domain expertise gaps.
+
+**Tech stack:**
+
+- **Frontend:** React 18 + TypeScript, Vite build tool, React Router for multi-page flow
+- **Deployment:** Vercel (automatic CI/CD from GitHub, zero-config deployment)
+- **Analysis:** R (tidyverse, lme4, emmeans) + Quarto for reproducible reporting
+- **Data export:** CSV download + optional EmailJS submission (compressed with pako)
+
+**Architecture components:**
+
+- **Task UI** (`app/src/components/FittsTask.tsx`): Canvas-based ISO 9241-9 compliant Fitts' Law implementation with circular target layout, real-time movement tracking, and hit/miss detection
+- **Gaze proxy** (`app/src/lib/modality.ts`): Psychophysics simulation with fixation-state Gaussian jitter, saccadic suppression (velocity-based freezing), and confirmation model (dwell/SPACE + tolerance ring)
+- **Policy engine** (`app/src/lib/policy.ts`): Rule-based adaptation with RT percentile thresholds, error burst detection, hysteresis (N-trial smoothing), and replayable state logs for debugging
+- **Telemetry collector** (`app/src/lib/telemetry/collector.ts`): Structured event logging (trial lifecycle, movement samples at 60Hz, display metadata, policy state changes) with automatic QC flagging (focus/blur, invalid RTs, display violations)
+- **Multi-page flow:** React Router with routes for consent → demographics → system check → calibration → task → debrief
+
+**System Overview:**
+
+- **Stack:** React 18 + TypeScript, deployed on Vercel
+- **Experiment Engine:** Block/condition assignment using Williams counterbalancing sequences
+- **Deployment:** Vercel with automated CI/CD
+
+**Telemetry Schema:**
+
+The telemetry system logs comprehensive per-trial data including trial metadata, performance metrics, Fitts' parameters, endpoint data, movement samples (60Hz), display state, and policy state. Key fields include:
+
+- **Trial Metadata:** trial_id, session_id, participant_id, taskType
+- **Performance Metrics:** rt_ms, correct, movement_time_ms, submovement_count
+- **Fitts' Parameters:** A (amplitude), W (width), ID (index of difficulty), target_width_px
+- **Endpoint Data:** endpoint_x/y, endpoint_error_px, target_center_x/y, path_length_px, peak_velocity_px_s, curvature_index
+- **Movement Samples:** 60Hz sampling with sd_along_px, sd_ortho_px for path analysis
+- **Display State:** screen_width, screen_height, device_pixel_ratio
+- **Policy State:** adaptation_triggered (boolean), width_scale_factor (applied scaling)
+
+**Key technical decisions:**
+
+- **Client-side only:** All processing happens in the browser (no backend), enabling fast deployment and privacy-preserving data collection
+- **Event-driven architecture:** Global event bus for inter-component communication (TaskPane ↔ HUDPane ↔ LoggerPane)
+- **Policy replay system:** Every policy decision is logged with full context, enabling post-hoc analysis of "why adaptation did/didn't trigger"
+- **Reproducible analysis:** Quarto document (`Report.qmd`) regenerates all figures/tables from raw CSV logs with consistent QC exclusions
+
+**File structure highlights:**
+
+- `app/src/routes/` — Multi-page flow components (Intro, Demographics, SystemCheck, Calibration, Task, Debrief)
+- `app/src/components/` — Reusable UI components (FittsTask, TaskPane, HUDPane, TLXForm)
+- `app/src/lib/` — Core logic (policy engine, modality simulation, telemetry, CSV export)
+- `policy/` — JSON policy configuration files (default vs locked variants)
+- `analysis/` — R scripts for data processing, QC, and statistical modeling
+- `Report.qmd` — Main Quarto analysis document (regenerates all outputs)
+
+**Performance & optimization:**
+
+- 60Hz movement sampling for smooth cursor tracking
+- Compressed telemetry export (pako gzip) for EmailJS size limits
+- Lazy loading and code splitting via Vite
+- TypeScript strict mode for type safety and early error detection
+
+</details>
+
+```{r architecture-fig-impl, echo=FALSE, out.width="100%"}
+#| fig-cap: "System architecture: Remote XR interaction testbed with client-side task execution, client-side telemetry collection, and adaptive policy engine. All processing occurs in the browser; data is exported via CSV download or optional EmailJS submission."
+#| fig-alt: "System architecture diagram"
+# Copy image to local images/ directory relative to .qmd file
+# Then use path relative to .qmd file (not root.dir) so HTML references work correctly
+qmd_dir <- file.path(getwd(), "docs", "case_study")
+images_dir <- file.path(qmd_dir, "images")
+if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
+src_file <- file.path(getwd(), "docs", "assets", "case_study", "portfolio", "architecture.png")
+dst_file <- file.path(images_dir, "architecture.png")
+
+if (!file.exists(src_file)) {
+  stop("Architecture image not found at: ", src_file)
+}
+
+if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
+  file.copy(src_file, dst_file, overwrite = TRUE)
+}
+
+# Temporarily change working directory so path resolves correctly
+# This works better than changing root.dir for knitr::include_graphics
+old_wd <- getwd()
+old_root <- knitr::opts_knit$get("root.dir")
+setwd(qmd_dir)
+knitr::opts_knit$set(root.dir = NULL)
+knitr::include_graphics("images/architecture.png", dpi = 200)
+setwd(old_wd)
+knitr::opts_knit$set(root.dir = old_root)
 ```
 
 ## Design & Methods {#design--methods}
@@ -560,7 +857,7 @@ knitr::opts_knit$set(root.dir = old_root)
     pixels-per-millimeter (px/mm) and pixels-per-degree (PPD) at assumed
     60cm viewing distance
 -   **Factorial Conditions**: 2×2×2 within-subjects design (Modality:
-    Hand/Gaze × UI Mode: Static/Adaptive × Pressure: OFF/ON)
+    Hand/Gaze × UI Mode: Static/Adaptive (declutter for gaze; width inflation for hand) × Pressure: OFF/ON)
 -   **Fitts' Law Task**: ISO 9241-9 compliant target acquisition with
     repeated trials
 -   **NASA-TLX Assessment**: 6-item workload questionnaire (0-100
@@ -568,32 +865,49 @@ knitr::opts_knit$set(root.dir = old_root)
 -   **Data Logging**: Comprehensive event tracking (`trial:start`,
     `trial:end`, `trial:error`)
 
-## What I Built {#what-i-built}
+::: {.callout-tip}
+**Quick primer (so the results make sense)**
 
-**Research Platform:**
+**Why this task?** We use a **Fitts' Law pointing task** because it's the standard HCI benchmark for target selection: it isolates the core loop (move → acquire → confirm) while systematically controlling difficulty via target **distance (A)** and **width (W)**.
 
--   **Web Application:** React 18 + TypeScript, deployed on Vercel
--   **Telemetry Schema:** Comprehensive event logging (trial start/end,
-    policy changes, display violations, movement samples)
--   **Adaptation Policy Engine:** Threshold-based triggers with
-    hysteresis (`app/src/lib/policy.ts`)
--   **Automated Report:** Quarto-based reproducible analysis pipeline
-    (`Report.qmd` → `Report.html`)
+**How to read the metrics (direction matters):**
 
-**Key Features:**
+- **Throughput (TP, bits/s)** = *speed–accuracy efficiency* (higher = better). It rewards being fast **without** getting sloppy.
+- **Movement Time (MT, s)** = time to complete a selection (lower = faster).
+- **Error rate (%)** = failed selections (lower = more reliable).
+- **NASA-TLX (0–100)** = perceived workload (lower = easier). We report the unweighted average of the 6 subscales.
 
--   Remote data collection (N=`r if(!is.na(n_total)) n_total else "—"`
-    participants total)
--   ISO
-    9241-9`r tip_i("International standard for evaluating pointing devices. Defines Fitts' Law task structure, effective width calculation (We = 4.133 × SD), and Throughput metric.")`
-    compliant Fitts'
-    Law`r tip_i("Standard HCI benchmark for target acquisition. Difficulty (ID) increases with distance and decreases with target width. Widely used to compare input methods.")`
-    task
--   Real-time adaptation engine with hysteresis
--   Comprehensive telemetry (movement kinematics, display metadata,
-    policy state)
--   Automated quality control (invalid trial detection, exclusion
-    criteria)
+**XR failure-mode vocabulary:**
+
+- **Slip** = accidental activation (classic "Midas Touch" pattern).
+- **Miss/timeout** = failed selection due to precision or timing constraints.
+
+**Why Fitts' Law + Throughput?** We use a Fitts' Law pointing task (ISO 9241-9 compliant) because it isolates the core interaction loop ("move → acquire → confirm") while systematically controlling difficulty. Rather than looking at speed and errors separately, we report **Throughput (TP)** as the primary performance metric—it combines movement time and effective accuracy into a single efficiency score (higher = better). This helps avoid misleading conclusions like "faster, but much sloppier" or "more accurate, but only because users slowed down."
+:::
+
+```{r task-layout-fig, echo=FALSE, out.width="100%"}
+#| fig-cap: "Task UI overview. The study uses a Fitts' Law target-acquisition task: participants select red targets on a central canvas while a side HUD shows modality and block-level feedback (errors, progress)."
+#| fig-alt: "Task layout diagram"
+# Copy image to local images/ directory relative to .qmd file
+# Then use path relative to .qmd file (not root.dir) so HTML references work correctly
+qmd_dir <- file.path(getwd(), "docs", "case_study")
+images_dir <- file.path(qmd_dir, "images")
+if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
+src_file <- file.path(getwd(), "docs", "assets", "case_study", "Task_layout.png")
+dst_file <- file.path(images_dir, "Task_layout.png")
+if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
+  file.copy(src_file, dst_file, overwrite = TRUE)
+}
+# Temporarily change working directory so path resolves correctly
+# This works better than changing root.dir for knitr::include_graphics
+old_wd <- getwd()
+old_root <- knitr::opts_knit$get("root.dir")
+setwd(qmd_dir)
+knitr::opts_knit$set(root.dir = NULL)
+knitr::include_graphics("images/Task_layout.png", dpi = 200)
+setwd(old_wd)
+knitr::opts_knit$set(root.dir = old_root)
+```
 
 ## Key Results {#key-results-60-seconds}
 
@@ -709,17 +1023,9 @@ similar.
 
 **Three Takeaways:**
 
-1.  **Hand input outperformed gaze:** Higher
-    throughput`r tip_i("Throughput (TP): speed–accuracy efficiency metric. TP = IDe / MT, where IDe is effective difficulty and MT is movement time. Higher TP = better efficiency.")`
-    (5.15 vs 4.70 bits/s), lower error rate (1.7% vs 18.6%), lower
-    workload (40.4 vs 47.0
-    NASA-TLX`r tip_i("NASA Task Load Index: 6 subscales (Mental, Physical, Temporal, Performance, Effort, Frustration). We report unweighted average (0–100). Higher = more workload. Useful when performance differences are small but users feel the task is harder.")`)
-2.  **Gaze errors are predominantly slips (99.2%),** not
-    timeouts—validating the Midas Touch problem in XR gaze interaction
-3.  **Adaptive UI (declutter) showed modest benefits** in gaze: slightly
-    lower error rate (18.2% vs 19.1%)
-
-### Explore the data (interactive)
+1.  **Hand input outperformed gaze:** Higher **Throughput (TP; speed–accuracy efficiency)** (5.15 vs 4.70 bits/s), lower error rate (1.7% vs 18.6%), lower **NASA-TLX (workload)** (40.4 vs 47.0)
+2.  **Gaze errors are predominantly slips (accidental activations / Midas Touch) (99.2%),** not timeouts—validating the Midas Touch problem in XR gaze interaction
+3.  **Adaptive UI (declutter: removes non-essential visual elements) showed modest benefits** in gaze: slightly lower error rate (18.2% vs 19.1%)
 
 ```{r results-table}
 results <- read_csv("docs/assets/case_study/results_at_a_glance.csv", show_col_types = FALSE)
@@ -770,6 +1076,8 @@ if (has_gt) {
 
 ## Failure Modes (XR-specific) {#failure-modes-xr-specific}
 
+**What this section shows:** XR-specific failure patterns—ways that gaze and hand interactions fail differently, with gaze showing the classic "Midas Touch" problem (accidental activations).
+
 ### Error Type Breakdown
 
 **Gaze errors:** 99.2% slips (accidental activations), 0.8% timeouts\
@@ -778,8 +1086,6 @@ if (has_gt) {
 This validates a core UX failure mode: gaze interaction suffers from
 intent ambiguity (looking to see vs. looking to select). The Midas Touch
 problem is real and measurable.
-
-We used a psychophysics-inspired gaze proxy (jitter + saccadic suppression + confirm). See [Appendix figure](#psychophysics-fig).
 
 ```{r error-type-table}
 if (file.exists("docs/assets/case_study/error_types_by_modality.csv")) {
@@ -945,11 +1251,11 @@ if (has_highcharter && !is.null(df_err_type_int) && nrow(df_err_type_int) > 0) {
 
 ### Spatial Error Patterns
 
-::::: panel-tabset
+::: panel-tabset
 #### Endpoint Density Heatmap
 
 ::: panel-tabset
-##### Static
+#### Static
 
 ```{r endpoint-heatmap-static, eval=has_highcharter && !is.null(df_endpoint_int)}
 #| fig-cap: "Endpoint Density: Static condition (interactive - hover for exact density values, zoom/pan enabled). White dashed lines mark target center (0,0)."
@@ -1057,7 +1363,7 @@ if (has_highcharter && !is.null(df_endpoint_int) && !is.null(endpoint_axis_info)
 }
 ```
 
-##### Adaptive
+#### Adaptive
 
 ```{r endpoint-heatmap-adaptive, eval=has_highcharter && !is.null(df_endpoint_int)}
 #| fig-cap: "Endpoint Density: Adaptive condition (interactive - hover for exact density values, zoom/pan enabled)"
@@ -1199,7 +1505,7 @@ over cells to see exact density values.
 #### Spatial Error Rate Heatmap
 
 ::: panel-tabset
-##### Hand
+#### Hand
 
 ```{r spatial-heatmap-hand, eval=has_highcharter && !is.null(df_spatial_int)}
 #| fig-cap: "Spatial Error Rate: Hand modality (interactive - hover for exact error rates, zoom/pan enabled)"
@@ -1251,7 +1557,7 @@ if (has_highcharter && !is.null(df_spatial_int) && nrow(df_spatial_int) > 0) {
 }
 ```
 
-##### Gaze
+#### Gaze
 
 ```{r spatial-heatmap-gaze, eval=has_highcharter && !is.null(df_spatial_int)}
 #| fig-cap: "Spatial Error Rate: Gaze modality (interactive - hover for exact error rates, zoom/pan enabled)"
@@ -1308,64 +1614,10 @@ if (has_highcharter && !is.null(df_spatial_int) && nrow(df_spatial_int) > 0) {
 over cells to see exact percentages. Compare Hand vs Gaze to see if
 certain screen regions show consistently higher errors—this could
 indicate UI layout issues or visual attention patterns.
-:::::
-
-### Why a Fitts' Law pointing task (and why TP)?
-
-To compare hand vs gaze fairly, we used an ISO
-9241-9`r tip_i("International standard for evaluating pointing devices. Defines Fitts' Law task structure, effective width calculation (We = 4.133 × SD), and Throughput metric.")`
-style Fitts'
-Law`r tip_i("Standard HCI benchmark for target acquisition. Difficulty (ID) increases with distance and decreases with target width. Widely used to compare input methods.")`
-pointing task — the standard HCI benchmark for target acquisition
-(selection). It's widely used because it isolates the core interaction
-loop ("move → acquire → confirm") while letting us systematically
-control difficulty via target size and distance. That makes it ideal for
-studying XR selection failure modes (e.g., gaze slips / Midas Touch) and
-testing UI assistance policies under time pressure. Selection is one of
-the highest-frequency actions in XR UI; benchmarking target acquisition
-gives direct insight into practical UI reliability.
-
-Rather than looking at speed and errors separately, we report
-**Throughput
-(TP)**`r tip_i("Speed–accuracy efficiency metric: TP = IDe / MT. Higher TP means users acquire targets faster without sacrificing precision. Prevents misleading 'accuracy by slowing down' interpretations.")`
-as the primary performance metric. TP summarizes how efficiently users
-can acquire targets by combining **movement time** and **effective
-accuracy** into a single value (higher is better). In practice, TP helps
-avoid misleading conclusions like "faster, but much sloppier" or "more
-accurate, but only because users slowed down."
-
-```{r task-layout-fig, echo=FALSE, out.width="100%"}
-#| fig-cap: "Task UI anatomy. Participants completed an ISO 9241-9 Fitts-style pointing task on a central canvas, with Task Control (progress + block) on the left and a System HUD (modality + block errors) on the right. Hand used visible cursor + click; Gaze used a jittering gaze dot + SPACE confirmation."
-#| fig-alt: "Task layout diagram"
-# Copy image to local images/ directory relative to .qmd file
-# Then use path relative to .qmd file (not root.dir) so HTML references work correctly
-qmd_dir <- file.path(getwd(), "docs", "case_study")
-images_dir <- file.path(qmd_dir, "images")
-if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
-src_file <- file.path(getwd(), "docs", "assets", "case_study", "Task_layout.png")
-dst_file <- file.path(images_dir, "Task_layout.png")
-if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
-  file.copy(src_file, dst_file, overwrite = TRUE)
-}
-# Temporarily change working directory so path resolves correctly
-# This works better than changing root.dir for knitr::include_graphics
-old_wd <- getwd()
-old_root <- knitr::opts_knit$get("root.dir")
-setwd(qmd_dir)
-knitr::opts_knit$set(root.dir = NULL)
-knitr::include_graphics("images/Task_layout.png", dpi = 200)
-setwd(old_wd)
-knitr::opts_knit$set(root.dir = old_root)
-```
-
-::: callout-tip
-**TP is a speed–accuracy efficiency score:** It rises when users get
-faster *without* sacrificing precision. Adaptations can "improve
-accuracy" by slowing people down; TP makes that tradeoff explicit.
 :::
 
-::: {.callout-note collapse="true"}
-## Metric cheat sheet (optional)
+<details class="tech-details">
+<summary><strong>Metric cheat sheet (optional)</strong></summary>
 
 **Fitts' Law difficulty (standard form):**
 
@@ -1396,20 +1648,18 @@ $$\mathrm{TP} = \frac{\mathrm{ID}_e}{\mathrm{MT}}$$
 *Units:* bits/s\
 *Variables:* MT = movement time (s)\
 *Interpretation:* Higher TP = better speed–accuracy efficiency
-:::
+
+</details>
 
 **Task:** Fitts' law pointing with varying target distances (A) and
 widths (W).\
 **Design:** 2×2×2 within-subjects factorial (modality × UI mode ×
 pressure)
 
-**Conditions:** - Modality: Hand (mouse) vs. Gaze (simulated) - UI Mode:
-Static vs. Adaptive
-(declutter`r tip_i("Declutter: adaptive UI policy that removes non-essential visual elements (e.g., background decorations, secondary buttons) to reduce visual noise and improve target visibility.")`
-for gaze; width
-inflation`r tip_i("Width inflation: adaptive UI policy that increases target width (width_scale_factor > 1.0) to make targets easier to acquire. Not activated in this dataset.")`
-for hand, but not activated) - Pressure: Low (0) vs. High (1) cognitive
-load
+**Conditions:** 
+- Modality: Hand (mouse) vs. Gaze (simulated)
+- UI Mode: Static vs. Adaptive (declutter for gaze: removes non-essential visual elements; width inflation for hand: increases target width, but not activated in this dataset)
+- Pressure: Low (0) vs. High (1) cognitive load
 
 **Participants:** N = `r if(!is.na(n_hand)) n_hand else "—"` hand (mouse
 users), N = `r if(!is.na(n_gaze)) n_gaze else "—"` gaze (mouse +
@@ -1432,7 +1682,7 @@ LMM`r tip_i("GLMM: Generalized Linear Mixed Model. Used for binary outcomes (lik
 ANOVA`r tip_i("Type III ANOVA: uses sum-to-zero contrasts, appropriate for unbalanced designs. Tests main effects and interactions after accounting for other terms.")`
 with sum-to-zero contrasts.
 
-:::::: callout-note
+::: callout-note
 ## Adaptive System: What Was Evaluable vs Not {#adaptive-system-evaluable}
 
 **Gaze adaptive UI (declutter) was evaluated:** PolicyEngine activated
@@ -1442,14 +1692,15 @@ significant throughput benefit.
 
 **Hand adaptive UI (width inflation) did not activate:** PolicyEngine
 emitted 243 `inflate_width` actions (17 participants), but
-``` width_scale_factor``r tip_i("width_scale_factor: multiplier applied to target width. 1.0 = no change, >1.0 = wider targets. Remained 1.0 throughout, indicating width inflation never activated.") ```
+`width_scale_factor` `r tip_i("width_scale_factor: multiplier applied to target width. 1.0 = no change, >1.0 = wider targets. Remained 1.0 throughout, indicating width inflation never activated.")`
 remained 1.0 throughout. Root cause: UI integration issue—policy actions
 were emitted but not applied to rendered targets. See
 [Appendix](#appendix) for full diagnostic analysis.
+:::
 
 ## Implications for XR Product Teams {#implications}
 
-### For Gaze Interaction: Slip-Prevention Beats Declutter
+### For Gaze Interaction: Slip prevention is the higher-leverage fix (in this dataset)
 
 The dominant gaze failure mode is slips (99.2%), not simple misses.
 Decluttering UI helps, but the bigger opportunity is **intent
@@ -1463,7 +1714,7 @@ Hand width inflation did not activate in this dataset; instrumentation
 and validated logging caught this early. The feature was instrumented
 but not exercised, so its benefit is unconfirmed.
 
-### For Adaptation Policy: Thresholds Must Be Validated
+### For Adaptation Policy: Thresholds need calibration + validation
 
 The concept is sound, but adaptation effects were small because triggers
 and mechanisms need tuning. **Key insight:** Not all "adaptive" changes
@@ -1474,7 +1725,7 @@ be calibrated through iterative testing, not assumed.
 ## Limitations & Lessons {#limitations--lessons}
 
 ::: callout-note
-## Limitations
+### Limitations
 
 -   **Hand adaptive UI not exercised:** Width inflation did not activate
     (width_scale_factor always 1.0), so hand UI-mode effects cannot be
@@ -1487,7 +1738,7 @@ be calibrated through iterative testing, not assumed.
 :::
 
 ::: callout-tip
-## Lessons Learned
+### Lessons Learned
 
 -   **Device standardization matters:** Trackpad vs. mouse differences
     required exclusion of trackpad users from hand modality.
@@ -1505,13 +1756,11 @@ be calibrated through iterative testing, not assumed.
 
 ## Appendix {#appendix}
 
-<details>
-
-<summary><strong>Technical Details & Statistical Analysis</strong>
-(Click to expand)</summary>
+<details class="tech-details">
+<summary><strong>Technical Details & Statistical Analysis</strong></summary>
 
 ::: panel-tabset
-### Statistical details
+### Statistical Models
 
 #### Omnibus Models (2×2×2)
 
@@ -1530,32 +1779,6 @@ intercepts per participant.
 **Key Interpretation Rule:** UI-mode effects reflect declutter in gaze;
 width inflation not exercised in hand, so any hand UI-mode effects are
 treated as noise/non-causal.
-
-#### Gaze proxy / psychophysics {#psychophysics-fig}
-
-```{r psychophysics-fig, echo=FALSE, out.width="100%"}
-#| fig-cap: "Psychophysics-inspired gaze proxy. Raw mouse input is transformed into a simulated gaze cursor using fixation-state Gaussian jitter (low angular velocity), saccadic suppression (freeze during high-velocity movement), and confirmation (dwell or SPACE) with a fixed tolerance ring (+10 px)."
-#| fig-alt: "Psychophysics-inspired gaze proxy diagram"
-# Copy image to local images/ directory relative to .qmd file
-# Then use path relative to .qmd file (not root.dir) so HTML references work correctly
-qmd_dir <- file.path(getwd(), "docs", "case_study")
-images_dir <- file.path(qmd_dir, "images")
-if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
-src_file <- file.path(getwd(), "docs", "assets", "case_study", "psychophysics.png")
-dst_file <- file.path(images_dir, "psychophysics.png")
-if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
-  file.copy(src_file, dst_file, overwrite = TRUE)
-}
-# Temporarily change working directory so path resolves correctly
-# This works better than changing root.dir for knitr::include_graphics
-old_wd <- getwd()
-old_root <- knitr::opts_knit$get("root.dir")
-setwd(qmd_dir)
-knitr::opts_knit$set(root.dir = NULL)
-knitr::include_graphics("images/psychophysics.png", dpi = 200)
-setwd(old_wd)
-knitr::opts_knit$set(root.dir = old_root)
-```
 
 #### Gaze-Only Follow-up
 
@@ -1601,13 +1824,13 @@ if (file.exists("outputs/width_inflation_diagnostics_summary.csv")) {
 }
 ```
 
-### Policy replay diagnostics
+#### Policy Replay Diagnostics
 
-**Data-backed conclusion:** - Width inflation never activated: 0 trials
-with `width_scale_factor != 1.0` - PolicyEngine emitted 243
+**Data-backed conclusion:** Width inflation never activated: 0 trials
+with `width_scale_factor != 1.0`. PolicyEngine emitted 243
 `inflate_width` actions (17 participants), but UI integration did not
-apply them - Root cause: UI integration issue—policy actions were
-emitted but not applied to rendered targets
+apply them. Root cause: UI integration issue—policy actions were
+emitted but not applied to rendered targets.
 
 **Adaptation activation summary:**
 
@@ -1677,7 +1900,74 @@ if (file.exists("outputs/policy_replay_summary.csv")) {
 }
 ```
 
-### Data quality & QC
+### Gaze Proxy
+
+Gaze input uses a physiologically-informed simulation rather than eye
+tracking hardware. This approach allows controlled comparison of hand vs
+gaze interaction patterns while maintaining ecological validity for XR
+selection tasks.
+
+```{r psychophysics-fig, echo=FALSE, out.width="100%"}
+#| fig-cap: "Psychophysics-inspired gaze proxy. Raw mouse input is transformed into a simulated gaze cursor using fixation-state Gaussian jitter (low angular velocity), saccadic suppression (freeze during high-velocity movement), and confirmation (dwell or SPACE) with a fixed tolerance ring (+10 px)."
+#| fig-alt: "Psychophysics-inspired gaze proxy diagram"
+# Copy image to local images/ directory relative to .qmd file
+# Then use path relative to .qmd file (not root.dir) so HTML references work correctly
+qmd_dir <- file.path(getwd(), "docs", "case_study")
+images_dir <- file.path(qmd_dir, "images")
+if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
+src_file <- file.path(getwd(), "docs", "assets", "case_study", "psychophysics.png")
+dst_file <- file.path(images_dir, "psychophysics.png")
+if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
+  file.copy(src_file, dst_file, overwrite = TRUE)
+}
+# Temporarily change working directory so path resolves correctly
+# This works better than changing root.dir for knitr::include_graphics
+old_wd <- getwd()
+old_root <- knitr::opts_knit$get("root.dir")
+setwd(qmd_dir)
+knitr::opts_knit$set(root.dir = NULL)
+knitr::include_graphics("images/psychophysics.png", dpi = 200)
+setwd(old_wd)
+knitr::opts_knit$set(root.dir = old_root)
+```
+
+**Psychophysics model:**
+
+-   **Gaussian jitter** (σ ≈ 1–2° visual angle): Simulates natural eye
+    movement variability. Real eye tracking has inherent noise; Gaussian
+    jitter captures this uncertainty in gaze position estimation.
+-   **Saccadic suppression**: Temporary input masking during rapid eye
+    movements (saccades). Prevents false selections during eye
+    movements, mimicking how real eye trackers suppress input during
+    saccades.
+-   **Latency injection** (50–150ms delay): Approximates real-world eye
+    tracking system delays. Commercial eye trackers have processing
+    latency; injected delay makes simulation more realistic.
+
+**Calibration:**
+
+-   **Pixels-per-degree conversion**: Based on screen dimensions and
+    viewing distance assumptions. Converts screen pixels to visual angle
+    degrees, enabling consistent difficulty across different display
+    sizes.
+
+**Reliability guards (QC gates):**
+
+-   **Zoom level check**: Must be 100% (prevents scaling artifacts that
+    would distort target sizes)
+-   **Fullscreen mode**: Required (ensures consistent viewport and
+    eliminates browser chrome interference)
+-   **Tab visibility**: Hidden duration \<500ms threshold (filters
+    trials where user switched tabs)
+-   **Focus/blur events**: Zero tolerance (ensures window had focus
+    throughout trial)
+-   **RT bounds**: 150–6000ms (filters non-physiological responses: too
+    fast = accidental clicks, too slow = disengagement)
+
+These guards ensure data quality and prevent confounds from display
+state or user disengagement.
+
+### Data Quality & QC
 
 **Before/after counts:**
 
@@ -1731,201 +2021,7 @@ if (file.exists("docs/assets/case_study/qc_exclusions_summary.csv")) {
 }
 ```
 
-### Implementation
-
-**System Overview:**
-
--   **Stack:** React 18 + TypeScript, deployed on Vercel
--   **Experiment Engine:** Block/condition assignment using Williams
-    counterbalancing sequences
--   **Telemetry Schema:** Per-trial logging includes: trial metadata
-    (modality, ui_mode, pressure), performance metrics (RT, correctness,
-    error type), Fitts' parameters (A, W, ID), endpoint coordinates,
-    movement samples (trajectory), display state (zoom, fullscreen, tab
-    visibility), policy state (adaptation triggers, actions)
--   **QC Signals:** Zoom level, fullscreen mode, tab hidden duration,
-    focus/blur events, RT bounds, input device type
--   **Deployment:** Vercel with automated CI/CD
-
-**Architecture:**
-
-```{r architecture-fig, echo=FALSE, out.width="100%"}
-#| fig-cap: "System architecture: Remote XR interaction testbed with client-side task execution, client-side telemetry collection, and adaptive policy engine. All processing occurs in the browser; data is exported via CSV download or optional EmailJS submission."
-#| fig-alt: "System architecture diagram"
-# Copy image to local images/ directory relative to .qmd file
-# Then use path relative to .qmd file (not root.dir) so HTML references work correctly
-qmd_dir <- file.path(getwd(), "docs", "case_study")
-images_dir <- file.path(qmd_dir, "images")
-if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
-src_file <- file.path(getwd(), "docs", "assets", "case_study", "portfolio", "architecture.png")
-dst_file <- file.path(images_dir, "architecture.png")
-
-if (!file.exists(src_file)) {
-  stop("Architecture image not found at: ", src_file)
-}
-
-if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
-  file.copy(src_file, dst_file, overwrite = TRUE)
-}
-
-# Temporarily change working directory so path resolves correctly
-# This works better than changing root.dir for knitr::include_graphics
-old_wd <- getwd()
-old_root <- knitr::opts_knit$get("root.dir")
-setwd(qmd_dir)
-knitr::opts_knit$set(root.dir = NULL)
-knitr::include_graphics("images/architecture.png", dpi = 200)
-setwd(old_wd)
-knitr::opts_knit$set(root.dir = old_root)
-```
-
-**Telemetry Schema:**
-
-```{r telemetry-schema-table, echo=FALSE}
-# Create telemetry schema table
-telemetry_schema <- tibble(
-  Category = c(
-    "Trial Metadata", "Trial Metadata", "Trial Metadata", "Trial Metadata",
-    "Performance Metrics", "Performance Metrics", "Performance Metrics", "Performance Metrics",
-    "Fitts' Parameters", "Fitts' Parameters", "Fitts' Parameters", "Fitts' Parameters",
-    "Endpoint Data", "Endpoint Data", "Endpoint Data", "Endpoint Data",
-    "Movement Samples", "Movement Samples", "Movement Samples", "Movement Samples", "Movement Samples",
-    "Display State", "Display State", "Display State",
-    "Policy State", "Policy State"
-  ),
-  Field = c(
-    "trial_id", "session_id", "participant_id", "taskType",
-    "rt_ms", "correct", "movement_time_ms", "submovement_count",
-    "A", "W", "ID", "target_width_px",
-    "endpoint_x", "endpoint_y", "endpoint_error_px", "target_center_x",
-    "path_length_px", "peak_velocity_px_s", "curvature_index", "sd_along_px", "sd_ortho_px",
-    "screen_width", "screen_height", "device_pixel_ratio",
-    "adaptation_triggered", "width_scale_factor"
-  ),
-  Type = c(
-    "string", "string", "string", "string",
-    "number (ms)", "boolean", "number (ms)", "integer",
-    "number (px)", "number (px)", "number (bits)", "number (px)",
-    "number (px)", "number (px)", "number (px)", "number (px)",
-    "number (px)", "number (px/s)", "number", "number (px)", "number (px)",
-    "number (px)", "number (px)", "number",
-    "boolean", "number"
-  ),
-  Description = c(
-    "Unique trial identifier",
-    "Session identifier",
-    "Participant identifier (anonymized)",
-    "Task type ('point' or 'drag')",
-    "Reaction time (stimulus onset to selection)",
-    "Trial success (endpoint within target)",
-    "Movement time (first to last sample)",
-    "Number of submovements (speed minima)",
-    "Amplitude (distance to target center)",
-    "Target width",
-    "Index of Difficulty (log₂(2A/W))",
-    "Target width in pixels",
-    "Selection endpoint X coordinate",
-    "Selection endpoint Y coordinate",
-    "Euclidean distance from endpoint to target center",
-    "Target center X coordinate",
-    "Total path length traveled",
-    "Peak velocity during movement",
-    "Path curvature (path length / straight-line distance)",
-    "Standard deviation along movement axis",
-    "Standard deviation orthogonal to movement axis",
-    "Screen width reported by browser",
-    "Screen height reported by browser",
-    "Device pixel ratio",
-    "Whether adaptive policy triggered this trial",
-    "Width scale factor applied (1.0 = no change, >1.0 = wider targets)"
-  )
-)
-
-if (has_gt && nrow(telemetry_schema) > 0) {
-  telemetry_schema %>%
-    gt(groupname_col = "Category") %>%
-    cols_label(
-      Field = "Field",
-      Type = "Type",
-      Description = "Description"
-    ) %>%
-    tab_header(
-      title = "Telemetry Schema: Key Fields",
-      subtitle = "Per-trial logging includes trial metadata, performance metrics, Fitts' parameters, endpoint data, movement samples, display state, and policy state"
-    ) %>%
-    opt_table_font(font = "system-ui, -apple-system") %>%
-    opt_table_lines(extent = "none") %>%
-    tab_options(
-      table.border.top.style = "solid",
-      table.border.top.width = px(2),
-      table.border.top.color = "#6d28d9",
-      row_group.border.top.width = px(1),
-      row_group.border.top.color = "#d3d3d3"
-    ) %>%
-    cols_width(
-      Field ~ px(150),
-      Type ~ px(120),
-      Description ~ px(300)
-    )
-} else {
-  # Fallback to simple markdown table
-  cat("**Telemetry Schema: Key Fields**\n\n")
-  cat("| Category | Field | Type | Description |\n")
-  cat("|----------|-------|------|-------------|\n")
-  for (i in 1:nrow(telemetry_schema)) {
-    cat(sprintf("| %s | `%s` | %s | %s |\n",
-                telemetry_schema$Category[i],
-                telemetry_schema$Field[i],
-                telemetry_schema$Type[i],
-                telemetry_schema$Description[i]))
-  }
-}
-```
-
-### Gaze proxy (psychophysics + calibration + reliability guards)
-
-Gaze input uses a physiologically-informed simulation rather than eye
-tracking hardware. This approach allows controlled comparison of hand vs
-gaze interaction patterns while maintaining ecological validity for XR
-selection tasks.
-
-**Psychophysics model:**
-
--   **Gaussian jitter** (σ ≈ 1–2° visual angle): Simulates natural eye
-    movement variability. Real eye tracking has inherent noise; Gaussian
-    jitter captures this uncertainty in gaze position estimation.
--   **Saccadic suppression**: Temporary input masking during rapid eye
-    movements (saccades). Prevents false selections during eye
-    movements, mimicking how real eye trackers suppress input during
-    saccades.
--   **Latency injection** (50–150ms delay): Approximates real-world eye
-    tracking system delays. Commercial eye trackers have processing
-    latency; injected delay makes simulation more realistic.
-
-**Calibration:**
-
--   **Pixels-per-degree conversion**: Based on screen dimensions and
-    viewing distance assumptions. Converts screen pixels to visual angle
-    degrees, enabling consistent difficulty across different display
-    sizes.
-
-**Reliability guards (QC gates):**
-
--   **Zoom level check**: Must be 100% (prevents scaling artifacts that
-    would distort target sizes)
--   **Fullscreen mode**: Required (ensures consistent viewport and
-    eliminates browser chrome interference)
--   **Tab visibility**: Hidden duration \<500ms threshold (filters
-    trials where user switched tabs)
--   **Focus/blur events**: Zero tolerance (ensures window had focus
-    throughout trial)
--   **RT bounds**: 150–6000ms (filters non-physiological responses: too
-    fast = accidental clicks, too slow = disengagement)
-
-These guards ensure data quality and prevent confounds from display
-state or user disengagement.
-
-### Planned: LBA modeling
+### Planned: LBA Modeling
 
 **What LBA adds:**
 
@@ -1951,4 +2047,3 @@ and decision thresholds.
 :::
 
 </details>
-::::::
