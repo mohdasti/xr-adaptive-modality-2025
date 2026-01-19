@@ -73,6 +73,7 @@ venv.bak/
 *.Rproj
 *_cache/
 /cache/
+Report_cache/
 *.utf8.md
 *.knit.md
 .httr-oauth

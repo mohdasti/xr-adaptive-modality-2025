@@ -12,7 +12,7 @@ Usage:
     python scripts/generate_participant_links.py \
       --base-url "https://your-project.vercel.app" \
       --participants 25 \
-      --output participant_links.csv
+      --output data/participant_links.csv
     
     # For localhost testing (only works on your machine):
     python scripts/generate_participant_links.py \
@@ -62,7 +62,7 @@ def main():
     parser.add_argument(
         '--output',
         type=str,
-        default='participant_links.csv',
+        default='data/participant_links.csv',
         help='Output CSV file (default: participant_links.csv)'
     )
     

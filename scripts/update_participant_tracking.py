@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Update participant_tracking.csv with data from raw CSV files.
+Update data/participant_tracking.csv with data from raw CSV files.
 
 This script:
 1. Scans data/raw/ for *_merged.csv files
 2. Extracts participant info and block completion data
-3. Updates participant_tracking.csv while preserving existing notes
+3. Updates data/participant_tracking.csv while preserving existing notes
 
 Usage:
     python scripts/update_participant_tracking.py
@@ -19,7 +19,7 @@ import sys
 
 def main():
     # Paths
-    tracking_file = 'participant_tracking.csv'
+    tracking_file = 'data/participant_tracking.csv'
     raw_dir = 'data/raw'
     
     # Read existing tracking file to preserve notes

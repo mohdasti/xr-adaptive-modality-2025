@@ -10,7 +10,7 @@ This script creates a CSV file that tracks:
 - Data file names
 
 Usage:
-    python scripts/generate_participant_tracking.py --participants 32 --output participant_tracking.csv
+    python scripts/generate_participant_tracking.py --participants 32 --output data/participant_tracking.csv
 """
 
 import argparse
@@ -104,7 +104,7 @@ def main():
     parser.add_argument(
         '--output',
         type=str,
-        default='participant_tracking.csv',
+        default='data/participant_tracking.csv',
         help='Output CSV file (default: participant_tracking.csv)'
     )
     
