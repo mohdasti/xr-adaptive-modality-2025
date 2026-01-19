@@ -404,7 +404,7 @@ This script:
 
 **Automatic Email Submission (EmailJS):**
 - All data automatically emailed on debrief page: trial CSV, block CSV, and debrief responses
-- EmailJS template configured with conditional sections (see `EMAILJS_TEMPLATE.txt`)
+- EmailJS template configured with conditional sections (see `docs/ops/EMAILJS_TEMPLATE.txt`)
 - **50KB Size Limit Handling**: If data exceeds EmailJS free tier limit, CSV files are automatically downloaded instead
 - Participant always has access to downloaded CSV files for manual backup
 
