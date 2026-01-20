@@ -345,33 +345,20 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         # Shape: (n_modalities, n_ui_modes) to allow interaction
         
         # Compute minimum RT per modality×ui_mode for constraint
-        min_rt_by_condition = {}
-        for mod_idx, mod in enumerate(modalities):
-            for ui_idx, ui in enumerate(ui_modes):
-                mask = (mod_idx == df['mod_idx'].values) & (ui_mode_idx == df['ui_mode_idx'].values)
-                if mask.any():
-                    min_rt = df.loc[mask, 'rt_ms'].min() / 1000.0  # Convert to seconds
-                    min_rt_by_condition[(mod_idx, ui_idx)] = min_rt * 0.95  # 95% of min RT as upper bound
-        
-        # Use global minimum if per-condition not available
-        global_min_rt = (df['rt_ms'].min() / 1000.0) * 0.95
+        # t0 must be < min(rt) to ensure t = rt - t0 > 0
+        min_rt_global = (df['rt_ms'].min() / 1000.0) * 0.95  # 95% of global min RT (in seconds)
         
         t0_mu = pm.Normal('t0_mu', mu=0.0, sigma=1.0, shape=(n_m, n_u))  # Less informative prior
         t0_sd = pm.HalfNormal('t0_sd', sigma=0.5)  # More flexible
         t0_offset_raw = pm.Normal('t0_offset_raw', mu=0, sigma=1, shape=(n_p, n_m, n_u))  # Standard normal
         
-        # Non-centered: t0 = softplus(mu + offset_raw * sd), constrained to be < min(rt)
-        # Use sigmoid transformation to bound t0: t0 = min_rt * sigmoid(raw_value)
+        # Non-centered: t0 = sigmoid(raw) * min_rt_bound
+        # This ensures t0 is always < min(rt), removing the need for pt.maximum(t, eps) clamp
         t0_raw = t0_mu[mod_idx, ui_mode_idx] + t0_offset_raw[pid_idx, mod_idx, ui_mode_idx] * t0_sd
         
-        # Apply constraint: t0 must be < min(rt) for each condition
-        # Use sigmoid to map to [0, min_rt)
-        t0 = pm.Deterministic('t0', 
-            pt.sigmoid(t0_raw) * pt.as_tensor([
-                min_rt_by_condition.get((m, u), global_min_rt) 
-                for m, u in zip(mod_idx, ui_mode_idx)
-            ])
-        )
+        # Apply constraint: t0 must be < min(rt) using sigmoid transformation
+        # sigmoid maps to [0, 1), multiply by min_rt to get [0, min_rt)
+        t0 = pm.Deterministic('t0', pt.sigmoid(t0_raw) * min_rt_global)
         
         # 2. Start Point Variability (A)
         # Upper bound of start point distribution.
