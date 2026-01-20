@@ -57,31 +57,41 @@ def pdf_lba_single(t, A, b, v, s):
     """
     Probability Density Function (PDF) for a single LBA accumulator.
     
+    Uses the correct Brown & Heathcote (2008) closed-form formula:
+    f(t) = (1/A) * [-v*Phi(z1) + s*phi(z1) + v*Phi(z2) - s*phi(z2)]
+    where z1 = (b-A-t*v)/(t*s), z2 = (b-t*v)/(t*s)
+    
     t: time (rt - t0)
     A: max start point
     b: decision threshold
     v: drift rate
     s: drift rate variability
     """
-    # Use standard normal distribution
     normal = pm.Normal.dist(mu=0, sigma=1)
     
-    # Transformation for numerical stability
-    # pdf(t) = (1/A) * [phi((b-A-t*v)/(t*s)) - phi((b-t*v)/(t*s))]
-    
+    # Compute z-scores
     denom = pt.maximum(t * s, 1e-10)  # Avoid division by zero
-    zs1 = (b - A - t * v) / denom
-    zs2 = (b - t * v) / denom
+    z1 = (b - A - t * v) / denom
+    z2 = (b - t * v) / denom
     
-    # Use log_prob for numerical stability
-    log_prob1 = pm.logp(normal, zs1)
-    log_prob2 = pm.logp(normal, zs2)
+    # Compute Phi (CDF) and phi (PDF) in log-space for stability
+    logcdf1 = pm.logcdf(normal, z1)
+    logcdf2 = pm.logcdf(normal, z2)
+    logpdf1 = pm.logp(normal, z1)
+    logpdf2 = pm.logp(normal, z2)
     
-    # Convert to probabilities and compute difference
-    dens = (1.0 / A) * (pm.math.exp(log_prob1) - pm.math.exp(log_prob2))
+    # Convert to linear space
+    Phi1 = pm.math.exp(logcdf1)
+    Phi2 = pm.math.exp(logcdf2)
+    phi1 = pm.math.exp(logpdf1)
+    phi2 = pm.math.exp(logpdf2)
     
-    # Clip to avoid zeros
-    return pt.maximum(dens, 1e-10)
+    # Brown & Heathcote (2008) closed-form PDF
+    # f(t) = (1/A) * [-v*Phi(z1) + s*phi(z1) + v*Phi(z2) - s*phi(z2)]
+    pdf_val = (1.0 / A) * (-v * Phi1 + s * phi1 + v * Phi2 - s * phi2)
+    
+    # Ensure non-negative (should be naturally, but protect against numerical issues)
+    return pt.maximum(pdf_val, 1e-12)
 
 def cdf_lba_single(t, A, b, v, s):
     """
@@ -117,35 +127,68 @@ def logp_lba_race(rt, response, A, b, v_c, v_e, s, t0):
     """
     Log-Likelihood for the LBA Race Model (Correct vs Error accumulators).
     
+    Computed entirely in log-space for numerical stability.
+    
     rt: observed reaction times
     response: observed responses (1 = correct, 0 = error)
     A, b, v_c, v_e, s, t0: LBA parameters
+    
+    Note: t0 should be constrained to be < min(rt) to avoid t <= 0 issues.
     """
     # Effective reaction time (time spent accumulating)
+    # t0 is constrained in the model to be < min(rt), so t should be positive
     t = rt - t0
     
-    # Ensure t is positive
-    t = pt.maximum(t, 1e-5)
+    # Compute log-PDFs and log-CDFs for both accumulators
+    normal = pm.Normal.dist(mu=0, sigma=1)
     
-    # PDF and CDF for Correct Accumulator
-    pdf_c = pdf_lba_single(t, A, b, v_c, s)
-    cdf_c = cdf_lba_single(t, A, b, v_c, s)
+    # Helper function to compute log-PDF and log-CDF for an accumulator
+    def compute_log_pdf_cdf(t_acc, v_acc):
+        denom = pt.maximum(t_acc * s, 1e-10)
+        z1 = (b - A - t_acc * v_acc) / denom
+        z2 = (b - t_acc * v_acc) / denom
+        
+        logcdf1 = pm.logcdf(normal, z1)
+        logcdf2 = pm.logcdf(normal, z2)
+        logpdf1 = pm.logp(normal, z1)
+        logpdf2 = pm.logp(normal, z2)
+        
+        Phi1 = pm.math.exp(logcdf1)
+        Phi2 = pm.math.exp(logcdf2)
+        phi1 = pm.math.exp(logpdf1)
+        phi2 = pm.math.exp(logpdf2)
+        
+        # Brown & Heathcote PDF in log-space
+        pdf_val = (1.0 / A) * (-v_acc * Phi1 + s * phi1 + v_acc * Phi2 - s * phi2)
+        logpdf = pt.log(pt.maximum(pdf_val, 1e-12))
+        
+        # CDF (already computed components)
+        cdf_val = 1.0 + ((b - A - t_acc * v_acc) / A) * Phi1 - ((b - t_acc * v_acc) / A) * Phi2 + ((t_acc * s) / A) * (phi1 - phi2)
+        cdf_val = pt.clip(cdf_val, 1e-10, 1.0 - 1e-10)  # Clip away from boundaries
+        logcdf = pt.log(cdf_val)
+        
+        # log(1 - CDF) = logsf using log1mexp for stability
+        logsf = pm.math.log1mexp(-logcdf)  # More stable than log(1 - exp(logcdf))
+        
+        return logpdf, logsf
     
-    # PDF and CDF for Error Accumulator
-    pdf_e = pdf_lba_single(t, A, b, v_e, s)
-    cdf_e = cdf_lba_single(t, A, b, v_e, s)
+    # Compute for correct accumulator
+    logpdf_c, logsf_c = compute_log_pdf_cdf(t, v_c)
     
-    # Likelihood of Correct Response: PDF(c) * (1 - CDF(e))
-    # Likelihood of Error Response:   PDF(e) * (1 - CDF(c))
+    # Compute for error accumulator  
+    logpdf_e, logsf_e = compute_log_pdf_cdf(t, v_e)
     
-    prob_correct = pdf_c * (1 - cdf_e)
-    prob_error = pdf_e * (1 - cdf_c)
+    # Race model likelihood in log-space:
+    # P(correct) = PDF(c) * (1 - CDF(e)) -> logpdf_c + logsf_e
+    # P(error) = PDF(e) * (1 - CDF(c)) -> logpdf_e + logsf_c
+    logprob_correct = logpdf_c + logsf_e
+    logprob_error = logpdf_e + logsf_c
     
-    # Select probability based on observed response
-    # response is 1 (correct) or 0 (error)
-    likelihood = response * prob_correct + (1 - response) * prob_error
+    # Select based on response (element-wise selection)
+    # response is 1 (correct) or 0 (error) - vector of same length as rt
+    loglikelihood = response * logprob_correct + (1 - response) * logprob_error
     
-    return pt.log(pt.maximum(likelihood, 1e-10))
+    return loglikelihood
 
 # -------------------------------------------------------------------------
 # Data Processing
@@ -165,11 +208,21 @@ def load_and_prep_data(input_path: Path):
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     
     # Column name mapping (handle different naming conventions)
-    # Map participant_id -> pid, movement_time_ms -> rt_ms, error -> correct
+    # Prefer verification_time_ms for verification phase, fallback to movement_time_ms
     if 'participant_id' in df.columns and 'pid' not in df.columns:
         df['pid'] = df['participant_id']
-    if 'movement_time_ms' in df.columns and 'rt_ms' not in df.columns:
-        df['rt_ms'] = df['movement_time_ms']
+    
+    # RT column: prefer verification_time_ms (verification phase), then rt_ms, then movement_time_ms
+    if 'rt_ms' not in df.columns:
+        if 'verification_time_ms' in df.columns:
+            df['rt_ms'] = df['verification_time_ms']
+            print("Using verification_time_ms for RT (verification phase)")
+        elif 'movement_time_ms' in df.columns:
+            df['rt_ms'] = df['movement_time_ms']
+            print("Using movement_time_ms for RT (movement phase - may not be appropriate for verification)")
+        else:
+            raise ValueError("No RT column found (need rt_ms, verification_time_ms, or movement_time_ms)")
+    
     if 'error' in df.columns and 'correct' not in df.columns:
         # error is inverted: FALSE = correct, TRUE = error
         df['correct'] = ~df['error'].astype(bool)
@@ -195,12 +248,29 @@ def load_and_prep_data(input_path: Path):
     
     # Filter valid trials
     # LBA is sensitive to extremely fast outliers, clip strict
+    # Also check for error trials - if no RTs for errors, warn user
+    initial_n = len(df)
     df = df[
+        (df['rt_ms'].notna()) &
         (df['rt_ms'] >= 200) & 
         (df['rt_ms'] <= 5000) & 
         (df['correct'].notna()) &
         (df['ID'].notna())
     ].copy()
+    
+    # Check if we have error trials with RTs
+    error_trials = df[df['correct'] == False]
+    if len(error_trials) == 0:
+        print("⚠ WARNING: No error trials found in data after filtering!")
+        print("   The race model requires both correct and error RTs.")
+        print("   Consider using a single-accumulator model or ensuring error RTs are recorded.")
+    elif error_trials['rt_ms'].isna().all():
+        print("⚠ WARNING: Error trials exist but have no RT values!")
+        print("   This will cause issues with the race model.")
+    else:
+        print(f"✓ Found {len(error_trials)} error trials with RTs")
+    
+    print(f"Filtered from {initial_n} to {len(df)} valid trials")
     
     # Normalize Covariates for better convergence
     # ID: centered and scaled (Z-scored)
@@ -271,17 +341,37 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         # Varies by Modality and UI Mode (Hand vs Gaze have different physics, UI modes may affect verification)
         # Hierarchical: Group mean + Participant deviation
         # Using NON-CENTERED parameterization for better geometry
+        # CRITICAL: Constrain t0 to be < min(rt) to avoid t <= 0 issues
         # Shape: (n_modalities, n_ui_modes) to allow interaction
+        
+        # Compute minimum RT per modality×ui_mode for constraint
+        min_rt_by_condition = {}
+        for mod_idx, mod in enumerate(modalities):
+            for ui_idx, ui in enumerate(ui_modes):
+                mask = (mod_idx == df['mod_idx'].values) & (ui_mode_idx == df['ui_mode_idx'].values)
+                if mask.any():
+                    min_rt = df.loc[mask, 'rt_ms'].min() / 1000.0  # Convert to seconds
+                    min_rt_by_condition[(mod_idx, ui_idx)] = min_rt * 0.95  # 95% of min RT as upper bound
+        
+        # Use global minimum if per-condition not available
+        global_min_rt = (df['rt_ms'].min() / 1000.0) * 0.95
+        
         t0_mu = pm.Normal('t0_mu', mu=0.0, sigma=1.0, shape=(n_m, n_u))  # Less informative prior
         t0_sd = pm.HalfNormal('t0_sd', sigma=0.5)  # More flexible
         t0_offset_raw = pm.Normal('t0_offset_raw', mu=0, sigma=1, shape=(n_p, n_m, n_u))  # Standard normal
         
-        # Non-centered: t0 = softplus(mu + offset_raw * sd)
-        # This improves geometry for hierarchical models
-        t0 = pm.Deterministic('t0', pt.softplus(
-            t0_mu[mod_idx, ui_mode_idx] + 
-            t0_offset_raw[pid_idx, mod_idx, ui_mode_idx] * t0_sd
-        ))
+        # Non-centered: t0 = softplus(mu + offset_raw * sd), constrained to be < min(rt)
+        # Use sigmoid transformation to bound t0: t0 = min_rt * sigmoid(raw_value)
+        t0_raw = t0_mu[mod_idx, ui_mode_idx] + t0_offset_raw[pid_idx, mod_idx, ui_mode_idx] * t0_sd
+        
+        # Apply constraint: t0 must be < min(rt) for each condition
+        # Use sigmoid to map to [0, min_rt)
+        t0 = pm.Deterministic('t0', 
+            pt.sigmoid(t0_raw) * pt.as_tensor([
+                min_rt_by_condition.get((m, u), global_min_rt) 
+                for m, u in zip(mod_idx, ui_mode_idx)
+            ])
+        )
         
         # 2. Start Point Variability (A)
         # Upper bound of start point distribution.
@@ -397,10 +487,10 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         print(f"  - Chains: {n_chains} (optimized for {available_cores}-core VM)")
         print(f"  - Cores used: {n_cores}")
         print(f"  - Draws: 1000 per chain")
-        print(f"  - Tune (warmup): 2000 per chain")
-        print(f"  - Total iterations: {n_chains * 3000} ({3000} per chain)")
+        print(f"  - Tune (warmup): 1500 per chain (reduced with fixed geometry)")
+        print(f"  - Total iterations: {n_chains * 2500} ({2500} per chain)")
         print(f"  - Target accept rate: 0.90 (balanced for speed/convergence)")
-        print(f"  - Max tree depth: 15")
+        print(f"  - Max tree depth: 12 (reduced with smooth geometry)")
         if available_cores >= 32:
             print(f"  - Estimated time: 20-40 minutes (high-performance VM)")
         else:
@@ -425,13 +515,13 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
         
         trace = pm.sample(
             draws=1000,
-            tune=2000,  # Warmup iterations
+            tune=1500,  # Reduced from 2000 - should be sufficient with fixed geometry
             target_accept=0.90,  # Balanced: faster than 0.95, still good convergence
             chains=n_chains,  # Optimized for VM size
             cores=n_cores,  # Use all available cores for parallelization
             return_inferencedata=True,
             progressbar=True,  # Use PyMC's built-in progress bar
-            max_treedepth=15,  # Increased from default 10 to handle difficult geometry
+            max_treedepth=12,  # Reduced from 15 - should be sufficient with smooth geometry
             compute_convergence_checks=False,  # Disable during sampling for speed
             random_seed=42  # For reproducibility
         )
