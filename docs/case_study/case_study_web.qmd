@@ -2254,13 +2254,29 @@ if (has_gt) {
 #| fig-cap: "MCMC trace plots for key LBA parameters. Left panels show trace plots (sampling chains), right panels show posterior distributions. All chains show good mixing and convergence."
 #| fig-alt: "LBA trace plots showing MCMC convergence"
 # Copy trace plot to local images directory
-qmd_dir <- file.path(getwd(), "docs", "case_study")
+# Use project_root from setup chunk
+qmd_dir <- file.path(project_root, "docs", "case_study")
 images_dir <- file.path(qmd_dir, "images")
 if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
-src_file <- file.path(getwd(), "outputs", "LBA", "lba_trace_plot.png")
-dst_file <- file.path(images_dir, "lba_trace_plot.png")
 
-if (file.exists(src_file)) {
+# Try multiple possible source paths
+src_paths <- c(
+  file.path(project_root, "outputs", "LBA", "lba_trace_plot.png"),
+  file.path(getwd(), "outputs", "LBA", "lba_trace_plot.png"),
+  "../outputs/LBA/lba_trace_plot.png",
+  "../../outputs/LBA/lba_trace_plot.png"
+)
+
+src_file <- NULL
+for (path in src_paths) {
+  if (file.exists(path)) {
+    src_file <- path
+    break
+  }
+}
+
+if (!is.null(src_file)) {
+  dst_file <- file.path(images_dir, "lba_trace_plot.png")
   if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
     file.copy(src_file, dst_file, overwrite = TRUE)
   }
@@ -2273,7 +2289,10 @@ if (file.exists(src_file)) {
   setwd(old_wd)
   knitr::opts_knit$set(root.dir = old_root)
 } else {
-  cat("Trace plot not found at:", src_file, "\n")
+  cat("⚠ Trace plot not found. Tried paths:\n")
+  for (path in src_paths) {
+    cat("  -", path, "\n")
+  }
 }
 ```
 
