@@ -2193,10 +2193,16 @@ if (has_gt) {
 
 ```{r lba-convergence}
 # Display convergence summary
-lba_summary_display <- lba_summary %>%
-  filter(!grepl("\\[", `Unnamed: 0`)) %>%  # Remove array indices for display
+# Read CSV and handle column names properly
+lba_summary_raw <- read_csv("outputs/LBA/lba_parameters_summary.csv", show_col_types = FALSE)
+
+# Get the first column name (might be "Unnamed: 0" or something else)
+first_col <- names(lba_summary_raw)[1]
+
+lba_summary_display <- lba_summary_raw %>%
+  filter(!grepl("\\[", .data[[first_col]])) %>%  # Remove array indices for display
   select(
-    Parameter = `Unnamed: 0`,
+    Parameter = all_of(first_col),
     Mean = mean,
     `95% CI Lower` = hdi_3,
     `95% CI Upper` = hdi_97,
