@@ -123,6 +123,35 @@ def cdf_lba_single(t, A, b, v, s):
     
     return pt.clip(cdf_val, 0.0, 1.0)
 
+def logp_lba_single(rt, A, b, v, s, t0):
+    """
+    Log-Likelihood for single LBA accumulator (when no error trials).
+    
+    Computed entirely in log-space for numerical stability.
+    """
+    t = rt - t0
+    normal = pm.Normal.dist(mu=0, sigma=1)
+    
+    denom = pt.maximum(t * s, 1e-10)
+    z1 = (b - A - t * v) / denom
+    z2 = (b - t * v) / denom
+    
+    logcdf1 = pm.logcdf(normal, z1)
+    logcdf2 = pm.logcdf(normal, z2)
+    logpdf1 = pm.logp(normal, z1)
+    logpdf2 = pm.logp(normal, z2)
+    
+    Phi1 = pm.math.exp(logcdf1)
+    Phi2 = pm.math.exp(logcdf2)
+    phi1 = pm.math.exp(logpdf1)
+    phi2 = pm.math.exp(logpdf2)
+    
+    # Brown & Heathcote PDF
+    pdf_val = (1.0 / A) * (-v * Phi1 + s * phi1 + v * Phi2 - s * phi2)
+    logpdf = pt.log(pt.maximum(pdf_val, 1e-12))
+    
+    return logpdf
+
 def logp_lba_race(rt, response, A, b, v_c, v_e, s, t0):
     """
     Log-Likelihood for the LBA Race Model (Correct vs Error accumulators).
@@ -168,7 +197,8 @@ def logp_lba_race(rt, response, A, b, v_c, v_e, s, t0):
         logcdf = pt.log(cdf_val)
         
         # log(1 - CDF) = logsf using log1mexp for stability
-        logsf = pm.math.log1mexp(-logcdf)  # More stable than log(1 - exp(logcdf))
+        # Handle edge case where logcdf is very negative (CDF near 0)
+        logsf = pm.math.log1mexp(pt.minimum(-logcdf, 10.0))  # Cap to avoid overflow
         
         return logpdf, logsf
     
@@ -260,15 +290,20 @@ def load_and_prep_data(input_path: Path):
     
     # Check if we have error trials with RTs
     error_trials = df[df['correct'] == False]
-    if len(error_trials) == 0:
-        print("⚠ WARNING: No error trials found in data after filtering!")
-        print("   The race model requires both correct and error RTs.")
-        print("   Consider using a single-accumulator model or ensuring error RTs are recorded.")
-    elif error_trials['rt_ms'].isna().all():
-        print("⚠ WARNING: Error trials exist but have no RT values!")
-        print("   This will cause issues with the race model.")
+    has_error_trials = len(error_trials) > 0 and error_trials['rt_ms'].notna().any()
+    
+    if not has_error_trials:
+        if len(error_trials) == 0:
+            print("⚠ WARNING: No error trials found in data after filtering!")
+            print("   Using single-accumulator model (correct responses only).")
+        else:
+            print("⚠ WARNING: Error trials exist but have no RT values!")
+            print("   Using single-accumulator model (correct responses only).")
     else:
-        print(f"✓ Found {len(error_trials)} error trials with RTs")
+        print(f"✓ Found {len(error_trials)} error trials with RTs - using race model")
+    
+    # Store flag for model building
+    df['has_error_trials'] = has_error_trials
     
     print(f"Filtered from {initial_n} to {len(df)} valid trials")
     
@@ -329,6 +364,9 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
     resp_obs = df['correct'].astype(int).values
     id_obs = df['ID_norm'].values
     pressure_obs = df['pressure_norm'].values
+    
+    # Check if we have error trials - if not, use single accumulator model
+    has_error_trials = df['has_error_trials'].iloc[0] if 'has_error_trials' in df.columns else (resp_obs == 0).any()
     
     print("Building PyMC Model...")
     print("  Using non-centered parameterization for hierarchical effects (improves geometry)")
@@ -411,33 +449,51 @@ def fit_hierarchical_lba(df, participants, modalities, ui_modes):
             )
         )
         
-        v_e = pm.Deterministic('v_e', pt.softplus(ve_mu))  # Flat error drift
-        
         # 5. Drift Variability (s)
         # Fixed to 1.0 for scaling constraint in LBA
         s = 1.0
         
         # --- Likelihood ---
         
-        # For PyMC 5.x CustomDist, stack observed data into 2D array
-        # Shape: (n_trials, 2) where [:, 0] = rt, [:, 1] = response
-        rt_array = np.asarray(rt_obs, dtype=np.float64)
-        resp_array = np.asarray(resp_obs, dtype=np.int32)
-        observed_stack = np.column_stack([rt_array, resp_array])
-        
-        # Custom Density - vectorized over trials
-        # PyMC 5.x: observed value is passed as first argument to logp
-        # The lambda extracts rt and response from the stacked array
-        obs = pm.CustomDist(
-            'obs',
-            A, b, v_c, v_e, s, t0,
-            logp=lambda value, A, b, v_c, v_e, s, t0: logp_lba_race(
-                value[:, 0],  # rt (first column)
-                value[:, 1],  # response (second column)
-                A, b, v_c, v_e, s, t0
-            ),
-            observed=observed_stack
-        )
+        # Check if we have error trials - if not, use single accumulator model
+        if not has_error_trials:
+            print("  Using single-accumulator model (correct responses only)")
+            # Single accumulator: just model correct RTs
+            rt_array = np.asarray(rt_obs, dtype=np.float64)
+            obs = pm.CustomDist(
+                'obs',
+                A, b, v_c, s, t0,
+                logp=lambda value, A, b, v_c, s, t0: logp_lba_single(
+                    value,  # rt (1D array)
+                    A, b, v_c, s, t0
+                ),
+                observed=rt_array
+            )
+            # v_e not used in single accumulator, but keep for compatibility
+            v_e = pm.Deterministic('v_e', pt.softplus(ve_mu))
+        else:
+            print("  Using race model (correct and error responses)")
+            v_e = pm.Deterministic('v_e', pt.softplus(ve_mu))  # Flat error drift
+            
+            # For PyMC 5.x CustomDist, stack observed data into 2D array
+            # Shape: (n_trials, 2) where [:, 0] = rt, [:, 1] = response
+            rt_array = np.asarray(rt_obs, dtype=np.float64)
+            resp_array = np.asarray(resp_obs, dtype=np.int32)
+            observed_stack = np.column_stack([rt_array, resp_array])
+            
+            # Custom Density - vectorized over trials
+            # PyMC 5.x: observed value is passed as first argument to logp
+            # The lambda extracts rt and response from the stacked array
+            obs = pm.CustomDist(
+                'obs',
+                A, b, v_c, v_e, s, t0,
+                logp=lambda value, A, b, v_c, v_e, s, t0: logp_lba_race(
+                    value[:, 0],  # rt (first column)
+                    value[:, 1],  # response (second column)
+                    A, b, v_c, v_e, s, t0
+                ),
+                observed=observed_stack
+            )
         
         # --- Sampling ---
         # Detect available CPU cores for optimal parallelization
