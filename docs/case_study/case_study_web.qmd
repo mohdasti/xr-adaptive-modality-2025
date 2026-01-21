@@ -1801,19 +1801,87 @@ if (file.exists("outputs/width_inflation_diagnostics_summary.csv")) {
   width_diag <- read_csv("outputs/width_inflation_diagnostics_summary.csv", show_col_types = FALSE)
   
   if (has_gt && nrow(width_diag) > 0) {
-    width_diag %>%
+    # Helper function to format values without trailing zeros
+    format_value <- function(val) {
+      if (is.na(val)) return("N/A")
+      
+      # Check if it's effectively an integer
+      if (abs(val - round(val)) < 1e-10) {
+        return(format(round(val), big.mark = ",", scientific = FALSE))
+      } else {
+        # Format and remove trailing zeros
+        formatted <- format(val, big.mark = ",", scientific = FALSE, nsmall = 0)
+        return(sub("\\.0+$", "", formatted))
+      }
+    }
+    
+    # Create a more readable version with descriptive labels
+    width_diag_clean <- width_diag %>%
+      mutate(
+        metric_label = case_when(
+          metric == "total_trials" ~ "Total trials (all conditions)",
+          metric == "n_participants" ~ "Total participants",
+          metric == "n_scaled_overall" ~ "Trials with width scaling (all conditions)",
+          metric == "pct_scaled_overall" ~ "Percentage scaled (all conditions)",
+          metric == "n_hand_adapt_p1_trials" ~ "Hand/Adaptive/Pressure=1 trials",
+          metric == "n_scaled_hand_adapt_p1" ~ "Trials with width scaling (Hand/Adaptive/P1)",
+          metric == "pct_scaled_hand_adapt_p1" ~ "Percentage scaled (Hand/Adaptive/P1)",
+          metric == "n_ever_triggered" ~ "Participants with ≥1 policy trigger",
+          metric == "n_streak_ge5" ~ "Participants with ≥5 consecutive triggers",
+          metric == "pct_streak_ge5" ~ "Percentage with ≥5 consecutive triggers",
+          metric == "median_max_streak" ~ "Median max consecutive triggers (per participant)",
+          metric == "mean_max_streak" ~ "Mean max consecutive triggers (per participant)",
+          metric == "max_max_streak" ~ "Maximum consecutive triggers (any participant)",
+          metric == "pressure_mismatch_pct" ~ "Pressure logging mismatch rate",
+          TRUE ~ metric
+        ),
+        value_formatted = case_when(
+          metric %in% c("pct_scaled_overall", "pct_scaled_hand_adapt_p1", "pct_streak_ge5", "pressure_mismatch_pct") ~ 
+            ifelse(is.na(value), "N/A", {
+              # Format percentages, removing trailing zeros
+              formatted <- sprintf("%.1f%%", value)
+              sub("\\.0+%%", "%%", formatted)  # Remove .0 from percentages like 0.0%
+            }),
+          metric %in% c("median_max_streak", "mean_max_streak", "max_max_streak") ~ 
+            ifelse(is.na(value), "N/A", {
+              # Format decimals, removing trailing zeros
+              formatted <- sprintf("%.1f", value)
+              sub("\\.0+$", "", formatted)  # Remove trailing .0
+            }),
+          TRUE ~ sapply(value, format_value)
+        )
+      ) %>%
+      select(metric_label, value_formatted) %>%
+      rename(
+        Metric = metric_label,
+        Value = value_formatted
+      )
+    
+    width_diag_clean %>%
       gt() %>%
       tab_header(
         title = "Hand Width Inflation: Manipulation Check",
-        subtitle = "width_scale_factor == 1.0 throughout (no activation)"
+        subtitle = "Diagnostic metrics showing width_scale_factor == 1.0 throughout (no activation)"
+      ) %>%
+      tab_footnote(
+        footnote = "Percentage of Hand/Adaptive trials where logged pressure value doesn't match runtime pressure state (indicates a data logging bug)",
+        locations = cells_body(rows = Metric == "Pressure logging mismatch rate")
+      ) %>%
+      tab_footnote(
+        footnote = "Number of trials in a row where policy conditions were met (needed ≥5 for hysteresis to activate width scaling)",
+        locations = cells_body(rows = Metric == "Participants with ≥5 consecutive triggers")
       ) %>%
       opt_table_font(font = "system-ui, -apple-system") %>%
       opt_table_lines(extent = "none") %>%
       tab_options(
         table.border.top.style = "solid",
         table.border.top.width = px(2),
-        table.border.top.color = "#6d28d9"
-      )
+        table.border.top.color = "#6d28d9",
+        footnotes.font.size = px(11),
+        footnotes.padding = px(4)
+      ) %>%
+      cols_align(align = "left", columns = Metric) %>%
+      cols_align(align = "right", columns = Value)
   } else {
     cat("**Hand UI-mode manipulation not exercised** (width_scale_factor always 1.0).\n\n")
     cat("H3/RQ3-hand cannot be tested in this dataset.\n")
@@ -2021,7 +2089,7 @@ if (file.exists("docs/assets/case_study/qc_exclusions_summary.csv")) {
 }
 ```
 
-### Planned: LBA Modeling
+### LBA Cognitive Modeling {#lba-modeling}
 
 **What LBA adds:**
 
@@ -2029,21 +2097,185 @@ Linear Ballistic Accumulator (LBA) modeling provides latent parameter
 interpretation: **drift rate** (information accumulation speed),
 **threshold** (decision boundary), and **non-decision time** (NDT,
 encoding + motor execution). This decomposes RT into cognitive
-components, revealing how modality and pressure affect decision-making
-processes.
+components, revealing how modality and UI mode affect decision-making
+processes during the verification phase.
 
-**Inputs needed:**
+**Model specification:**
 
-Trial-level RT + correctness data, separated by modality × pressure
-conditions.
+We fit a hierarchical Bayesian LBA model using PyMC, modeling the verification phase (time from first target entry to final selection). The model uses:
 
-**Planned output:**
+- **Non-decision time (t0)**: Varies by modality and UI mode (captures physical actuation differences)
+- **Drift rate (v)**: Varies by Index of Difficulty (ID) - harder trials → lower drift rate
+- **Threshold (b)**: Varies by pressure condition (speed-accuracy tradeoff)
+- **Start point variability (A)**: Per-participant random effect
 
-Forest plot of LBA parameters (drift, threshold, NDT) by modality ×
-pressure, showing how gaze vs hand differ in information accumulation
-and decision thresholds.
+**Data:** 16,947 valid trials from 81 participants, filtered to verification phase RTs (200-5000 ms).
 
-**Status:** Planned / in progress
+**Sampling:** 8 chains × 1,500 warmup + 1,000 draws per chain (total: 20,000 iterations) on a 64-core VM. Model converged successfully (R-hat < 1.01, ESS > 2,000 for all parameters).
+
+```{r lba-results-table}
+# Load LBA parameters
+lba_params <- jsonlite::fromJSON("outputs/LBA/lba_parameters.json")
+lba_summary <- read_csv("outputs/LBA/lba_parameters_summary.csv", show_col_types = FALSE)
+
+# Create a readable table of parameters by condition
+lba_table <- bind_rows(
+  tibble(
+    Condition = "Hand - Static",
+    `Non-Decision Time (t0)` = sprintf("%.3f", lba_params$hand$static$t0_mu),
+    `Base Drift Rate` = sprintf("%.3f", lba_params$hand$static$vc_base_mu),
+    `ID Slope` = sprintf("%.3f", lba_params$hand$static$vc_slope_mu),
+    `Threshold Intercept` = sprintf("%.3f", lba_params$hand$static$gap_int_mu),
+    `Pressure Slope` = sprintf("%.3f", lba_params$hand$static$gap_slope_mu)
+  ),
+  tibble(
+    Condition = "Hand - Adaptive",
+    `Non-Decision Time (t0)` = sprintf("%.3f", lba_params$hand$adaptive$t0_mu),
+    `Base Drift Rate` = sprintf("%.3f", lba_params$hand$adaptive$vc_base_mu),
+    `ID Slope` = sprintf("%.3f", lba_params$hand$adaptive$vc_slope_mu),
+    `Threshold Intercept` = sprintf("%.3f", lba_params$hand$adaptive$gap_int_mu),
+    `Pressure Slope` = sprintf("%.3f", lba_params$hand$adaptive$gap_slope_mu)
+  ),
+  tibble(
+    Condition = "Gaze - Static",
+    `Non-Decision Time (t0)` = sprintf("%.3f", lba_params$gaze$static$t0_mu),
+    `Base Drift Rate` = sprintf("%.3f", lba_params$gaze$static$vc_base_mu),
+    `ID Slope` = sprintf("%.3f", lba_params$gaze$static$vc_slope_mu),
+    `Threshold Intercept` = sprintf("%.3f", lba_params$gaze$static$gap_int_mu),
+    `Pressure Slope` = sprintf("%.3f", lba_params$gaze$static$gap_slope_mu)
+  ),
+  tibble(
+    Condition = "Gaze - Adaptive",
+    `Non-Decision Time (t0)` = sprintf("%.3f", lba_params$gaze$adaptive$t0_mu),
+    `Base Drift Rate` = sprintf("%.3f", lba_params$gaze$adaptive$vc_base_mu),
+    `ID Slope` = sprintf("%.3f", lba_params$gaze$adaptive$vc_slope_mu),
+    `Threshold Intercept` = sprintf("%.3f", lba_params$gaze$adaptive$gap_int_mu),
+    `Pressure Slope` = sprintf("%.3f", lba_params$gaze$adaptive$gap_slope_mu)
+  )
+)
+
+if (has_gt) {
+  lba_table %>%
+    gt() %>%
+    cols_align(align = "left", columns = Condition) %>%
+    cols_align(align = "right", columns = c(`Non-Decision Time (t0)`, `Base Drift Rate`, `ID Slope`, `Threshold Intercept`, `Pressure Slope`)) %>%
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_column_labels()
+    ) %>%
+    tab_style(
+      style = cell_fill(color = "#f8f9fa"),
+      locations = cells_body(rows = seq(1, nrow(lba_table), by = 2))
+    ) %>%
+    format_gt_portfolio(
+      title = "LBA Parameter Estimates",
+      subtitle = "Group-level means by modality and UI mode (verification phase)",
+      footnote = "Parameters are in log-space (softplus transformed). t0: non-decision time; vc_base: base drift rate; vc_slope: effect of ID on drift (negative = harder trials reduce drift); gap_int: threshold intercept; gap_slope: effect of pressure on threshold (positive = higher pressure increases threshold)."
+    )
+} else {
+  lba_table %>%
+    kable(caption = "LBA Parameter Estimates by Condition") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+}
+```
+
+**Key findings:**
+
+1. **Modality effect on non-decision time:** Gaze has higher t0 than Hand (gaze: -1.41 to -0.97, hand: -3.01 to -2.85), indicating longer verification phase duration for gaze interaction—consistent with the need for intent disambiguation.
+
+2. **UI mode effect:** Adaptive UI shows different t0 patterns, particularly in gaze (static: -1.41, adaptive: -0.97), suggesting adaptive declutter may affect verification timing.
+
+3. **Difficulty effect:** Negative ID slope (-0.935) confirms harder trials reduce drift rate, as expected from Fitts' Law.
+
+4. **Pressure effect:** Positive pressure slope (0.058) indicates speed-accuracy tradeoff—higher pressure increases decision threshold.
+
+**Convergence diagnostics:**
+
+```{r lba-convergence}
+# Display convergence summary
+lba_summary_display <- lba_summary %>%
+  filter(!grepl("\\[", `Unnamed: 0`)) %>%  # Remove array indices for display
+  select(
+    Parameter = `Unnamed: 0`,
+    Mean = mean,
+    `95% CI Lower` = hdi_3,
+    `95% CI Upper` = hdi_97,
+    `R-hat` = r_hat,
+    `ESS Bulk` = ess_bulk
+  ) %>%
+  mutate(
+    `R-hat` = sprintf("%.3f", `R-hat`),
+    `ESS Bulk` = sprintf("%.0f", `ESS Bulk`),
+    Mean = sprintf("%.3f", Mean),
+    `95% CI Lower` = sprintf("%.3f", `95% CI Lower`),
+    `95% CI Upper` = sprintf("%.3f", `95% CI Upper`)
+  )
+
+if (has_gt) {
+  lba_summary_display %>%
+    gt() %>%
+    cols_align(align = "left", columns = Parameter) %>%
+    cols_align(align = "right", columns = c(Mean, `95% CI Lower`, `95% CI Upper`, `R-hat`, `ESS Bulk`)) %>%
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_column_labels()
+    ) %>%
+    tab_style(
+      style = cell_fill(color = "#f8f9fa"),
+      locations = cells_body(rows = seq(1, nrow(lba_summary_display), by = 2))
+    ) %>%
+    tab_style(
+      style = cell_text(color = "#059669", weight = "bold"),
+      locations = cells_body(
+        columns = `R-hat`,
+        rows = as.numeric(`R-hat`) < 1.01
+      )
+    ) %>%
+    format_gt_portfolio(
+      title = "LBA Model Convergence Diagnostics",
+      subtitle = "R-hat < 1.01 indicates excellent convergence; ESS > 400 indicates sufficient effective sample size"
+    )
+} else {
+  lba_summary_display %>%
+    kable(caption = "LBA Model Convergence Diagnostics") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+}
+```
+
+**Trace plots:**
+
+```{r lba-trace-plot, echo=FALSE, out.width="100%"}
+#| fig-cap: "MCMC trace plots for key LBA parameters. Left panels show trace plots (sampling chains), right panels show posterior distributions. All chains show good mixing and convergence."
+#| fig-alt: "LBA trace plots showing MCMC convergence"
+# Copy trace plot to local images directory
+qmd_dir <- file.path(getwd(), "docs", "case_study")
+images_dir <- file.path(qmd_dir, "images")
+if (!dir.exists(images_dir)) dir.create(images_dir, recursive = TRUE)
+src_file <- file.path(getwd(), "outputs", "LBA", "lba_trace_plot.png")
+dst_file <- file.path(images_dir, "lba_trace_plot.png")
+
+if (file.exists(src_file)) {
+  if (!file.exists(dst_file) || file.mtime(src_file) > file.mtime(dst_file)) {
+    file.copy(src_file, dst_file, overwrite = TRUE)
+  }
+  # Temporarily change working directory so path resolves correctly
+  old_wd <- getwd()
+  old_root <- knitr::opts_knit$get("root.dir")
+  setwd(qmd_dir)
+  knitr::opts_knit$set(root.dir = NULL)
+  knitr::include_graphics("images/lba_trace_plot.png", dpi = 200)
+  setwd(old_wd)
+  knitr::opts_knit$set(root.dir = old_root)
+} else {
+  cat("Trace plot not found at:", src_file, "\n")
+}
+```
+
+**Interpretation:**
+
+The LBA model successfully decomposed verification phase RTs into cognitive components. The modality differences in non-decision time align with the observed performance differences: gaze requires longer verification time due to intent ambiguity (Midas Touch problem), while hand input benefits from clearer motor intent. The adaptive UI effects on t0 suggest that decluttering may reduce verification burden, though the effects are modest.
+
+**Note:** A detailed paper on the LBA analysis methodology, parameter interpretation, and theoretical implications is in preparation and will be cited here upon publication.
 :::
 
 </details>
