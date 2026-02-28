@@ -100,3 +100,6 @@ playwright/.cache/
 logs/
 *.log
 
+# LBA full trace (too large for GitHub; use lba_trace_plot.png for diagnostics)
+outputs/LBA/lba_trace.nc
+

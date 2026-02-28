@@ -159,6 +159,11 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{orcidlink}
+\usepackage{float}
+
+% Force figures and tables to appear exactly where placed (no floating)
+\floatplacement{figure}{H}
+\floatplacement{table}{H}
 
 % Customize title page formatting with proper author block
 \makeatletter
@@ -250,7 +255,7 @@
 \title{Adaptive Modality Systems in Extended Reality: Optimizing
 Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching}
 \author{Mohammad Dastgheib \and Fatemeh Pourmahdian}
-\date{2025-12-08}
+\date{2026-02-27}
 \begin{document}
 \maketitle
 \begin{abstract}
@@ -274,7 +279,7 @@ the NASA-TLX.
 \end{abstract}
 
 
-\setstretch{1.5}
+\setstretch{1}
 \vspace{-0.5em}
 
 \textbf{Keywords:} Extended Reality, Virtual Reality, Adaptive
@@ -425,24 +430,28 @@ Mechanisms}\label{adaptive-intervention-mechanisms}
 We implemented two modality-specific adaptive interventions. \textbf{For
 gaze interaction}, a declutter mechanism draws on visual attention
 guiding techniques in XR, related to diminished reality (DR) (Herling \&
-Broll, 2010). When the user operates in gaze mode, the interface fades
-out non-target objects, mitigating peripheral distraction. This aligns
-with foveated rendering principles, where systems leverage the human
-visual system's foveal focus to prioritize content at the gaze point
-(Patney et al., 2016). By decluttering the periphery, we hypothesize
-that gaze-based targeting becomes faster and less cognitively demanding.
+Broll, 2010). When the policy engine detects performance degradation in
+gaze mode (error burst or RT threshold exceeded), non-critical HUD
+elements are hidden, mitigating peripheral distraction. This aligns with
+foveated rendering principles, where systems leverage the human visual
+system's foveal focus to prioritize content (Patney et al., 2016). By
+decluttering when performance degrades, we hypothesize that gaze-based
+targeting becomes faster and less cognitively demanding.
 
 \textbf{For hand-based interactions}, our adaptive strategy is width
-inflation---dynamically expanding the effective size of targets when the
-cursor approaches. This concept is inspired by ``expanding targets''
-research (McGuffin \& Balakrishnan, 2005) and the ``Bubble Cursor''
-(Grossman \& Balakrishnan, 2005), which demonstrate that even slight,
-transient enlargement significantly improves pointing performance. Our
-implementation uses a hysteresis threshold to prevent flicker, acting as
-a ``safety net'' that compensates for motor tremor under fatigue. The
-expansion occurs only when the system detects the user is aiming at the
-target (cursor nearing the target center), to prevent overlapping
-targets in the dense circle layout.
+inflation---dynamically expanding the effective size of targets when
+performance degrades, triggered by the policy engine based on error rate
+and reaction time thresholds. This concept is inspired by ``expanding
+targets'' research (McGuffin \& Balakrishnan, 2005) and the ``Bubble
+Cursor'' (Grossman \& Balakrishnan, 2005), which demonstrate that even
+slight enlargement significantly improves pointing performance. Our
+implementation uses a hysteresis gate (requiring N consecutive trials
+meeting trigger conditions) to prevent flicker, acting as a ``safety
+net'' that compensates for motor tremor under fatigue. In the current
+dataset, width scaling did not activate due to policy configuration
+requiring pressure-enabled blocks combined with participants not meeting
+performance degradation thresholds. Width scaling functionality is
+implemented and logged for analysis in future data collection.
 
 \section{Research Objectives}\label{research-objectives}
 
@@ -666,35 +675,37 @@ Implementations}\label{input-modality-implementations}
 The system implemented two distinct input modalities, each with static
 and adaptive modes. \textbf{For hand-based trials}, participants
 controlled a cursor with their mouse to click the target. In static
-mode, this was standard 1:1 mouse pointing. In adaptive mode, the
-effective clickable area of the target was expanded (width scale
-\textgreater{} 1.0) when the cursor approached the target---a ``Gravity
-Well'' effect that was invisible to the user but increased error
-tolerance for the final click. This implementation draws directly from
-the ``expanding targets'' technique validated by McGuffin and
-Balakrishnan (McGuffin \& Balakrishnan, 2005). Expansion occurred only
-when the system detected the user was aiming at the target (cursor
-nearing the target center), to prevent overlapping targets in the dense
-circle layout.
+mode, this was standard 1:1 mouse pointing. In adaptive mode, the system
+was designed to expand the effective clickable area of targets (width
+scale \textgreater{} 1.0) through a rule-based policy engine that
+triggers when performance degrades (error burst ≥ 2 consecutive errors
+or reaction time exceeds the 75th percentile threshold), drawing on the
+``expanding targets'' technique (McGuffin \& Balakrishnan, 2005).
+However, in the current dataset, width scaling did not activate due to
+policy configuration constraints (\texttt{pressure\_only:\ true}
+requiring pressure-enabled blocks) and performance thresholds not being
+met. Width scaling functionality is implemented and will be analyzed in
+future data collection runs.
 
 \textbf{For gaze-based trials}, participants controlled the cursor via
 the simulated gaze signal described above. In static mode, selection was
 triggered by a \textbf{Dwell} mechanism (typically 350-500ms) or a
 confirmation key (Spacebar) if dwell was disabled, following the
 standard ``dwell-to-select'' paradigm (Majaranta et al., 2006; Ware \&
-Mikaelian, 1987). In adaptive mode, adaptation focused on
-\textbf{Goal-Aware Snapping} or \textbf{Dwell Time Adjustment} to
-counteract the injected jitter during the verification phase. For gaze
-declutter, the trigger was immediate at trial start in adaptive
-blocks---the moment a new target appeared and the user began aiming, all
-non-targets dimmed.
+Mikaelian, 1987). In adaptive mode, the system implements a
+\textbf{declutter mechanism} that hides non-critical HUD elements when
+the policy engine detects performance degradation (error burst or RT
+threshold exceeded) in gaze blocks. The declutter effect persists until
+performance improves, using hysteresis to prevent rapid oscillation.
+Advanced gaze adaptations such as goal-aware snapping and dynamic dwell
+time adjustment are planned for future implementations.
 
-Both adaptive features (declutter and expansion) were driven by a simple
-rule-based policy with slight hysteresis to prevent flicker (e.g., once
-expanded, a target stayed expanded for the remainder of the trial). The
-application logged detailed event traces (gaze enter/exit target, click
-times, etc.), enabling us to later verify that the adaptive mechanisms
-functioned as intended.
+Both adaptive features (declutter and width expansion) are driven by a
+rule-based policy engine with hysteresis gates (requiring N consecutive
+trials meeting trigger conditions) to prevent flicker. The application
+logged detailed event traces (policy state changes, trial performance,
+adaptation triggers) to enable verification of adaptive mechanism
+activation and effectiveness.
 
 \subsection{Task and Stimuli}\label{task-and-stimuli}
 
@@ -709,6 +720,22 @@ yield the desired ID values). In half of the blocks, a ``Time Pressure''
 condition was enforced via a visible countdown timer; failure to select
 within the timeout (6s) resulted in a forced error, intended to induce
 stress and mental workload, simulating a high-demand scenario.
+Figure~\ref{fig-task-layout} shows the task interface.
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.85\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/Task_layout.png}
+
+}
+
+\caption{\label{fig-task-layout}Task UI overview. ISO 9241-9
+multi-directional tapping task: participants select highlighted targets
+on a central canvas. A side HUD shows modality and block-level
+feedback.}
+
+\end{figure}%
 
 \subsection{Experimental Design}\label{experimental-design}
 
@@ -757,6 +784,24 @@ participants had normal or corrected-to-normal vision and no known motor
 impairments. The study was approved by the Institutional Review Board
 (IRB) and all participants provided informed consent.
 
+\subsubsection{Participant Exclusions}\label{participant-exclusions}
+
+Seven participants (P002, P003, P007, P008, P015, P039, P040) were
+excluded from the main 2×2×2 factorial analysis due to a data logging
+error that incorrectly recorded all trials as \texttt{pressure\ =\ 1}
+regardless of block condition. This error was identified during a
+comprehensive data audit on December 8, 2025, and was caused by passing
+the pressure value (always 1.0) instead of the pressure condition
+boolean (\texttt{pressureEnabled}) to the logging function. The bug was
+fixed in commit \texttt{04758db}, and seven replacement participants
+(P049-P055) will be collected to maintain the planned target sample size
+of \(N=48\) participants with complete data across all experimental
+conditions. The affected participants' data were retained for
+exploratory analyses but excluded from the primary factorial analysis to
+ensure all factors had complete data across all levels. All analyses in
+the current interim dataset use \(N=23\) participants with complete
+data.
+
 \subsection{Procedure}\label{procedure}
 
 Each participant completed a short training session to get familiar with
@@ -791,21 +836,27 @@ jitter) and the high accuracy of the task, standard Drift Diffusion
 Models (DDM) were ill-suited due to the scarcity of error trials
 (\textasciitilde3\%). Previous methodological reviews indicate that
 diffusion models require a sufficient error density to reliably estimate
-boundary separation parameters (Lerche et al., 2017). We instead adopted
-a \textbf{Hybrid Analysis} framework to disentangle ``motor''
-performance from ``decision'' caution: (1) \textbf{Macro-Performance
-(Fitts' Law)}---we modeled the overall throughput (bits/s) and the
-regression slope (\(b\)) to quantify the global cost of the gaze
-simulation lag, following standard ISO 9241-9 throughput calculations;
-(2) \textbf{Path Quality (Control Theory)}---we calculated submovement
-counts (velocity peaks) and target re-entries to quantify the ``cost of
-control'' (how often the user had to correct their trajectory due to the
-simulated lag and ``saccadic blindness''), drawing on the Optimized
-Submovement Model (Meyer et al., 1988); (3) \textbf{Decision
-Verification (LBA)}---we used the Linear Ballistic Accumulator (LBA)
-model (Brown \& Heathcote, 2008) to analyze the selection phase, which
-is robust to low error rates and allows accurate estimation of the
-``Caution Threshold'' users adopted to overcome fixation jitter.
+boundary separation parameters (Lerche et al., 2017). We adopted a
+\textbf{Hybrid Analysis} framework to disentangle ``motor'' performance
+from ``decision'' caution: (1) \textbf{Macro-Performance (Fitts'
+Law)}---we modeled the overall throughput (bits/s) and the regression
+slope (\(b\)) to quantify the global cost of the gaze simulation lag,
+following standard ISO 9241-9 throughput calculations; (2) \textbf{Path
+Quality (Control Theory)}---we calculated pre-computed submovement
+counts (velocity peaks detected in real-time) and target re-entries to
+quantify the ``cost of control'' (how often the user had to correct
+their trajectory due to simulated lag and ``saccadic blindness''),
+drawing on the Optimized Submovement Model (Meyer et al., 1988). Full
+trajectory-based velocity profile decomposition and primary
+vs.~corrective movement identification will be conducted once the sample
+size reaches N=48; (3) \textbf{Decision Verification (LBA)}---we used
+the Linear Ballistic Accumulator (LBA) model (Brown \& Heathcote, 2008)
+to analyze the verification phase (time from first target entry to final
+selection). LBA is robust to low error rates and allows estimation of
+non-decision time (NDT), drift rate, and decision threshold. We fit a
+hierarchical Bayesian LBA model in PyMC with modality- and
+UI-mode-varying NDT, ID-varying drift rate, and pressure-varying
+threshold.
 
 Data were analyzed using repeated-measures ANOVAs and linear mixed
 models. We tested for main effects of Modality, Adaptation, and
@@ -829,44 +880,342 @@ maintaining progress tracking.
 
 Data collection occurred entirely client-side to ensure participant
 privacy. The application implemented a structured CSV logging system
-that captured comprehensive trial-level data in real-time (23+ columns
-per trial), including participant metadata (ID, demographics), trial
-parameters (block, trial, modality, UI mode, pressure, ID, A, W),
-performance metrics (RT, accuracy, error type, hover duration), system
-metadata (browser type, DPR, timestamp), and workload measures (NASA-TLX
-subscales). At the completion of each session, participants exported
-their data via browser-based CSV download. Data export occurred entirely
-locally---no data was transmitted to servers during the experimental
-session, ensuring participant privacy. The application was built as a
-single-page application (SPA) with client-side routing, with the gaze
-simulation algorithm, adaptive policy engine, and data logging system
-all operating in real-time within the browser. Event-driven architecture
-(via an internal event bus) coordinated trial timing, data logging, and
-UI updates, ensuring precise temporal alignment between user actions and
-recorded data. All code is open-source and available for
-reproducibility.
+that captured comprehensive trial-level data in real-time (77 columns
+per trial), including participant metadata (ID, demographics, session
+number), trial parameters (block, trial, modality, UI mode, pressure,
+ID, A, W), performance metrics (RT, accuracy, error type, hover
+duration, submovement count, verification time), adaptive system metrics
+(width scaling, alignment gate metrics, adaptation triggers), system
+metadata (browser type, DPR, display calibration, timestamp), and
+workload measures (NASA-TLX subscales). At the completion of each
+session, participants exported their data via browser-based CSV
+download. Data export occurred entirely locally---no data was
+transmitted to servers during the experimental session, ensuring
+participant privacy. The application was built as a single-page
+application (SPA) with client-side routing, with the gaze simulation
+algorithm, adaptive policy engine, and data logging system all operating
+in real-time within the browser. Event-driven architecture (via an
+internal event bus) coordinated trial timing, data logging, and UI
+updates, ensuring precise temporal alignment between user actions and
+recorded data.
+
+\textbf{Data Quality Assurance:} A comprehensive audit was conducted on
+December 8, 2025, to verify data collection integrity. The audit
+confirmed that modality and UI mode conditions were logged correctly (0
+mismatches across all participants). However, a bug was identified in
+the pressure condition logging that affected the first 7 participants
+(see Participant Exclusions above). The bug was fixed immediately, and
+all subsequent data collection used the corrected logging code. All code
+is open-source and available for reproducibility.
 
 \section{Results}\label{results}
 
-\emph{{[}Results section to be completed after data collection and
-analysis. This section will include:}
+We report interim results from the current dataset (N=23 participants
+with complete factorial data; broader analyses include up to N=81 where
+applicable). Full confirmatory analyses with mixed-effects models will
+be reported upon completion of the target sample (N=48).
 
-\begin{itemize}
-\tightlist
-\item
-  \emph{Descriptive statistics for all dependent variables across
-  conditions}
-\item
-  \emph{Mixed-effects model results for RQ1 (Performance)}
-\item
-  \emph{NASA-TLX analysis for RQ2 (Workload)}
-\item
-  \emph{Analysis of adaptive intervention effects for RQ3 (Adaptation)}
-\item
-  \emph{Figures showing throughput by condition and ID level}
-\item
-  \emph{Tables summarizing statistical tests{]}}
-\end{itemize}
+\subsection{Primary Performance Outcomes
+(RQ1)}\label{primary-performance-outcomes-rq1}
+
+Throughput (TP), error rate, and movement time (MT) were computed
+following ISO 9241-9. Table~\ref{tbl-performance} reports descriptive
+statistics by modality, collapsed over UI mode and pressure.
+
+\begin{longtable}[]{@{}lcc@{}}
+\caption{Primary performance metrics by modality. Values are mean
+{[}95\% CI{]}. Hand produced higher throughput and lower error rate than
+gaze.}\label{tbl-performance}\tabularnewline
+\toprule\noalign{}
+Metric & Hand & Gaze \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Metric & Hand & Gaze \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Throughput (bits/s) & 5.15 {[}5.06, 5.25{]} & 4.70 {[}4.56, 4.83{]} \\
+Error Rate (\%) & 1.75 {[}1.23, 2.26{]} & 18.65 {[}17.26, 20.04{]} \\
+Movement Time (s) & 1.09 {[}1.07, 1.11{]} & 1.19 {[}1.16, 1.23{]} \\
+\end{longtable}
+
+Hand input yielded higher throughput (5.15 vs.~4.70 bits/s) and
+substantially lower error rate (1.75\% vs.~18.65\%) than gaze input.
+Movement time was shorter for hand (1.09 s) than gaze (1.19 s). The
+modality effect on throughput and error rate is large and robust at this
+sample size. Figure~\ref{fig-throughput} and Figure~\ref{fig-error-rate}
+illustrate these differences.
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.7\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/throughput.png}
+
+}
+
+\caption{\label{fig-throughput}Throughput (bits/s) by modality. Hand
+produced higher throughput than gaze. Error bars show 95\% CI.}
+
+\end{figure}%
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.7\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/error_rate.png}
+
+}
+
+\caption{\label{fig-error-rate}Error rate (\%) by modality. Gaze showed
+substantially higher error rate than hand. Error bars show 95\% CI.}
+
+\end{figure}%
+
+\subsection{Error Profile: Midas Touch
+Confirmation}\label{error-profile-midas-touch-confirmation}
+
+Error types differed sharply between modalities
+(Table~\ref{tbl-error-types}). For \textbf{gaze}, 99.2\% of errors were
+\textbf{slips} (accidental activations) and 0.8\% were timeouts. For
+\textbf{hand}, 95.7\% were \textbf{misses} (target not acquired) and
+4.3\% were timeouts. This asymmetry provides empirical confirmation of
+the Midas Touch problem: gaze interaction fails primarily due to intent
+ambiguity (looking to see vs.~looking to select), whereas hand
+interaction fails due to spatial targeting errors.
+
+\begin{longtable}[]{@{}lcc@{}}
+\caption{Distribution of error types by modality. Gaze errors are
+predominantly slips; hand errors are predominantly
+misses.}\label{tbl-error-types}\tabularnewline
+\toprule\noalign{}
+Error Type & Hand & Gaze \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Error Type & Hand & Gaze \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Slip (accidental activation) & 0\% & 99.2\% \\
+Miss (target not acquired) & 95.7\% & 0\% \\
+Timeout & 4.3\% & 0.8\% \\
+\end{longtable}
+
+Figure~\ref{fig-error-types} shows the composition of errors by
+modality, illustrating the stark contrast between gaze (slips) and hand
+(misses).
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.75\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/error_type_composition.png}
+
+}
+
+\caption{\label{fig-error-types}Error type composition by modality. Gaze
+errors are predominantly slips (accidental activations); hand errors are
+predominantly misses.}
+
+\end{figure}%
+
+\subsection{Gaze Declutter Effectiveness
+(RQ3)}\label{gaze-declutter-effectiveness-rq3}
+
+The gaze adaptive manipulation (declutter) was the only adaptation that
+executed in this dataset. Gaze error rate was modestly lower in adaptive
+(18.2\%) than static (19.1\%) mode. The declutter mechanism reduced
+timeouts (1.18\% → 0.42\%) but did not materially reduce slips (98.8\% →
+99.6\%), suggesting that decluttering mitigates distraction-driven
+hesitation but does not address the core intent disambiguation problem.
+At N=23, this effect is directional; confirmatory tests will be reported
+at N=48.
+
+\subsection{Subjective Workload (RQ2)}\label{subjective-workload-rq2}
+
+NASA-TLX scores (0--100) were higher for gaze than hand across all
+subscales (Table~\ref{tbl-tlx}). Overall workload (unweighted mean of
+six subscales) was 40.4 {[}37.0, 43.8{]} for hand and 47.0 {[}43.9,
+50.2{]} for gaze. For the RQ2-specified subscales, \textbf{Physical
+Demand} was 34.3 {[}30.8, 37.8{]} (hand) vs.~41.9 {[}38.4, 45.4{]}
+(gaze), and \textbf{Frustration} was 32.2 {[}28.5, 35.9{]} (hand)
+vs.~43.2 {[}39.5, 46.9{]} (gaze). Gaze interaction imposed higher
+perceived physical demand and frustration, consistent with the Midas
+Touch burden and the need for sustained dwell/verification.
+
+\begin{longtable}[]{@{}lcc@{}}
+\caption{NASA-TLX subscale means {[}95\% CI{]} by modality. Higher =
+more workload.}\label{tbl-tlx}\tabularnewline
+\toprule\noalign{}
+NASA-TLX Subscale & Hand & Gaze \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+NASA-TLX Subscale & Hand & Gaze \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Mental Demand & 34.9 {[}31.5, 38.4{]} & 45.7 {[}42.4, 49.1{]} \\
+Physical Demand & 34.3 {[}30.8, 37.8{]} & 41.9 {[}38.4, 45.4{]} \\
+Temporal Demand & 40.3 {[}36.9, 43.6{]} & 47.1 {[}44.0, 50.1{]} \\
+Performance & 55.6 {[}50.4, 60.9{]} & 53.3 {[}49.3, 57.3{]} \\
+Effort & 39.8 {[}36.1, 43.5{]} & 48.6 {[}45.2, 51.9{]} \\
+Frustration & 32.2 {[}28.5, 35.9{]} & 43.2 {[}39.5, 46.9{]} \\
+\textbf{Overall} & \textbf{40.4 {[}37.0, 43.8{]}} & \textbf{47.0
+{[}43.9, 50.2{]}} \\
+\end{longtable}
+
+Figure~\ref{fig-tlx} shows overall workload by modality.
+Figure~\ref{fig-tlx-stacked} shows the subscale composition.
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.7\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/tlx_overall.png}
+
+}
+
+\caption{\label{fig-tlx}NASA-TLX overall workload (0--100) by modality.
+Gaze imposed higher subjective workload than hand. Error bars show 95\%
+CI.}
+
+\end{figure}%
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.75\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/tlx_stacked.png}
+
+}
+
+\caption{\label{fig-tlx-stacked}NASA-TLX subscale composition by
+modality. Stacked bars show contribution of each subscale (Mental,
+Physical, Temporal, Performance, Effort, Frustration).}
+
+\end{figure}%
+
+\subsection{LBA Cognitive Modeling}\label{lba-cognitive-modeling}
+
+The LBA model decomposes verification-phase reaction time into latent
+cognitive components: \textbf{non-decision time} (NDT, encoding + motor
+execution), \textbf{drift rate} (information accumulation speed), and
+\textbf{decision threshold} (caution). We fit a hierarchical Bayesian
+LBA model in PyMC, with NDT varying by modality and UI mode, drift rate
+varying by Index of Difficulty (ID), and threshold varying by pressure
+condition. The model used verification-phase RTs (200--5000 ms) from
+valid trials. MCMC sampling used multiple chains with R-hat \textless{}
+1.01 and ESS \textgreater{} 2,000 for all parameters, indicating
+convergence.
+
+\subsubsection{Parameter Estimates}\label{parameter-estimates}
+
+Table~\ref{tbl-lba-params} reports group-level LBA parameter estimates
+by modality and UI mode. Non-decision time (t0) is the primary parameter
+that varies across conditions; drift and threshold parameters are shared
+across conditions with modality- and pressure-specific effects captured
+in the hierarchical structure.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1333}}
+  >{\centering\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1333}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1600}}
+  >{\centering\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1333}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2133}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2267}}@{}}
+\caption{LBA parameter estimates by modality and UI mode. Parameters are
+in log-space (softplus transformed). t0: non-decision time; ID slope:
+effect of difficulty on drift (negative = harder trials reduce drift);
+Pressure slope: effect of time pressure on
+threshold.}\label{tbl-lba-params}\tabularnewline
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Condition
+\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
+t0 (NDT)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Drift Base
+\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
+ID Slope
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Threshold Int.
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Pressure Slope
+\end{minipage} \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Condition
+\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
+t0 (NDT)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Drift Base
+\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
+ID Slope
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Threshold Int.
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Pressure Slope
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Hand -- Static & −2.85 & 5.03 & −0.93 & 4.69 & 0.06 \\
+Hand -- Adaptive & −3.01 & 5.03 & −0.93 & 4.69 & 0.06 \\
+Gaze -- Static & −1.41 & 5.03 & −0.93 & 4.69 & 0.06 \\
+Gaze -- Adaptive & −0.97 & 5.03 & −0.93 & 4.69 & 0.06 \\
+\end{longtable}
+
+\subsubsection{Interpretation}\label{interpretation}
+
+\textbf{Modality effect on NDT:} Gaze conditions show higher t0 values
+(less negative: −1.41 to −0.97) than hand conditions (−3.01 to −2.85),
+indicating longer verification-phase duration for gaze interaction. This
+aligns with the Midas Touch problem: gaze requires additional time for
+intent disambiguation before selection.
+
+\textbf{UI mode effect:} Adaptive UI shows different t0 patterns,
+particularly for gaze (static: −1.41, adaptive: −0.97). The higher t0 in
+gaze-adaptive suggests that declutter may alter verification timing,
+though the direction of the effect warrants further investigation with
+the full sample.
+
+\textbf{Difficulty and pressure:} The negative ID slope (−0.93) confirms
+that harder trials reduce drift rate, consistent with Fitts's Law. The
+positive pressure slope (0.06) indicates a speed--accuracy tradeoff:
+higher time pressure increases the decision threshold.
+
+\subsubsection{Convergence Diagnostics}\label{convergence-diagnostics}
+
+Figure~\ref{fig-lba-trace} shows MCMC trace plots for key parameters.
+The drift-rate slope (vc\_slope\_mu) and threshold slope
+(gap\_slope\_mu) exhibit unimodal posteriors and well-mixed chains. The
+t0\_mu parameter shows multiple modes across the four condition cells,
+reflecting the hierarchical structure; R-hat remained at 1.0 for all
+parameters, and ESS exceeded 2,000.
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.9\linewidth,height=\textheight,keepaspectratio]{../../outputs/LBA/lba_trace_plot.png}
+
+}
+
+\caption{\label{fig-lba-trace}MCMC trace plots for key LBA parameters.
+Left panels: posterior densities; right panels: sampling chains.
+Parameters vc\_slope\_mu and gap\_slope\_mu show unimodal posteriors and
+good mixing; t0\_mu reflects the four condition-specific estimates.}
+
+\end{figure}%
 
 \section{Discussion}\label{discussion}
 
@@ -909,6 +1258,69 @@ will:}
 This research was conducted as an independent project. The author thanks
 the participants for their time and the open-source community for the
 tools that made this work possible.
+
+\section{Appendix}\label{appendix}
+
+\subsection{Fitts' Law Regression
+(Validation)}\label{fitts-law-regression-validation}
+
+Linear regression of movement time on effective Index of Difficulty
+(\(ID_e\)) validates that the task conforms to Fitts's Law.
+Table~\ref{tbl-fitts} reports slope (\(b\)) and \(R^2\) by modality and
+UI mode. Hand conditions showed steeper slopes (0.15--0.16 s/bit) and
+higher \(R^2\) (0.54) than gaze (slopes 0.18--0.19 s/bit, \(R^2\)
+0.28--0.35). The flatter gaze slope is consistent with the ballistic
+nature of saccadic movement: difficulty primarily affects the
+verification phase rather than the initial ballistic phase, aligning
+with the LBA NDT findings.
+
+\begin{longtable}[]{@{}lcc@{}}
+\caption{Fitts' Law regression (MT \textasciitilde{} \(ID_e\)) by
+condition. Slope = rate of information processing; \(R^2\) = proportion
+of variance explained.}\label{tbl-fitts}\tabularnewline
+\toprule\noalign{}
+Condition & Slope (s/bit) & \(R^2\) \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+Condition & Slope (s/bit) & \(R^2\) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Hand -- Static & 0.155 & 0.54 \\
+Hand -- Adaptive & 0.146 & 0.54 \\
+Gaze -- Static & 0.179 & 0.35 \\
+Gaze -- Adaptive & 0.193 & 0.28 \\
+\end{longtable}
+
+Figure~\ref{fig-fitts} shows the regression of movement time on
+effective Index of Difficulty by modality.
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.95\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/fitts_validation.png}
+
+}
+
+\caption{\label{fig-fitts}Fitts' Law validation. Movement time
+vs.~effective Index of Difficulty by modality. Linear fits with 95\% CI
+bands.}
+
+\end{figure}%
+
+\subsection{Adaptive System Manipulation
+Check}\label{adaptive-system-manipulation-check}
+
+Hand width inflation did not activate in this dataset. Across all
+trials, \texttt{width\_scale\_factor} remained 1.0 (0 trials with
+scaling). The PolicyEngine emitted \texttt{inflate\_width} actions in
+some sessions, but the UI integration did not apply them to rendered
+targets. Consequently, hand UI-mode effects cannot be interpreted as
+adaptation effectiveness; only gaze declutter was evaluable. Full
+diagnostic analysis is available in the project repository.
 
 \section{References}\label{references}
 

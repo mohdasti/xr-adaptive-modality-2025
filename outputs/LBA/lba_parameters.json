@@ -1,0 +1,42 @@
+{
+  "hand": {
+    "static": {
+      "t0_mu": -2.845678766041002,
+      "vc_base_mu": 5.034838150971585,
+      "vc_slope_mu": -0.9345882211291642,
+      "ve_mu": -0.018935768417832708,
+      "gap_int_mu": 4.685567942813292,
+      "gap_slope_mu": 0.05796997027560754,
+      "note": "LBA parameters for verification phase modeling. t0 varies by modality and ui_mode."
+    },
+    "adaptive": {
+      "t0_mu": -3.00785323141293,
+      "vc_base_mu": 5.034838150971585,
+      "vc_slope_mu": -0.9345882211291642,
+      "ve_mu": -0.018935768417832708,
+      "gap_int_mu": 4.685567942813292,
+      "gap_slope_mu": 0.05796997027560754,
+      "note": "LBA parameters for verification phase modeling. t0 varies by modality and ui_mode."
+    }
+  },
+  "gaze": {
+    "static": {
+      "t0_mu": -1.4095091677961953,
+      "vc_base_mu": 5.034838150971585,
+      "vc_slope_mu": -0.9345882211291642,
+      "ve_mu": -0.018935768417832708,
+      "gap_int_mu": 4.685567942813292,
+      "gap_slope_mu": 0.05796997027560754,
+      "note": "LBA parameters for verification phase modeling. t0 varies by modality and ui_mode."
+    },
+    "adaptive": {
+      "t0_mu": -0.9710337012567755,
+      "vc_base_mu": 5.034838150971585,
+      "vc_slope_mu": -0.9345882211291642,
+      "ve_mu": -0.018935768417832708,
+      "gap_int_mu": 4.685567942813292,
+      "gap_slope_mu": 0.05796997027560754,
+      "note": "LBA parameters for verification phase modeling. t0 varies by modality and ui_mode."
+    }
+  }
+}

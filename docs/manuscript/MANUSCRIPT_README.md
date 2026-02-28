@@ -157,9 +157,19 @@ The current implementation uses a text-based indicator. For a graphical ORCID ic
 - **Sections complete**: 1-6 (Introduction through Methods)
 - **Sections pending**: Results, Discussion, Conclusion
 
+## Regenerating Manuscript Statistics
+
+To recompute NASA-TLX subscales, Fitts' Law slopes, and width scaling check from trial data:
+
+```bash
+python3 scripts/compute_manuscript_stats.py
+```
+
+Outputs are saved to `docs/manuscript/assets/` (tlx_subscales_by_modality.csv, fitts_slopes_by_condition.csv, width_scaling_check.csv). The manuscript tables use these values; update the manuscript if regenerating with new data.
+
 ## Next Steps
 
-1. **Complete data collection** (N=24 participants)
+1. **Complete data collection** (N=48 participants)
 2. **Run statistical analyses** (mixed-effects models in R)
 3. **Generate figures** (throughput plots, NASA-TLX comparisons)
 4. **Write Results section** (descriptive stats + inferential tests)
