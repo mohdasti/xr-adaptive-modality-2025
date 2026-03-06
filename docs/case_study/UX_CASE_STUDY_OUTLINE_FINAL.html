@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>UX Research Case Study Outline</title>
+  <style type="text/css">
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header>
+<h1 class="title">UX Research Case Study Outline</h1>
+</header>
+<h1 id="ux-research-case-study-final-outline">UX Research Case Study: Final Outline</h1>
+<h2 id="xr-adaptive-modality-user-centered-research-approach">XR Adaptive Modality — User-Centered Research Approach</h2>
+<p><strong>Purpose:</strong> A UX-Research focused portfolio case study (less technical than the current case_study_web.html)<br />
+<strong>Target audience:</strong> Recruiters, UX Research managers, AR/XR product teams, design leadership<br />
+<strong>Tone:</strong> User-centered, narrative-driven, outcome-focused — showcase <em>how you think</em> and <em>what you learned</em> about users<br />
+<strong>Length:</strong> 1,500–2,200 words main page (scannable, visual, fast) + collapsible deep dives / appendix for extended version</p>
+<hr />
+<h2 id="at-a-glance-header-required-top-of-page">At-a-Glance Header (REQUIRED — Top of Page)</h2>
+<p><strong>Non-optional.</strong> 2–4 bullets before anything else. Example:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 66%" />
+</colgroup>
+<tbody>
+<tr class="odd">
+<td><strong>Problem</strong></td>
+<td>Gaze interaction fails via accidental activation under time pressure; hand input fatigues.</td>
+</tr>
+<tr class="even">
+<td><strong>Role</strong></td>
+<td>End-to-end: research design, platform build, data collection, analysis, design guidelines.</td>
+</tr>
+<tr class="odd">
+<td><strong>Methods</strong></td>
+<td>Remote web study, within-subjects, NASA-TLX + performance + qualitative debrief.</td>
+</tr>
+<tr class="even">
+<td><strong>N</strong></td>
+<td>80 participants.</td>
+</tr>
+<tr class="odd">
+<td><strong>Key outcome</strong></td>
+<td>99.2% of gaze errors are slips (Midas Touch); intent disambiguation &gt; declutter.</td>
+</tr>
+<tr class="even">
+<td><strong>Top recommendation</strong></td>
+<td>Prioritize confirmation, stabilization, dwell tuning for gaze; treat adaptive UI like a feature flag (validate trigger → UI state → user impact).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="section-order-final">Section Order (Final)</h2>
+<table>
+<colgroup>
+<col style="width: 7%" />
+<col style="width: 23%" />
+<col style="width: 69%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>Section</th>
+<th>Decision under each section</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td><strong>At-a-Glance</strong></td>
+<td>(See above)</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td><strong>Problem</strong></td>
+<td>Under time pressure, gaze fails via slips → workload + mistrust → abandonment.</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td><strong>Solution</strong></td>
+<td>Adaptive assistance within each modality; visual-first (one diagram).</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td><strong>Context &amp; Background</strong></td>
+<td>We compared hand vs. gaze, static vs. adaptive, low vs. high pressure—within same participants.</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td><strong>Key Learnings</strong></td>
+<td>Four insights (merged 4+5); participant quotes; “So we recommend…” + “If I were on a product team, I’d test…”</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td><strong>Future Directions</strong></td>
+<td>Pilot plan + roadmap placement.</td>
+</tr>
+<tr class="odd">
+<td>6</td>
+<td><strong>Reflections</strong></td>
+<td>Renamed subsections; Key Decisions I drove; Trust signals box.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="section-1-the-problem">Section 1: The Problem</h2>
+<p><strong>Goal:</strong> Make the reader feel the user pain. No jargon—explain why this matters for real people in XR.</p>
+<h3 id="opening-hook-23-sentences">1.1 Opening Hook (2–3 sentences)</h3>
+<p><strong>Use Option A (scenario) first, then Option B ( framing) as one line:</strong></p>
+<ul>
+<li><em>“Imagine wearing an AR headset for 30 minutes. Your arm aches from pointing. You switch to gaze — and accidentally tap three things you didn’t mean to. You’re stuck between fatigue and frustration.”</em></li>
+<li><em>“XR users today face a binary choice: precise but fatiguing hand input, or fast but error-prone gaze. There’s no middle ground.”</em></li>
+</ul>
+<h3 id="one-sentence-problem-statement-add">1.2 One-Sentence Problem Statement (ADD)</h3>
+<p>Add this explicitly: &gt; <em>“Under time pressure, gaze interaction fails primarily via accidental activation, increasing workload and reducing trust.”</em></p>
+<h3 id="what-success-looks-like-add">1.3 What Success Looks Like (ADD)</h3>
+<p>One line to foreshadow: &gt; <em>“Success means reduced slips and lower workload without slowing users down.”</em></p>
+<h3 id="the-two-core-ux-failures">1.4 The Two Core UX Failures</h3>
+<p><strong>1.4.1 Gorilla Arm</strong> - Mid-air hand gestures cause rapid arm fatigue - Shaking, reduced precision, pain within minutes - Users abandon XR due to physical strain</p>
+<p><strong>1.4.2 Midas Touch</strong> - Gaze-based controls suffer from accidental activations - “Looking to see” vs. “looking to select” — intent ambiguity - Natural eye jitter makes small targets hard to hit - <strong>Concrete consequence:</strong> Missed selection causes wrong action under time pressure → errors → mistrust → abandonment</p>
+<h3 id="the-gap">1.5 The Gap</h3>
+<ul>
+<li>Current XR interfaces are <strong>static</strong> — one-size-fits-all</li>
+<li>No adaptation to user state, fatigue, or task difficulty</li>
+<li>Users must commit to one modality and accept its downsides</li>
+<li><em>Research question:</em> How can we give users the benefits of both modalities without the downsides?</li>
+</ul>
+<h3 id="why-this-matters-for-ux-research">1.6 Why This Matters for UX Research</h3>
+<ul>
+<li>Tie to <strong>product outcomes:</strong> errors → mistrust → abandonment (not just “XR is growing”)</li>
+<li>Design teams need evidence-based guidance, not assumptions</li>
+<li>Adaptive systems are promising but under-evaluated from a <em>user experience</em> lens</li>
+</ul>
+<hr />
+<h2 id="section-2-the-solution">Section 2: The Solution</h2>
+<p><strong>Goal:</strong> High-level, visual-first. One diagram + one paragraph. Details in Context.</p>
+<h3 id="visual-first-add-required">2.1 Visual-First (ADD — Required)</h3>
+<p><strong>One diagram:</strong> “Struggle detected → Adaptation → Expected effect”</p>
+<ul>
+<li>Flow: User performance degrades → Policy triggers → Declutter (gaze) or Width inflation (hand) → Expected UX effect</li>
+<li>Annotated before/after screenshot of Declutter: <em>“This should reduce peripheral distraction; we learned it doesn’t address slips directly.”</em></li>
+</ul>
+<h3 id="the-core-idea">2.2 The Core Idea</h3>
+<ul>
+<li><strong>Adaptive assistance within each modality</strong> — not modality switching (future work)</li>
+<li>The interface adapts to the user in real-time based on performance and context</li>
+<li>User-centered principle: <em>adapt the interface to the user, not the user to the interface</em></li>
+</ul>
+<h3 id="two-modality-specific-interventions">2.3 Two Modality-Specific Interventions</h3>
+<p><strong>2.3.1 Declutter (Gaze Mode)</strong> - When users struggle in gaze blocks, hide non-critical UI elements - Aligns with foveal focus — reduce peripheral distraction - Helps users maintain focus on target - <strong>Show what changed:</strong> Before/after screenshot</p>
+<p><strong>2.3.2 Width Inflation (Hand Mode)</strong> - When users show performance issues in hand blocks, expand target size by 25% - Compensates for motor tremor and fatigue - Acts as a “safety net” when users need it most - <strong>MOVE TO REFLECTIONS + LIMITATIONS:</strong> In Solution, say only: <em>“Two interventions were planned; gaze intervention (declutter) is the focus of findings in this write-up.”</em> Do NOT mention non-activation here—it undermines confidence before you earn trust.</p>
+<h3 id="design-principle-stability">2.4 Design Principle: Stability</h3>
+<ul>
+<li>Hysteresis mechanism: adaptation triggers only after several poor trials in a row</li>
+<li>Prevents rapid flickering between states</li>
+<li>Ensures the system feels predictable and stable</li>
+</ul>
+<h3 id="what-you-shipped-brief">2.5 What You Shipped (Brief)</h3>
+<ul>
+<li>Web-based research platform (React + TypeScript, Vercel)</li>
+<li>Remote data collection, no hardware required</li>
+<li>Comprehensive telemetry, workload measurement (NASA-TLX), qualitative debrief</li>
+</ul>
+<hr />
+<h2 id="section-3-context-background">Section 3: Context &amp; Background</h2>
+<p><strong>Goal:</strong> Compress factorial/methods language into scannable bullets. Avoid reading like an HCI methods paper.</p>
+<h3 id="research-design-rewrite">3.1 Research Design (REWRITE)</h3>
+<p><strong>Replace “2×2×2 within-subjects factorial design” with:</strong> &gt; <em>“We compared hand vs. gaze, static vs. adaptive UI, and low vs. high pressure—within the same participants.”</em></p>
+<p><strong>3.1.1 Participants</strong> - N = 80 (or current N) collected remotely - Demographics: age, gender, gaming hours, input device, vision correction, handedness, fatigue level, motor impairment - <em>UX angle:</em> Remote collection enabled diverse participation; device standardization (mouse vs. trackpad) required exclusion for hand modality</p>
+<p><strong>3.1.2 Task</strong> - Fitts’ Law pointing task (ISO 9241-9 compliant) - Standard HCI benchmark: isolates “move → acquire → confirm” - Why Fitts? Speed–accuracy tradeoff, systematic difficulty control</p>
+<h3 id="constraints-callout-add">3.2 Constraints Callout (ADD)</h3>
+<p>Short box: <strong>How we mitigated constraints</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Constraint</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Remote (no lab)</td>
+<td>Display calibration, fullscreen enforcement, QC rules</td>
+</tr>
+<tr class="even">
+<td>No eye tracker</td>
+<td>Physically-informed gaze simulation; frame as “prototype evaluation method”</td>
+</tr>
+<tr class="odd">
+<td>Device variability</td>
+<td>Input device logged; trackpad excluded from hand modality</td>
+</tr>
+</tbody>
+</table>
+<h3 id="participant-journey-visual-text">3.3 Participant Journey (Visual + Text)</h3>
+<p><strong>Flow:</strong> Consent → Demographics → System Check → Calibration → Practice → Main Task (~192 trials) → NASA-TLX (after each block) → Debrief</p>
+<p><strong>Key UX elements:</strong> - Display calibration (credit card method for px/mm, PPD) - Comprehension checks - Block-level workload assessment - Debrief questions: <em>“Did you notice the interface changing?”</em> and <em>“Did you change your strategy?”</em></p>
+<p><em>Artifact:</em> Participant journey diagram (participant_journey_final.png, Task_layout.png)</p>
+<h3 id="gaze-simulation-keep-light-reframe">3.4 Gaze Simulation (Keep Light + Reframe)</h3>
+<ul>
+<li><strong>Why:</strong> No hardware eye tracker — enables remote, scalable research</li>
+<li><strong>What:</strong> Psychophysics-informed mouse proxy: Gaussian jitter, saccadic suppression, lag</li>
+<li><strong>Frame as:</strong> “Prototype evaluation method” with guardrails (calibration, QC)</li>
+<li><strong>Limitation:</strong> Not a substitute for real eye tracking; validation plan for future work</li>
+</ul>
+<h3 id="metrics-user-focused-framing">3.5 Metrics (User-Focused Framing)</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>What It Tells Us (UX Lens)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Throughput (TP)</strong></td>
+<td>Speed–accuracy efficiency — higher = better</td>
+</tr>
+<tr class="even">
+<td><strong>Error Rate</strong></td>
+<td>Failed selections — lower = more reliable</td>
+</tr>
+<tr class="odd">
+<td><strong>Movement Time (MT)</strong></td>
+<td>Time to complete selection — lower = faster</td>
+</tr>
+<tr class="even">
+<td><strong>NASA-TLX</strong></td>
+<td>Perceived workload (6 dimensions) — lower = easier</td>
+</tr>
+<tr class="odd">
+<td><strong>Error Types</strong></td>
+<td>Slip vs. Miss vs. Timeout — reveals <em>how</em> users fail</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="section-4-key-learnings-insights-recommendations">Section 4: Key Learnings (Insights &amp; Recommendations)</h2>
+<p><strong>Goal:</strong> Four stronger insights (merge 4+5). Add participant quotes. Each insight ends with “So we recommend…” and “If I were on a product team, I’d test…”</p>
+<h3 id="insight-1-the-midas-touch-problem-is-real-and-measurable-keep-first">4.1 Insight 1: The Midas Touch Problem is Real and Measurable (KEEP FIRST)</h3>
+<p><strong>Finding:</strong> Gaze errors are <strong>99.2% slips</strong> (accidental activations), 0.8% timeouts. Hand errors are 95.7% misses, 4.3% timeouts.</p>
+<p><strong>UX implication:</strong> The dominant gaze failure mode is intent ambiguity — “looking to see” vs. “looking to select.” This validates a core UX challenge that XR teams must design around.</p>
+<p><strong>Recommendation:</strong> Prioritize <strong>intent disambiguation</strong> for gaze: confirmation mechanisms, stabilization, snapping, dwell tuning, clear state feedback. Reducing the verification burden is higher leverage than reducing UI chrome.</p>
+<p><strong>Participant quote (ADD):</strong> <em>[Short, punchy quote from debrief — e.g., “I kept accidentally clicking when I was just looking around.”]</em></p>
+<p><strong>Decision &amp; Impact:</strong> So we recommend… <em>[1 sentence]</em> | If I were on a product team, I’d test… <em>[1 experiment]</em></p>
+<h3 id="insight-2-hand-remains-the-reliability-baseline">4.2 Insight 2: Hand Remains the Reliability Baseline</h3>
+<p><strong>Finding:</strong> Hand: lower error (1.7% vs 18.6%), higher throughput (5.15 vs 4.70 bits/s), lower NASA-TLX (40.4 vs 47.0).</p>
+<p><strong>UX implication:</strong> Reinforces why XR products rely on hand/controller for precision. Hand is the performance baseline; gaze must close the gap through better design.</p>
+<p><strong>Participant quote (ADD):</strong> <em>[Optional]</em></p>
+<p><strong>Decision &amp; Impact:</strong> So we recommend… | If I were on a product team, I’d test…</p>
+<h3 id="insight-3-adaptive-interventions-need-refinement-reframe">4.3 Insight 3: Adaptive Interventions Need Refinement (REFRAME)</h3>
+<p><strong>Finding:</strong> Declutter showed modest error reduction (18.2% vs 19.1%) but no significant throughput or workload benefit.</p>
+<p><strong>Reframe (don’t say “it didn’t work”):</strong> <em>Convert into:</em> What it teaches about targeting the right mechanism—declutter helps a little, but targeting the dominant failure mode (slips) is more impactful than general UI simplification.</p>
+<p><strong>Recommendation:</strong> Policy thresholds must be calibrated through iterative testing, not assumed. A/B test multiple policy variants.</p>
+<p><strong>Decision &amp; Impact:</strong> So we recommend… | If I were on a product team, I’d test…</p>
+<h3 id="insight-4-gaze-creates-a-vigilance-tax-merged-was-4-5">4.4 Insight 4: Gaze Creates a Vigilance Tax (MERGED — was 4 + 5)</h3>
+<p><strong>Finding:</strong> NASA-TLX higher in gaze than hand. Adaptive vs. Static TLX similar. Qualitative debrief: users developed different strategies per modality; some noticed adaptations, others benefited without explicit awareness. For gaze: maintain steady gaze, wait for confirmation.</p>
+<p><strong>UX implication:</strong> Gaze places a higher “intent verification” burden—users must constantly monitor whether their gaze will trigger an unintended action. Adaptive systems should reduce <em>the need for vigilance</em> rather than adding new rules. Design for subconscious benefit where possible.</p>
+<p><strong>Participant quote (ADD):</strong> <em>[e.g., “I had to be really careful not to look at things I didn’t want to select.”]</em></p>
+<p><strong>Decision &amp; Impact:</strong> So we recommend… | If I were on a product team, I’d test…</p>
+<h3 id="design-recommendations-summary-box">4.5 Design Recommendations (Summary Box)</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 66%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>For…</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Gaze interaction</strong></td>
+<td>Slip prevention &gt; declutter. Intent disambiguation, confirmation, stabilization.</td>
+</tr>
+<tr class="even">
+<td><strong>Hand interaction</strong></td>
+<td>Width inflation unconfirmed (didn’t activate). Instrumentation caught non-activation — important for future iterations. <em>(Move full discussion to Reflections.)</em></td>
+</tr>
+<tr class="odd">
+<td><strong>Adaptation policy</strong></td>
+<td>Calibrate thresholds; validate with real users; target dominant failure mode.</td>
+</tr>
+<tr class="even">
+<td><strong>Implementation</strong></td>
+<td>Hysteresis for stability; log adaptation state for validation.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="section-5-future-directions-industry-applications">Section 5: Future Directions &amp; Industry Applications</h2>
+<p><strong>Goal:</strong> Add “Pilot plan” and “Where this fits in a roadmap.” Make industry apps concrete.</p>
+<h3 id="pilot-plan-add">5.1 Pilot Plan (ADD)</h3>
+<p><strong>2–3 proposed product experiments:</strong> 1. Dwell + confirmation variations (A/B test dwell duration) 2. Snap-to-target + undo (reduce slip consequence) 3. Intent mode indicator (explicit “selection mode” vs. “browse mode”)</p>
+<h3 id="where-this-fits-in-a-roadmap-add">5.2 Where This Fits in a Roadmap (ADD)</h3>
+<blockquote>
+<p>Prototype validation (this study) → Headset study with real eye tracker → In-product A/B test of intent disambiguation features</p>
+</blockquote>
+<h3 id="future-research-directions">5.3 Future Research Directions</h3>
+<ol type="1">
+<li><strong>Real modality switching</strong> — Evaluate automatic hand ↔ gaze switching</li>
+<li><strong>Policy threshold calibration</strong> — A/B test policy variants</li>
+<li><strong>Longer tasks</strong> — Extended sessions to induce fatigue</li>
+<li><strong>Real eye-tracker validation</strong> — Calibration study to confirm UX signatures</li>
+</ol>
+<h3 id="industry-applications-concretize">5.4 Industry Applications (Concretize)</h3>
+<p><strong>AR/VR Headsets:</strong> Eye-tracking to declutter when cognitive overload sensed; intent-first gaze design for menus.</p>
+<p><strong>XR Product Teams:</strong> Design guidelines; evidence base for gaze vs. hand investment; instrument and validate before claiming benefit.</p>
+<p><strong>Accessibility:</strong> Gaze for users with limited hand mobility—but must solve Midas Touch first.</p>
+<hr />
+<h2 id="section-6-reflections">Section 6: Reflections</h2>
+<p><strong>Goal:</strong> Rename subsections. Add “Key Decisions I drove.” Add “Trust signals” box. Frame width-inflation non-activation as <em>research rigor + instrumentation saving you from a false claim</em>.</p>
+<h3 id="trust-signals-box-add">6.1 Trust Signals Box (ADD)</h3>
+<p><strong>Turn width-inflation into credibility:</strong> - QC rules: RT bounds, display violations, focus/blur, exclusions - Instrumentation checks: <code>width_scale_factor</code> logged; validated that activation state was correct - What we excluded + why: trackpad from hand, practice trials, invalid RTs</p>
+<p><em>“We instrumented and validated our adaptive mechanisms. That’s how we caught that width inflation never activated—and avoided a false claim.”</em></p>
+<h3 id="what-i-learned-professional">6.2 What I Learned (Professional)</h3>
+<ul>
+<li><strong>Not all adaptive changes are meaningful</strong> — Declutter helped modestly; targeting slips would be more impactful. Prioritize the dominant failure mode.</li>
+<li><strong>Instrumentation is essential</strong> — Width inflation didn’t activate; validated logging caught it. <em>Frame as research rigor: instrumentation saved us from a false claim. Keep out of main narrative until here.</em></li>
+<li><strong>Device standardization matters</strong> — Trackpad vs. mouse required exclusion. Affects recruitment and analysis planning.</li>
+<li><strong>Policy integration is critical</strong> — PolicyEngine logic worked; UI integration failed to apply width scaling. Cross-team coordination and validation matter.</li>
+</ul>
+<p><strong>How this changed my approach:</strong> <em>“I now treat adaptive UI like a feature flag: validate trigger → validate UI state → validate user impact.”</em></p>
+<h3 id="next-iteration-id-run-rename-was-what-i-would-do-differently">6.3 Next Iteration I’d Run (RENAME — was “What I Would Do Differently”)</h3>
+<p><em>Keep it confident; read like an engineer/research lead planning the next iteration, not apologizing.</em></p>
+<ul>
+<li>Remove pressure-only gating; use longer tasks to induce fatigue so width inflation can activate</li>
+<li>Add more qualitative probes (e.g., think-aloud during gaze blocks)</li>
+<li>Consider giving users control over adaptation preferences</li>
+<li>Test in a real XR application context, not just a pointing task</li>
+</ul>
+<h3 id="key-decisions-i-drove-add">6.4 Key Decisions I Drove (ADD)</h3>
+<p><strong>Anchor skills in decisions, not resume bullets:</strong> 1. <strong>Study design tradeoff:</strong> Remote + gaze simulation vs. lab + hardware—chose scalability and reproducibility. 2. <strong>QC/exclusion rule:</strong> Define and apply exclusion criteria (trackpad, RT bounds, display violations). 3. <strong>Adaptation stability policy:</strong> Hysteresis to prevent flicker; logged state for validation.</p>
+<h3 id="limitations-honest-accounting">6.5 Limitations (Honest Accounting)</h3>
+<ul>
+<li>Gaze simulation, not hardware — ecological validity limits</li>
+<li>Hand width inflation not exercised — benefit unconfirmed; instrumentation caught it (see Trust Signals)</li>
+<li>Unbalanced design (hand N=75 mouse-only, gaze N=81) — Type III ANOVA handles this</li>
+</ul>
+<h3 id="role-skills-demonstrated">6.6 Role &amp; Skills Demonstrated</h3>
+<p><strong>Role:</strong> End-to-end ownership — research question, hypothesis, platform, experiment design, data collection, analysis, design guidelines.</p>
+<p><strong>Skills (anchor in decisions):</strong> UX Research, AR/XR, Technical, Communication — as evidenced by Key Decisions above.</p>
+<hr />
+<h2 id="appendix-optional-deeper-dives-collapsible-or-separate-page">Appendix: Optional Deeper Dives (Collapsible or Separate Page)</h2>
+<ul>
+<li><strong>Statistical models</strong> — LMEM, GLMM, TOST</li>
+<li><strong>LBA cognitive modeling</strong> — Drift rate, threshold, non-decision time</li>
+<li><strong>Error type breakdown table</strong> — Full numbers</li>
+<li><strong>Spatial error patterns</strong> — Heatmaps, endpoint density</li>
+<li><strong>Quality control exclusions</strong> — What was removed and why</li>
+<li><strong>File structure</strong> — Links to repo, telemetry schema, policy config</li>
+</ul>
+<hr />
+<h2 id="checklist-before-publishing-updated">Checklist Before Publishing (Updated)</h2>
+<ul>
+<li>[x] <strong>At-a-glance header block at top</strong> (non-optional)</li>
+<li>[ ] One-line “decision” under each main section (Problem, Solution, Learnings)</li>
+<li>[ ] Before/After visual of Declutter + expected mechanism</li>
+<li>[ ] 2–3 participant quotes tied to insights</li>
+<li>[ ] “Decision &amp; Impact” callouts under each insight</li>
+<li>[ ] Trust signals box (turns width-inflation into credibility)</li>
+<li>[ ] Width-inflation non-activation in Reflections/Limitations only (not early)</li>
+<li>[ ] Contact / links to repo, full report</li>
+<li>[ ] Proofread for UX audience (minimize jargon)</li>
+</ul>
+<hr />
+<p><em>This outline incorporates second-opinion feedback. Final document: 1,500–2,200 words main page + collapsible deep dives.</em></p>
+</body>
+</html>

@@ -531,6 +531,18 @@ quarto render docs/analysis/Report.qmd
 - `results/lba_parameters.json` (LBA parameters by modality/ui_mode)
 - `results/figures/summary_panel.png`
 
+**Manuscript figure regeneration:**
+```bash
+# Regenerate all figures for docs/manuscript/Manuscript.qmd
+./scripts/run_manuscript_figures.sh
+```
+Or run individually:
+- `Rscript scripts/export_case_study_assets.R` — performance, TLX, error types, Fitts
+- `Rscript scripts/export_lba_figures.R` — LBA forest plot, verification RT
+- `python scripts/regenerate_lba_trace_plot.py` — LBA trace plots (requires `outputs/LBA/lba_trace.nc`)
+
+Figures are saved to `docs/assets/case_study/` and `outputs/LBA/`. Style guide: `analysis/r/utils_plotting.R`.
+
 ---
 
 ## Preregistration

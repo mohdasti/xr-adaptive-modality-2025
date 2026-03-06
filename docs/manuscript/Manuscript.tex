@@ -144,7 +144,6 @@
 % ArXiv-style preamble for proper author metadata display
 % Improve PDF text extraction: disable ligatures that cause copy-paste artifacts
 \usepackage{microtype}
-\usepackage[T1]{fontenc}
 \usepackage{hyperref}
 \hypersetup{
     colorlinks=true,
@@ -152,7 +151,7 @@
     citecolor=blue,
     urlcolor=blue,
     pdfauthor={Mohammad Dastgheib and Fatemeh Pourmahdian},
-    pdftitle={Adaptive Modality Systems in Extended Reality},
+    pdftitle={Adaptive Gaze-Hand Switching in XR: Modality-Specific Failure Modes and the Midas Touch Problem},
     pdfkeywords={Extended Reality, Virtual Reality, Adaptive Interfaces, Gaze Interaction, Fitts's Law, Human-Computer Interaction, Multimodal Interaction, Pupillometry}
 }
 
@@ -250,7 +249,7 @@
 \IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
 \urlstyle{same}
 \hypersetup{
-  pdftitle={Adaptive Modality Systems in Extended Reality: Optimizing Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching},
+  pdftitle={Adaptive Gaze-Hand Switching in XR: Modality-Specific Failure Modes and the Midas Touch Problem},
   pdfauthor={Mohammad Dastgheib; Fatemeh Pourmahdian},
   colorlinks=true,
   linkcolor={blue},
@@ -260,8 +259,8 @@
   pdfcreator={LaTeX via pandoc}}
 
 
-\title{Adaptive Modality Systems in Extended Reality: Optimizing
-Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching}
+\title{Adaptive Gaze-Hand Switching in XR: Modality-Specific Failure
+Modes and the Midas Touch Problem}
 \author{Mohammad Dastgheib \and Fatemeh Pourmahdian}
 \date{2026-03-06}
 \begin{document}
@@ -278,7 +277,7 @@ performance and reduce workload relative to static unimodal interaction.
 The platform combines physiologically accurate gaze simulation, an ISO
 9241-9 multidirectional tapping task, and two modality-specific adaptive
 interventions: gaze declutter and hand target-width inflation. We
-evaluated the system in a 2×2×2 within-subjects design manipulating
+evaluated the system in a 2 × 2 × 2 within-subjects design manipulating
 Modality (Hand vs.~Gaze), UI Mode (Static vs.~Adaptive), and Pressure
 (Yes vs.~No). Interim results from N=23 participants show that hand
 yielded higher throughput than gaze (5.15 vs.~4.70 bits/s), lower error
@@ -518,8 +517,8 @@ difficulty:
 Where the intercept \(a\) represents non-informational additive
 components (e.g., reaction time, system latency) and the slope \(b\)
 represents the rate of information processing. The reciprocal of the
-slope, \(1/b\), is often referred to as the \textbf{Index of Performance
-(}\(IP\)), or bandwidth, measured in bits per second.
+slope, \(1/b\), is often referred to as the \textbf{Index of
+Performance} (\(IP\)), or bandwidth, measured in bits per second.
 
 \subsection{The Speed-Accuracy Tradeoff in
 3D}\label{the-speed-accuracy-tradeoff-in-3d}
@@ -527,7 +526,7 @@ slope, \(1/b\), is often referred to as the \textbf{Index of Performance
 In XR, the ``Width'' (\(W\)) of a target is ambiguous. To standardize
 performance across users with varying error rates, the
 \texttt{xr-adaptive-modality-2025} platform utilizes the
-\textbf{Effective Width (}\(W_e\)). Unlike nominal width, \(W_e\) is
+\textbf{Effective Width} (\(W_e\)). Unlike nominal width, \(W_e\) is
 derived from the spatial distribution of selection endpoints.
 
 Consistent with ISO 9241-9, we calculate \(W_e\) using the standard
@@ -539,11 +538,11 @@ computed as the scalar projection:
 
 \[x_i = \frac{(P_{hit} - P_{target}) \cdot \vec{v}}{\| \vec{v} \|}\]
 
-The effective width is then calculated as
-\(W_e = 4.133 \times \sigma_x\), where \(\sigma_x\) is the standard
-deviation of these projected errors. This effectively normalizes the
-error rate to 4\%, allowing us to calculate \textbf{Throughput
-(}\(TP\)), a unified metric of speed and accuracy:
+The effective width is then calculated as \(W_e = 4.133 × \sigma_x\),
+where \(\sigma_x\) is the standard deviation of these projected errors.
+This effectively normalizes the error rate to 4\%, allowing us to
+calculate \textbf{Throughput} (\(TP\)), a unified metric of speed and
+accuracy:
 
 \[TP = \frac{ID_e}{MT} = \frac{\log_2(D/W_e + 1)}{MT}\]
 
@@ -573,7 +572,7 @@ We quantify the ``cost of control'' by analyzing the velocity profile
 \(v(t)\) of the cursor. A submovement is mathematically identified as a
 zero-crossing in the acceleration profile (or a local maximum in
 velocity) after the initial ballistic phase. The \textbf{Submovement
-Count (}\(N_{sub}\)) serves as a proxy for the efficiency of the control
+Count} (\(N_{sub}\)) serves as a proxy for the efficiency of the control
 loop:
 
 \[N_{sub} = \sum_{t=0}^{T} \mathbb{1}(\text{is\_velocity\_peak}(t)) - 1\]
@@ -605,7 +604,7 @@ a threshold \(b\).
 Unlike Drift Diffusion Models (DDM) which require substantial error
 rates to constrain the boundary separation (Lerche et al., 2017), LBA is
 robust to the low-error scenarios typical of Fitts' tasks. It allows us
-to explicitly estimate the \textbf{Caution Threshold (}\(b - A\))---the
+to explicitly estimate the \textbf{Caution Threshold} (\(b - A\))---the
 amount of evidence users require before committing to selection. We
 hypothesize that adaptive interventions can alter the amount of evidence
 users require before committing to selection.
@@ -676,13 +675,14 @@ physiology:
   open-loop until the eye settles.
 \item
   \textbf{Fixation Jitter \& Drift:} When the cursor slowed (\textless30
-  deg/s), Gaussian noise (SD ≈ 0.12° visual angle) was injected to
-  simulate fixational eye movements (Martinez-Conde et al., 2004),
-  specifically the random walk characteristics of ocular drift and
-  tremor that occur even during attempted fixation. This angular noise
-  was normalized to screen pixels using the pixels-per-degree (PPD)
-  calibration value, ensuring consistent perceptual difficulty across
-  different display sizes and viewing distances.
+  deg/s), Gaussian noise (SD \(\approx\) 0.12\(^\circ\) visual angle)
+  was injected to simulate fixational eye movements (Martinez-Conde et
+  al., 2004), specifically the random walk characteristics of ocular
+  drift and tremor that occur even during attempted fixation. This
+  angular noise was normalized to screen pixels using the
+  pixels-per-degree (PPD) calibration value, ensuring consistent
+  perceptual difficulty across different display sizes and viewing
+  distances.
 \item
   \textbf{Sensor Lag:} A first-order lag (linear interpolation, factor
   0.15) was applied to mimic the processing latency (typically 30--70
@@ -786,8 +786,8 @@ The planned confirmatory sample was N=48, corresponding to six complete
 Williams counterbalancing blocks. At the time of this interim report,
 the complete factorial dataset available for primary analysis included
 N=23 participants. Seven earlier participants were excluded from the
-primary 2×2×2 analysis because a pressure-logging bug misrecorded block
-condition; their data were retained only for exploratory use.
+primary 2 × 2 × 2 analysis because a pressure-logging bug misrecorded
+block condition; their data were retained only for exploratory use.
 Replacement recruitment is ongoing to restore the planned complete
 sample of N=48. Participants were recruited from the university
 community (target: balanced gender distribution, age range 18-35). All
@@ -803,7 +803,7 @@ dwell clicking) and hand selection. During the experiment, they
 performed 4 blocks of 40 trials each (160 trials total per participant).
 Practice trials (10 per modality before the main blocks) were excluded
 from analysis. Target positions cycled through 8 directions; Index of
-Difficulty varied across three levels (≈2--6 bits). Pressure
+Difficulty varied across three levels (\$\approx\$2--6 bits). Pressure
 (time-limited vs.~self-paced) was varied within blocks.
 
 After each block, participants filled out a NASA-TLX workload survey
@@ -933,32 +933,21 @@ Hand input yielded higher throughput (5.15 vs.~4.70 bits/s) and
 substantially lower error rate (1.75\% vs.~18.65\%) than gaze input.
 Movement time was shorter for hand (1.09 s) than gaze (1.19 s).
 Descriptively, hand outperformed gaze on throughput and error rate in
-the current complete-case dataset. Figure~\ref{fig-throughput} and
-Figure~\ref{fig-error-rate} illustrate these differences.
+the current complete-case dataset. Figure~\ref{fig-performance}
+illustrates these differences.
 
 \begin{figure}[H]
 
 \centering{
 
-\includegraphics[width=0.7\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/throughput.png}
+\includegraphics[width=0.85\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/performance_combined.png}
 
 }
 
-\caption{\label{fig-throughput}Throughput (bits/s) by modality. Hand
-produced higher throughput than gaze. Error bars show 95\% CI.}
-
-\end{figure}%
-
-\begin{figure}[H]
-
-\centering{
-
-\includegraphics[width=0.7\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/error_rate.png}
-
-}
-
-\caption{\label{fig-error-rate}Error rate (\%) by modality. Gaze showed
-substantially higher error rate than hand. Error bars show 95\% CI.}
+\caption{\label{fig-performance}Primary performance by modality. (A)
+Throughput (bits/s): hand produced higher throughput than gaze. (B)
+Error rate (\%): gaze showed substantially higher error rate than hand.
+Error bars show 95\% CI.}
 
 \end{figure}%
 
@@ -1056,7 +1045,9 @@ Frustration & 32.2 {[}28.5, 35.9{]} & 43.2 {[}39.5, 46.9{]} \\
 \end{longtable}
 
 Figure~\ref{fig-tlx} shows overall workload by modality.
-Figure~\ref{fig-tlx-stacked} shows the subscale composition.
+Figure~\ref{fig-tlx-subscales} compares workload across the six NASA-TLX
+subscales, making it clear which dimensions (e.g., Physical Demand,
+Frustration) differ most between hand and gaze.
 
 \begin{figure}[H]
 
@@ -1076,13 +1067,15 @@ CI.}
 
 \centering{
 
-\includegraphics[width=0.75\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/tlx_stacked.png}
+\includegraphics[width=0.75\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/tlx_subscales.png}
 
 }
 
-\caption{\label{fig-tlx-stacked}NASA-TLX subscale composition by
-modality. Stacked bars show contribution of each subscale (Mental,
-Physical, Temporal, Performance, Effort, Frustration).}
+\caption{\label{fig-tlx-subscales}NASA-TLX subscales by modality.
+Point-range plot comparing Hand and Gaze on each subscale (Mental,
+Physical, Temporal, Performance, Effort, Frustration). Gaze shows higher
+scores on most dimensions; Physical Demand and Frustration show the
+largest modality differences. Error bars show 95\% CI.}
 
 \end{figure}%
 
@@ -1105,7 +1098,13 @@ Table~\ref{tbl-lba-params} reports group-level LBA parameter estimates
 by modality and UI mode. Non-decision time (t0) is the primary parameter
 that varies across conditions; drift and threshold parameters are shared
 across conditions with modality- and pressure-specific effects captured
-in the hierarchical structure.
+in the hierarchical structure. Figure~\ref{fig-lba-t0} visualizes the t0
+posterior estimates and 95\% HDIs by condition, making the modality and
+UI-mode differences immediately apparent: gaze conditions show higher
+(less negative) t0 values than hand conditions, indicating longer
+verification-phase duration. Figure~\ref{fig-verification-rt} shows the
+empirical verification-phase RT by condition, bridging the raw observed
+behavior to the modeled latent parameters.
 
 \begin{longtable}[]{@{}
   >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1111}}
@@ -1160,6 +1159,41 @@ Gaze -- Adaptive & −0.97 {[}−1.39, −0.57{]} & 5.03 & −0.93 {[}−0.95,
 −0.92{]} & 0.06 {[}0.03, 0.09{]} \\
 \end{longtable}
 
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.9\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/lba_t0_forest.png}
+
+}
+
+\caption{\label{fig-lba-t0}Non-decision time (t0) by condition. Each row
+shows one condition; the point is the posterior mean and the horizontal
+line is the 95\% highest-density interval. t0 is the time spent on
+encoding and motor execution before the decision process---the
+verification phase. Values are on a latent scale (negative); rightward
+means longer verification phase. Gaze conditions (top two rows) show
+longer t0 than hand conditions (bottom two rows), meaning gaze required
+more time before users committed to selection---consistent with the
+Midas Touch problem.}
+
+\end{figure}%
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.85\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/verification_rt_empirical.png}
+
+}
+
+\caption{\label{fig-verification-rt}Empirical verification-phase RT by
+condition. Mean verification time (ms) from first target entry to
+selection, with 95\% CI. Bridges the raw observed behavior to the
+LBA-modeled latent parameters.}
+
+\end{figure}%
+
 \subsubsection{Interpretation}\label{interpretation}
 
 \textbf{Modality effect on NDT:} Gaze conditions show higher t0 values
@@ -1182,28 +1216,12 @@ higher time pressure increases the decision threshold.
 
 \subsubsection{Convergence Diagnostics}\label{convergence-diagnostics}
 
-Figure~\ref{fig-lba-trace} shows MCMC trace plots for key parameters.
-The drift-rate slope (ID) and threshold slope (pressure) exhibit
-unimodal posteriors and well-mixed chains. Non-decision time shows
-multiple modes across the four condition cells, reflecting the
-hierarchical structure; R-hat remained at 1.0 for all parameters, and
-ESS exceeded 2,000.
-
-\begin{figure}[H]
-
-\centering{
-
-\includegraphics[width=0.9\linewidth,height=\textheight,keepaspectratio]{../../outputs/LBA/lba_trace_plot.png}
-
-}
-
-\caption{\label{fig-lba-trace}MCMC trace plots for key LBA parameters.
-Left panels: posterior densities; right panels: sampling chains. Drift
-rate slope (ID) and threshold slope (pressure) show unimodal posteriors
-and good mixing; non-decision time reflects the four condition-specific
-estimates.}
-
-\end{figure}%
+MCMC convergence was satisfactory: R-hat remained at 1.0 for all
+parameters, and ESS exceeded 2,000. The drift-rate slope (ID) and
+threshold slope (pressure) exhibited unimodal posteriors and well-mixed
+chains. Non-decision time showed multiple modes across the four
+condition cells, reflecting the hierarchical structure. Trace plots are
+provided in the Appendix (Figure~\ref{fig-lba-trace}).
 
 \section{Discussion}\label{discussion}
 
@@ -1509,6 +1527,24 @@ effective Index of Difficulty by modality.
 \caption{\label{fig-fitts}Fitts' Law validation. Movement time
 vs.~effective Index of Difficulty by modality. Linear fits with 95\% CI
 bands.}
+
+\end{figure}%
+
+\subsection{LBA MCMC Trace Plots}\label{lba-mcmc-trace-plots}
+
+\begin{figure}[H]
+
+\centering{
+
+\includegraphics[width=0.9\linewidth,height=\textheight,keepaspectratio]{../../outputs/LBA/lba_trace_plot.png}
+
+}
+
+\caption{\label{fig-lba-trace}MCMC trace plots for key LBA parameters.
+Left panels: posterior densities; right panels: sampling chains. Drift
+rate slope (ID) and threshold slope (pressure) show unimodal posteriors
+and good mixing; non-decision time reflects the four condition-specific
+estimates.}
 
 \end{figure}%
 

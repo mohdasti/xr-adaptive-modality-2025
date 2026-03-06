@@ -4,6 +4,7 @@
 
 library(tidyverse)
 library(ggplot2)
+library(patchwork)
 library(lme4)
 library(lmerTest)
 library(emmeans)
@@ -11,16 +12,28 @@ library(emmeans)
 # Set sum-to-zero contrasts (matching Report.qmd)
 options(contrasts = c("contr.sum", "contr.poly"))
 
-# Color palette (matching Report.qmd)
-if (requireNamespace("ggsci", quietly = TRUE)) {
-  library(ggsci)
-  npg_pal <- pal_npg("nrc")(10)
+# Global plotting style (analysis/r/utils_plotting.R)
+if (file.exists("analysis/r/utils_plotting.R")) {
+  source("analysis/r/utils_plotting.R")
+} else if (file.exists("../analysis/r/utils_plotting.R")) {
+  source("../analysis/r/utils_plotting.R")
 } else {
-  # Fallback: use RColorBrewer or manual colors
-  npg_pal <- c("#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", "#8491B4", "#91D1C2", "#DC0000", "#7E6148", "#B09C85")
+  MODALITY_COLORS <- c(hand = "#E64B35", gaze = "#4DBBD5")
+  modality_levels <- c("hand", "gaze")
+  tlx_subscale_levels <- c("Mental", "Physical", "Temporal", "Performance", "Effort", "Frustration")
+  theme_manuscript <- function(base_size = 12) theme_classic(base_size = base_size)
+  scale_fill_modality <- function(...) scale_fill_manual(values = MODALITY_COLORS, ...)
+  scale_color_modality <- function(...) scale_color_manual(values = MODALITY_COLORS, ...)
 }
-custom_palette_2 <- npg_pal[1:2]
-custom_palette_multi <- npg_pal[1:6]
+
+# Error-type composition: distinct from modality to avoid confusion
+# Slips (gaze-dominant), Misses (hand-dominant), Timeouts (both)
+ERROR_TYPE_COLORS <- c(
+  "Slips"   = "#D95F02",  # orange (distinct from Hand #E64B35)
+  "Timeouts" = "#7F7F7F", # grey
+  "Misses"  = "#00A087",  # teal
+  "Other"   = "#8491B4"   # grey-blue (fallback)
+)
 
 # --- DATA LOADING (reuse from Report.qmd) ---
 data_paths <- c(
@@ -146,38 +159,8 @@ output_dir <- "docs/assets/case_study"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 cat("Output directory:", output_dir, "\n\n")
 
-# --- FIGURE A: Error Rate (Hand vs Gaze with 95% CI) ---
-cat("Generating Figure A: Error Rate...\n")
-df_err_summary <- df_pid_cond %>%
-  filter(!is.na(error_rate)) %>%
-  group_by(modality) %>%
-  summarise(
-    mean_err = mean(error_rate, na.rm = TRUE) * 100,
-    se = sd(error_rate, na.rm = TRUE) / sqrt(n()) * 100,
-    ci_lower = mean_err - 1.96 * se,
-    ci_upper = mean_err + 1.96 * se,
-    n = n(),
-    .groups = "drop"
-  )
-
-p_err <- ggplot(df_err_summary, aes(x = modality, y = mean_err, fill = modality)) +
-  geom_bar(stat = "identity", alpha = 0.8, width = 0.6) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, linewidth = 0.8) +
-  scale_fill_manual(values = c("hand" = custom_palette_2[1], "gaze" = custom_palette_2[2])) +
-  scale_x_discrete(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
-  labs(
-    x = "Input Modality",
-    y = "Error Rate (%)",
-    title = "Error Rate by Modality"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "none")
-
-ggsave(file.path(output_dir, "error_rate.png"), p_err, width = 6, height = 5, dpi = 300)
-cat("  ✓ Saved error_rate.png\n")
-
-# --- FIGURE B: Throughput (TP) Hand vs Gaze with 95% CI ---
-cat("Generating Figure B: Throughput...\n")
+# --- FIGURE: Combined Performance (Throughput + Error Rate) ---
+cat("Generating combined performance figure (Throughput + Error Rate)...\n")
 df_tp_summary <- df_pid_cond %>%
   filter(!is.na(tp_mean)) %>%
   group_by(modality) %>%
@@ -188,23 +171,49 @@ df_tp_summary <- df_pid_cond %>%
     ci_upper = mean_tp + 1.96 * se,
     n = n(),
     .groups = "drop"
-  )
+  ) %>%
+  mutate(modality = factor(modality, levels = c("hand", "gaze")))
 
-p_tp <- ggplot(df_tp_summary, aes(x = modality, y = mean_tp, fill = modality)) +
-  geom_bar(stat = "identity", alpha = 0.8, width = 0.6) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, linewidth = 0.8) +
-  scale_fill_manual(values = c("hand" = custom_palette_2[1], "gaze" = custom_palette_2[2])) +
+df_err_summary <- df_pid_cond %>%
+  filter(!is.na(error_rate)) %>%
+  group_by(modality) %>%
+  summarise(
+    mean_err = mean(error_rate, na.rm = TRUE) * 100,
+    se = sd(error_rate, na.rm = TRUE) / sqrt(n()) * 100,
+    ci_lower = mean_err - 1.96 * se,
+    ci_upper = mean_err + 1.96 * se,
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(modality = factor(modality, levels = c("hand", "gaze")))
+
+p_tp <- ggplot(df_tp_summary, aes(x = modality, y = mean_tp, color = modality)) +
+  geom_pointrange(aes(ymin = ci_lower, ymax = ci_upper), size = 1, linewidth = 1) +
+  scale_color_modality(guide = "none") +
   scale_x_discrete(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
-  labs(
-    x = "Input Modality",
-    y = "Throughput (bits/s)",
-    title = "Throughput by Modality"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "none")
+  labs(x = NULL, y = "Throughput (bits/s)", subtitle = "A") +
+  theme_manuscript() +
+  theme(plot.subtitle = element_text(face = "bold", hjust = -0.05))
 
-ggsave(file.path(output_dir, "throughput.png"), p_tp, width = 6, height = 5, dpi = 300)
-cat("  ✓ Saved throughput.png\n")
+p_err <- ggplot(df_err_summary, aes(x = modality, y = mean_err, color = modality)) +
+  geom_pointrange(aes(ymin = ci_lower, ymax = ci_upper), size = 1, linewidth = 1) +
+  scale_color_modality(guide = "none") +
+  scale_x_discrete(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
+  labs(x = NULL, y = "Error Rate (%)", subtitle = "B") +
+  theme_manuscript() +
+  theme(plot.subtitle = element_text(face = "bold", hjust = -0.05))
+
+p_performance <- p_tp + p_err +
+  plot_layout(ncol = 2) +
+  plot_annotation(theme = theme(plot.margin = margin(0, 0, 0, 0)))
+
+ggsave(file.path(output_dir, "performance_combined.png"), p_performance, width = 7, height = 3.5, dpi = 300)
+cat("  ✓ Saved performance_combined.png\n")
+
+# Also save individual figures for backward compatibility / flexibility
+ggsave(file.path(output_dir, "throughput.png"), p_tp + labs(subtitle = NULL), width = 4, height = 3.5, dpi = 300)
+ggsave(file.path(output_dir, "error_rate.png"), p_err + labs(subtitle = NULL), width = 4, height = 3.5, dpi = 300)
+cat("  ✓ Saved throughput.png, error_rate.png (individual)\n")
 
 # --- FIGURE C: RT (log-RT or ms) Hand vs Gaze with 95% CI ---
 cat("Generating Figure C: Movement Time...\n")
@@ -220,18 +229,12 @@ df_rt_summary <- df_pid_cond %>%
     .groups = "drop"
   )
 
-p_rt <- ggplot(df_rt_summary, aes(x = modality, y = mean_rt, fill = modality)) +
-  geom_bar(stat = "identity", alpha = 0.8, width = 0.6) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, linewidth = 0.8) +
-  scale_fill_manual(values = c("hand" = custom_palette_2[1], "gaze" = custom_palette_2[2])) +
+p_rt <- ggplot(df_rt_summary, aes(x = modality, y = mean_rt, color = modality)) +
+  geom_pointrange(aes(ymin = ci_lower, ymax = ci_upper), size = 1, linewidth = 1) +
+  scale_color_modality(guide = "none") +
   scale_x_discrete(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
-  labs(
-    x = "Input Modality",
-    y = "Movement Time (s)",
-    title = "Movement Time by Modality"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "none")
+  labs(x = "Input Modality", y = "Movement Time (s)") +
+  theme_manuscript()
 
 ggsave(file.path(output_dir, "movement_time.png"), p_rt, width = 6, height = 5, dpi = 300)
 cat("  ✓ Saved movement_time.png\n")
@@ -245,6 +248,7 @@ if ("err_type" %in% names(df_all_trials)) {
       err_category = case_when(
         grepl("slip|missclick|click", err_type, ignore.case = TRUE) ~ "Slips",
         grepl("timeout|timed", err_type, ignore.case = TRUE) ~ "Timeouts",
+        grepl("miss", err_type, ignore.case = TRUE) ~ "Misses",
         TRUE ~ "Other"
       )
     ) %>%
@@ -253,23 +257,16 @@ if ("err_type" %in% names(df_all_trials)) {
     group_by(modality) %>%
     mutate(
       pct = 100 * n / sum(n),
-      err_category = factor(err_category, levels = c("Slips", "Timeouts", "Other"))
+      err_category = factor(err_category, levels = c("Slips", "Timeouts", "Misses", "Other"))
     )
   
   p_err_type <- ggplot(df_err_type, aes(x = modality, y = pct, fill = err_category)) +
-    geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
-    scale_fill_manual(values = c("Slips" = custom_palette_multi[1], 
-                                  "Timeouts" = custom_palette_multi[2],
-                                  "Other" = custom_palette_multi[3])) +
+    geom_bar(stat = "identity", position = "stack", alpha = 0.85) +
+    scale_fill_manual(values = ERROR_TYPE_COLORS) +
     scale_x_discrete(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
-    labs(
-      x = "Input Modality",
-      y = "Percentage of Errors (%)",
-      fill = "Error Type",
-      title = "Error Type Composition"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "right")
+    labs(x = "Modality", y = "Percentage of Errors (%)", fill = "Error Type") +
+    theme_manuscript() +
+    theme(legend.position = "right", legend.key.size = unit(0.5, "lines"))
   
   ggsave(file.path(output_dir, "error_type_composition.png"), p_err_type, width = 7, height = 5, dpi = 300)
   cat("  ✓ Saved error_type_composition.png\n")
@@ -306,45 +303,42 @@ if (all(tlx_cols %in% names(df_raw))) {
       .groups = "drop"
     )
   
-  p_tlx <- ggplot(df_tlx_overall, aes(x = modality, y = mean_tlx, fill = modality)) +
-    geom_bar(stat = "identity", alpha = 0.8, width = 0.6) +
-    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, linewidth = 0.8) +
-    scale_fill_manual(values = c("hand" = custom_palette_2[1], "gaze" = custom_palette_2[2])) +
+  p_tlx <- ggplot(df_tlx_overall, aes(x = modality, y = mean_tlx, color = modality)) +
+    geom_pointrange(aes(ymin = ci_lower, ymax = ci_upper), size = 1, linewidth = 1) +
+    scale_color_modality(guide = "none") +
     scale_x_discrete(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
-    labs(
-      x = "Input Modality",
-      y = "Overall TLX Score (0-100)",
-      title = "NASA-TLX Workload by Modality"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "none")
+    labs(x = NULL, y = "Overall TLX Score (0–100)") +
+    theme_manuscript()
   
   ggsave(file.path(output_dir, "tlx_overall.png"), p_tlx, width = 6, height = 5, dpi = 300)
   cat("  ✓ Saved tlx_overall.png\n")
   
-  # Stacked TLX components
-  df_tlx_stacked <- df_tlx %>%
+  # TLX subscales: point-range comparison (replaces stacked bars)
+  df_tlx_subscales <- df_tlx %>%
     group_by(modality, Scale) %>%
-    summarise(Mean_Score = mean(Score, na.rm = TRUE), .groups = "drop") %>%
+    summarise(
+      mean_score = mean(Score, na.rm = TRUE),
+      se = sd(Score, na.rm = TRUE) / sqrt(n()),
+      ci_lower = mean_score - 1.96 * se,
+      ci_upper = mean_score + 1.96 * se,
+      .groups = "drop"
+    ) %>%
     mutate(
-      Modality = str_to_title(modality),
-      Scale = factor(Scale, levels = c("Mental", "Physical", "Temporal", "Performance", "Effort", "Frustration"))
+      modality = factor(modality, levels = modality_levels),
+      Scale = factor(Scale, levels = tlx_subscale_levels)
     )
   
-  p_tlx_stacked <- ggplot(df_tlx_stacked, aes(x = Modality, y = Mean_Score, fill = Scale)) +
-    geom_bar(stat = "identity", position = "stack", alpha = 0.8) +
-    scale_fill_manual(values = custom_palette_multi) +
-    labs(
-      x = "Input Modality",
-      y = "TLX Score (0-100)",
-      fill = "TLX Scale",
-      title = "NASA-TLX Components by Modality"
-    ) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "right")
+  p_tlx_subscales <- ggplot(df_tlx_subscales, aes(x = mean_score, y = Scale, color = modality)) +
+    geom_pointrange(aes(xmin = ci_lower, xmax = ci_upper), position = position_dodge(width = 0.4), size = 0.8, linewidth = 1) +
+    scale_color_modality(labels = c("hand" = "Hand", "gaze" = "Gaze")) +
+    labs(x = "NASA-TLX Score (0–100)", y = NULL, color = "Modality") +
+    theme_manuscript() +
+    theme(legend.position = "bottom", legend.key.size = unit(0.5, "lines"))
   
-  ggsave(file.path(output_dir, "tlx_stacked.png"), p_tlx_stacked, width = 7, height = 5, dpi = 300)
-  cat("  ✓ Saved tlx_stacked.png\n")
+  ggsave(file.path(output_dir, "tlx_subscales.png"), p_tlx_subscales, width = 6, height = 4.5, dpi = 300)
+  cat("  ✓ Saved tlx_subscales.png\n")
+  
+  # tlx_stacked intentionally not generated: do not use stacked bars for TLX subscales
 } else {
   cat("  ⚠ TLX columns not found, skipping TLX plots\n")
 }
@@ -362,19 +356,18 @@ if (nrow(df_iso) > 0 && "IDe" %in% names(df_iso) && "MT_avg" %in% names(df_iso))
     )
   
   p_fitts <- ggplot(df_iso, aes(x = IDe, y = MT_avg, color = modality)) +
-    geom_point(alpha = 0.3, size = 1) +
+    geom_point(alpha = 0.35, size = 1.2) +
     geom_smooth(method = "lm", se = TRUE, linewidth = 1.2) +
     facet_wrap(~modality, labeller = labeller(modality = c("hand" = "Hand", "gaze" = "Gaze"))) +
-    scale_color_manual(values = c("hand" = custom_palette_2[1], "gaze" = custom_palette_2[2])) +
+    scale_color_modality(guide = "none") +
     labs(
       x = "Effective Index of Difficulty (IDe, bits)",
       y = "Movement Time (s)",
-      title = "Fitts' Law Validation",
-      subtitle = paste0("Hand: R² = ", sprintf("%.3f", fitts_fits$r_squared[fitts_fits$modality == "hand"]),
-                       ", Gaze: R² = ", sprintf("%.3f", fitts_fits$r_squared[fitts_fits$modality == "gaze"]))
+      subtitle = paste0("Hand R² = ", sprintf("%.2f", fitts_fits$r_squared[fitts_fits$modality == "hand"]),
+                        "  |  Gaze R² = ", sprintf("%.2f", fitts_fits$r_squared[fitts_fits$modality == "gaze"]))
     ) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "none")
+    theme_manuscript() +
+    theme(plot.subtitle = element_text(size = rel(0.9), color = "grey40"))
   
   ggsave(file.path(output_dir, "fitts_validation.png"), p_fitts, width = 10, height = 5, dpi = 300)
   cat("  ✓ Saved fitts_validation.png\n")
