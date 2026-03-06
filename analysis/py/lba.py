@@ -680,7 +680,33 @@ def main():
             import matplotlib
             matplotlib.use('Agg')  # Non-interactive backend
             import matplotlib.pyplot as plt
-            az.plot_trace(trace, var_names=['vc_slope_mu', 'gap_slope_mu', 't0_mu'])
+            from arviz.labels import MapLabeller
+            # Distinct colors for chains/conditions (colorblind-friendly)
+            plt.rcParams['axes.prop_cycle'] = plt.cycler(
+                color=['#0173b2', '#de8f05', '#029e73', '#cc78bc', '#ca9161', '#fbafe4', '#949494', '#ece133']
+            )
+            labeller = MapLabeller(var_name_map={
+                'vc_slope_mu': 'Drift Rate Slope (ID)',
+                'gap_slope_mu': 'Threshold Slope (Pressure)',
+                't0_mu': 'Non-Decision Time',
+            })
+            az.plot_trace(
+                trace,
+                var_names=['vc_slope_mu', 'gap_slope_mu', 't0_mu'],
+                labeller=labeller,
+                compact=True,
+            )
+            fig = plt.gcf()
+            fig.subplots_adjust(hspace=0.5, wspace=0.3)
+            # Identical parameter range per row: density x-axis and trace y-axis aligned
+            axes = fig.get_axes()
+            for i, var in enumerate(['vc_slope_mu', 'gap_slope_mu', 't0_mu']):
+                vals = trace.posterior[var].values.flatten()
+                vmin, vmax = float(vals.min()), float(vals.max())
+                pad = 0.1 * (vmax - vmin) or 0.1
+                lim = (vmin - pad, vmax + pad)
+                axes[i * 2].set_xlim(lim)      # density: param on x-axis
+                axes[i * 2 + 1].set_ylim(lim)  # trace: param on y-axis
             plt.savefig(output_dir / 'lba_trace_plot.png', dpi=150, bbox_inches='tight')
             plt.close()
             print(f"  ✓ Saved: lba_trace_plot.png")

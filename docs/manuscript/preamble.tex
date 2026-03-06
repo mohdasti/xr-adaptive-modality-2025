@@ -1,4 +1,7 @@
 % ArXiv-style preamble for proper author metadata display
+% Improve PDF text extraction: disable ligatures that cause copy-paste artifacts
+\usepackage{microtype}
+\usepackage[T1]{fontenc}
 \usepackage{hyperref}
 \hypersetup{
     colorlinks=true,
@@ -22,6 +25,11 @@
 \floatplacement{figure}{H}
 \floatplacement{table}{H}
 
+% Keep tables from splitting awkwardly: require space before each table
+\usepackage{needspace}
+\usepackage{etoolbox}
+\BeforeBeginEnvironment{table}{\Needspace{10\baselineskip}}
+
 % Customize title page formatting with proper author block
 \makeatletter
 \renewcommand{\@maketitle}{%
@@ -31,6 +39,8 @@
   \begin{center}%
     \let \footnote \thanks
     {\LARGE \@title \par}%
+    \vskip 0.5em%
+    {\large\textit{Interim Report}\par}%
     \vskip 1.5em%
     {\large
       \begin{tabular}[t]{c}%
@@ -47,7 +57,7 @@
   \begin{center}
     \footnotesize
     \begin{tabular}{@{}l@{}}
-      \textsuperscript{1}Corresponding author: \href{mailto:mdast003@ucr.edu}{\texttt{mdast003@ucr.edu}}
+      \textsuperscript{1}Corresponding author: \href{mailto:mohammad.dastgheib@email.ucr.edu}{\texttt{mohammad.dastgheib@email.ucr.edu}}
     \end{tabular}
   \end{center}%
   \par
