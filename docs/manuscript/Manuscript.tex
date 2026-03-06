@@ -182,8 +182,6 @@
   \begin{center}%
     \let \footnote \thanks
     {\LARGE \@title \par}%
-    \vskip 0.5em%
-    {\large\textit{Interim Report}\par}%
     \vskip 1.5em%
     {\large
       \begin{tabular}[t]{c}%
@@ -264,13 +262,6 @@
 
 \title{Adaptive Modality Systems in Extended Reality: Optimizing
 Input-Output Bandwidth Through Context-Aware Gaze-Hand Switching}
-\usepackage{etoolbox}
-\makeatletter
-\providecommand{\subtitle}[1]{% add subtitle to \maketitle
-  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
-}
-\makeatother
-\subtitle{Interim Report}
 \author{Mohammad Dastgheib \and Fatemeh Pourmahdian}
 \date{2026-03-06}
 \begin{document}
@@ -280,25 +271,28 @@ Extended Reality (XR) interfaces impose both ergonomic and cognitive
 demands, yet current systems often force a binary choice between
 hand-based input, which can produce fatigue, and gaze-based input, which
 is vulnerable to the Midas Touch problem and precision limitations. We
-introduce the xr-adaptive-modality-2025 platform, a web-based framework
-for studying adaptive modality switching in XR. The platform combines
-physiologically accurate gaze simulation, an ISO 9241-9 multidirectional
-tapping task, and two adaptive interventions: gaze declutter and hand
-target-width inflation. We evaluated the system in a 2×2×2
-within-subjects design manipulating Modality (Hand vs.~Gaze), UI Mode
-(Static vs.~Adaptive), and Pressure (Yes vs.~No). Interim results from
-the current complete factorial sample (N=23) showed that hand yielded
-higher throughput than gaze (5.15 vs.~4.70 bits/s), lower error (1.75\%
-vs.~18.65\%), and lower workload on the NASA-TLX. Error profiles
-differed sharply by modality: gaze errors were predominantly slips
-(99.2\%), whereas hand errors were predominantly misses (95.7\%),
-consistent with the Midas Touch problem. Gaze declutter showed only
-modest benefit, reducing timeouts but not slips; hand width inflation
-was not evaluable in this dataset. In this interim dataset, the platform
-revealed modality-specific failure modes: hand selection remained more
-reliable overall, whereas gaze interaction was limited primarily by
-intent disambiguation. Confirmatory analyses will be reported after the
-planned complete sample of N=48 is reached.
+introduce the xr-adaptive-modality-2025 platform, a web-based
+open-source framework for studying whether context-driven adaptive
+switching between gaze and hand input can improve XR pointing
+performance and reduce workload relative to static unimodal interaction.
+The platform combines physiologically accurate gaze simulation, an ISO
+9241-9 multidirectional tapping task, and two modality-specific adaptive
+interventions: gaze declutter and hand target-width inflation. We
+evaluated the system in a 2×2×2 within-subjects design manipulating
+Modality (Hand vs.~Gaze), UI Mode (Static vs.~Adaptive), and Pressure
+(Yes vs.~No). Interim results from N=23 participants show that hand
+yielded higher throughput than gaze (5.15 vs.~4.70 bits/s), lower error
+(1.75\% vs.~18.65\%), and lower NASA-TLX workload. Crucially, error
+profiles differed sharply by modality: gaze errors were predominantly
+slips (99.2\%), whereas hand errors were predominantly misses (95.7\%),
+strongly supporting the Midas Touch account. Of the two adaptive
+interventions, only gaze declutter executed in this dataset; it modestly
+reduced timeouts but not slips. Hand width inflation was not evaluable
+due to a UI integration bug. These findings reveal modality-specific
+failure modes with direct implications for adaptive policy design, and
+establish the platform as a reproducible infrastructure for confirmatory
+studies. Full confirmatory analyses will be reported at the planned
+complete sample of N=48.
 \end{abstract}
 
 
@@ -306,7 +300,8 @@ planned complete sample of N=48 is reached.
 \vspace{-0.5em}
 
 \textbf{Keywords:} Extended Reality, Adaptive Interfaces, Gaze
-Interaction, Fitts's Law, Multimodal Interaction, Gaze Simulation
+Interaction, Fitts's Law, Multimodal Interaction, Gaze Simulation, Midas
+Touch, Linear Ballistic Accumulator, Intent Disambiguation
 
 \newpage
 
@@ -344,6 +339,26 @@ intended to address distraction during gaze selection and spatial
 difficulty during hand selection. The central question is whether
 adaptive modality logic can improve performance and workload relative to
 static unimodal interaction (Soukoreff \& MacKenzie, 2004).
+
+This paper makes three contributions. First, we present an
+\textbf{open-source platform} for controlled, reproducible study of
+adaptive gaze--hand switching in XR, including a physiologically
+informed gaze simulation, a policy-driven adaptation engine, and a full
+remote data collection infrastructure. Second, we provide
+\textbf{quantitative empirical evidence} on gaze vs.~hand input in an
+ISO 9241-9 pointing task (N=23 interim), showing that hand substantially
+outperforms gaze on throughput (5.15 vs.~4.70 bits/s) and error rate
+(1.75\% vs.~18.65\%), and that the dominant failure modes are
+modality-specific: slips (false activations) for gaze and misses
+(spatial targeting failures) for hand. Third, we demonstrate that a
+simple \textbf{gaze-declutter adaptation} modestly reduces timeouts but
+does not address the core slip-based failure mode of gaze interaction,
+which has direct implications for designing adaptive modality policies.
+Unlike prior gaze+hand paradigms that treat the two modalities as
+complementary components of a fixed multimodal combination (e.g., gaze
+for acquisition + hand for confirmation (Jacob, 1990)), this work
+investigates \emph{context-driven switching}---when and how the system
+should shift between modalities based on real-time performance signals.
 
 \section{Background and Related Work}\label{background-and-related-work}
 
@@ -405,11 +420,14 @@ al., 2004), ensuring that the ``cost'' of gaze interaction is accurately
 represented even when using a mouse proxy.
 
 We use Cognitive Load Theory (CLT) as a conceptual lens for reasoning
-about modality-specific costs (Hart, 2006). In principle, hand input may
-increase physical effort during larger reaches, whereas gaze input may
-increase extraneous attentional and verification demands during precise
-selection. The present study uses workload and performance measures to
-test whether those costs appear in the current task.
+about modality-specific costs (Sweller, 1988). CLT distinguishes
+intrinsic load (task difficulty) from extraneous load (interface
+overhead). In principle, hand input may increase physical effort
+(intrinsic load during larger reaches), whereas gaze input may increase
+extraneous attentional and verification demands during precise
+selection. The present study uses workload (NASA-TLX) and performance
+measures to test whether these modality-specific costs appear in the
+current task, and whether adaptive interventions can reduce them.
 
 \subsection{Adaptive Intervention
 Mechanisms}\label{adaptive-intervention-mechanisms}
@@ -439,6 +457,21 @@ interim dataset, the hand width-inflation pathway was not evaluable:
 width scaling remained at 1.0 across trials, and although the policy
 engine emitted inflate-width actions in some sessions, the rendered
 targets were not updated.
+
+\textbf{Differentiation from prior gaze+hand work.} Recent XR systems
+combine gaze and hand in fixed multimodal combinations: gaze for target
+acquisition and hand for confirmation or manipulation (Pfeuffer et al.,
+2017, 2024). Pfeuffer et al. (Pfeuffer et al., 2024) outline design
+principles for gaze+pinch interaction (e.g., division of labor,
+minimalistic timing), while Kim et al. (Kim et al., 2025) propose
+PinchCatcher, a semi-pinch quasi-mode for multi-selection in gaze+pinch
+interfaces. These approaches treat gaze and hand as complementary
+components of a fixed interaction paradigm. Our work differs by
+investigating \emph{context-driven switching}---when and how the system
+should shift between modalities based on real-time performance
+signals---rather than a fixed multimodal combination. We draw on
+context-aware computing principles (Dey, 2001) to frame policy-driven
+adaptation that responds to performance degradation.
 
 \section{Research Objectives}\label{research-objectives}
 
@@ -783,10 +816,15 @@ Strategy}\label{measures-and-analysis-strategy}
 
 The primary performance measures were Movement Time (MT) in milliseconds
 (from trial start to successful selection) and Selection Accuracy (hit
-vs.~miss rate, including specific error types: misses, timeouts, slips).
-From these, we computed Throughput (TP) in bits/second for each
-condition by combining each trial's effective ID (\(ID_e\)) and MT,
-following ISO 9241-9's recommended calculation using the effective
+vs.~miss rate, including specific error types). We classified errors
+into three categories following Reason's (1990) taxonomy of human error:
+\textbf{slips} (unintended activations---the cursor dwelled on a target
+the user did not intend to select), \textbf{misses} (failures of spatial
+targeting---the user attempted selection but did not acquire the target
+within bounds), and \textbf{timeouts} (no response within the 6-second
+trial window). From these, we computed Throughput (TP) in bits/second
+for each condition by combining each trial's effective ID (\(ID_e\)) and
+MT, following ISO 9241-9's recommended calculation using the effective
 target width \(W_e\) (computed from the spread of hit points) to
 incorporate accuracy into the difficulty measure.
 
@@ -801,14 +839,13 @@ caution: (1) \textbf{Macro-Performance (Fitts' Law)}---we modeled the
 overall throughput (bits/s) and the regression slope (\(b\)) to quantify
 the global cost of the gaze simulation lag, following standard ISO
 9241-9 throughput calculations; (2) \textbf{Path Quality (Control
-Theory)}---we calculated pre-computed submovement counts (velocity peaks
-detected in real-time) and target re-entries to quantify the ``cost of
-control,'' drawing on the Optimized Submovement Model (Meyer et al.,
-1988); (3) \textbf{Decision Verification (LBA)}---we used the Linear
-Ballistic Accumulator (LBA) model (Brown \& Heathcote, 2008) to analyze
-the verification phase (time from first target entry to final
-selection). LBA is robust to low error rates and allows estimation of
-non-decision time (NDT), drift rate, and decision threshold. We fit a
+Theory)}---we logged velocity profiles and submovement counts for future
+control-theory analysis; the present interim report focuses on
+macro-performance and LBA; (3) \textbf{Decision Verification (LBA)}---we
+used the Linear Ballistic Accumulator (LBA) model (Brown \& Heathcote,
+2008) to analyze the verification phase (time from first target entry to
+final selection). LBA is robust to low error rates and allows estimation
+of non-decision time (NDT), drift rate, and decision threshold. We fit a
 hierarchical Bayesian LBA model in PyMC with modality- and
 UI-mode-varying NDT, ID-varying drift rate, and pressure-varying
 threshold. For the verification-phase component, we used LBA rather than
@@ -926,16 +963,16 @@ substantially higher error rate than hand. Error bars show 95\% CI.}
 \end{figure}%
 
 \subsection{Error Profile: Midas Touch
-Confirmation}\label{error-profile-midas-touch-confirmation}
+Signature}\label{error-profile-midas-touch-signature}
 
 Error types differed sharply between modalities
 (Table~\ref{tbl-error-types}). For \textbf{gaze}, 99.2\% of errors were
 \textbf{slips} (accidental activations) and 0.8\% were timeouts. For
 \textbf{hand}, 95.7\% were \textbf{misses} (target not acquired) and
-4.3\% were timeouts. This asymmetry provides empirical confirmation of
-the Midas Touch problem: gaze interaction fails primarily due to intent
+4.3\% were timeouts. This asymmetry strongly supports the Midas Touch
+account (Jacob, 1990): gaze interaction failed primarily due to intent
 ambiguity (looking to see vs.~looking to select), whereas hand
-interaction fails due to spatial targeting errors.
+interaction failed due to spatial targeting errors.
 
 \begin{longtable}[]{@{}lcc@{}}
 \caption{Distribution of error types by modality. Gaze errors are
@@ -1294,12 +1331,45 @@ ambiguity. Declutter may help when performance degradation is driven by
 visual competition or hesitation, but it is unlikely to solve Midas
 Touch on its own. More generally, adaptive systems in XR should not be
 judged only by whether adaptation occurred, but by whether the
-adaptation targets the dominant failure mode of the modality. For gaze,
-that failure mode appears to be unintended activation; for hand, it
-appears to be spatial acquisition difficulty. The practical takeaway is
-therefore modality-specific: gaze is fast in principle but error-prone
-under confirmation demands, whereas hand is more precise and more stable
-for committed selection in the present task.
+adaptation targets the dominant failure mode of the modality.
+Table~\ref{tbl-design-implications} summarizes these modality-specific
+guidelines.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1724}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3966}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.4310}}@{}}
+\caption{Design implications: modality-specific failure modes and
+recommended adaptive
+interventions.}\label{tbl-design-implications}\tabularnewline
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Modality
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Dominant Failure Mode
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Recommended Adaptation
+\end{minipage} \\
+\midrule\noalign{}
+\endfirsthead
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Modality
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Dominant Failure Mode
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Recommended Adaptation
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Gaze & Slips (unintended activation) & Declutter for distraction-driven
+hesitation; intent disambiguation (dwell, confirmation) for core Midas
+Touch \\
+Hand & Misses (spatial targeting) & Width inflation / target expansion
+for acquisition difficulty \\
+\end{longtable}
 
 Several limitations qualify these conclusions. First, this is an interim
 report based on N=23 participants with complete factorial data, and
@@ -1307,17 +1377,20 @@ confirmatory mixed-effects analyses are planned at N=48. The current
 findings should therefore be interpreted as directional rather than
 definitive. Second, gaze was modeled through a physiologically informed
 mouse-based simulation rather than measured with a hardware eye tracker.
-That choice supports internal control, but limits direct generalization
-to real eye-tracking systems, which may introduce different latencies,
-noise profiles, and calibration errors. Third, the hand adaptation
-pathway was not evaluable (width inflation did not affect rendered
-targets), leaving RQ3 only partially answered. Fourth, seven
-participants were excluded from the primary factorial analysis because
-of a pressure-logging bug, although the bug has since been fixed.
-Finally, the task was restricted to an ISO 9241-9 multidirectional
-tapping paradigm, which captures one well-defined class of XR
-interaction but cannot fully represent more ecological tasks such as
-menu navigation, object manipulation, or extended mixed-modality
+That choice supports internal control by preserving key oculomotor
+constraints (lag, jitter, saccadic blindness) while enabling precise
+manipulation of noise characteristics; prior work has validated
+mouse-as-gaze proxies for controlled pointing experiments. However, this
+limits direct generalization to real eye-tracking systems, which may
+introduce different latencies, noise profiles, and calibration errors.
+Third, the hand adaptation pathway was not evaluable (width inflation
+did not affect rendered targets), leaving RQ3 only partially answered.
+Fourth, seven participants were excluded from the primary factorial
+analysis because of a pressure-logging bug, although the bug has since
+been fixed. Finally, the task was restricted to an ISO 9241-9
+multidirectional tapping paradigm, which captures one well-defined class
+of XR interaction but cannot fully represent more ecological tasks such
+as menu navigation, object manipulation, or extended mixed-modality
 workflows.
 
 These limitations point directly to the next phase of the project. The
@@ -1468,16 +1541,16 @@ Brown, S. D., \& Heathcote, A. (2008). The linear ballistic accumulator
 model of simple choice and reaction time. \emph{Cognitive Psychology},
 \emph{57}(3), 153--178.
 
+\bibitem[\citeproctext]{ref-dey2001}
+Dey, A. K. (2001). Understanding and using context. \emph{Personal and
+Ubiquitous Computing}, \emph{5}(1), 4--7.
+\url{https://doi.org/10.1007/s007790170019}
+
 \bibitem[\citeproctext]{ref-grossman2005bubble}
 Grossman, T., \& Balakrishnan, R. (2005). The bubble cursor: Enhancing
 target acquisition by dynamic resizing of the cursor's activation area.
 \emph{Proceedings of the SIGCHI Conference on Human Factors in Computing
 Systems}, 281--290.
-
-\bibitem[\citeproctext]{ref-hart2006nasa}
-Hart, S. G. (2006). NASA-task load index (NASA-TLX); 20 years later.
-\emph{Proceedings of the Human Factors and Ergonomics Society Annual
-Meeting}, \emph{50}, 904--908.
 
 \bibitem[\citeproctext]{ref-herling2010}
 Herling, J., \& Broll, W. (2010). Advanced self-contained object removal
@@ -1494,6 +1567,12 @@ Terminals (VDTs) --- Part 9: Requirements for Non-Keyboard Input Devices
 Jacob, R. J. (1990). What you look at is what you get: Eye
 movement-based interaction techniques. \emph{Proceedings of the SIGCHI
 Conference on Human Factors in Computing Systems}, 11--18.
+
+\bibitem[\citeproctext]{ref-kim2025pinchcatcher}
+Kim, J., Park, S., Zhou, Q., Gonzalez-Franco, M., Lee, J., \& Pfeuffer,
+K. (2025). PinchCatcher: Enabling multi-selection for gaze+pinch.
+\emph{Proceedings of the CHI Conference on Human Factors in Computing
+Systems}.
 
 \bibitem[\citeproctext]{ref-lerche2017}
 Lerche, V., Voss, A., \& Nagler, M. (2017). How many trials are required
@@ -1535,10 +1614,19 @@ Luebke, D., \& Lefohn, A. (2016). Towards foveated rendering for
 gaze-tracked virtual reality. \emph{ACM Transactions on Graphics (TOG)},
 \emph{35}(6), 1--12.
 
+\bibitem[\citeproctext]{ref-pfeuffer2024gaze}
+Pfeuffer, K., Gellersen, H., \& Gonzalez-Franco, M. (2024). Design
+principles and challenges for gaze + pinch interaction in XR. \emph{IEEE
+Computer Graphics and Applications}, \emph{44}(3), 74--81.
+\url{https://doi.org/10.1109/MCG.2024.3382961}
+
 \bibitem[\citeproctext]{ref-pfeuffer2017gaze}
 Pfeuffer, K., Mayer, B., Mardanbegi, D., \& Gellersen, H. (2017). Gaze+
 pinch interaction in virtual reality. \emph{Proceedings of the 5th
 Symposium on Spatial User Interaction}, 99--108.
+
+\bibitem[\citeproctext]{ref-reason1990}
+Reason, J. (1990). \emph{Human error}. Cambridge University Press.
 
 \bibitem[\citeproctext]{ref-saunders2014}
 Saunders, D. R., \& Woods, R. L. (2014). Direct measurement of the
@@ -1550,6 +1638,10 @@ Soukoreff, R. W., \& MacKenzie, I. S. (2004). Towards a standard for
 pointing device evaluation, perspectives on 27 years of fitts' law
 research in HCI. \emph{International Journal of Human-Computer Studies},
 \emph{61}(6), 751--789.
+
+\bibitem[\citeproctext]{ref-sweller1988}
+Sweller, J. (1988). Cognitive load during problem solving: Effects on
+learning. \emph{Cognitive Science}, \emph{12}(2), 257--285.
 
 \bibitem[\citeproctext]{ref-ware1987}
 Ware, C., \& Mikaelian, H. H. (1987). An evaluation of an eye tracker as
