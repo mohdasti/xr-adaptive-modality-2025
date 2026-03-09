@@ -1,0 +1,4 @@
+population,description,n_participants,trials,hand_trials,gaze_trials,tlx_observations,blocks_per_participant,matches_rm_design
+A,Current pipeline (no 8-block gate),81,16711,8113,8598,492,varies,no
+B,8-block complete (primary),69,15105,7560,7545,441,8,yes
+C,8-block + check_exclusions,68,14889,7452,7437,433,8,yes

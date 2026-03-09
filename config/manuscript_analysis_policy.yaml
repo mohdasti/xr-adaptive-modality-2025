@@ -1,0 +1,49 @@
+# Manuscript Analysis Policy
+# Source of truth for participant/trial inclusion in manuscript-facing analyses.
+# Used by: scripts/compute_manuscript_stats.py, scripts/export_case_study_assets.R,
+#          scripts/compute_analysis_populations.py
+
+# Trial-level QC (applied before any analysis)
+trial_qc:
+  exclude_practice: true
+  zoom_pct: 100
+  fullscreen_required: true
+  tab_hidden_max_ms: 500
+  focus_blur_max: 0
+
+# Input device rules (per INPUT_DEVICE_EXCLUSION_STRATEGY.md)
+input_device:
+  hand: ["mouse"]           # hand modality: mouse only
+  gaze: ["mouse", "trackpad"]  # gaze: both
+
+# Primary repeated-measures sample
+primary_sample:
+  require_8_blocks: true
+  description: "Participants with all 8 blocks after QC and device filter"
+
+# Valid trials for performance metrics (TP, error rate, MT)
+valid_trials:
+  correct: true
+  rt_min_ms: 150
+  rt_max_ms: 6000
+
+# Analysis-specific filters
+tlx:
+  use_primary_sample: true
+  # TLX at block level; participants with missing TLX in some blocks still contribute
+
+fitts:
+  use_primary_sample: true
+  valid_trials: true
+
+lba:
+  use_primary_sample: true
+  verification_time_min_ms: 200
+  verification_time_max_ms: 5000
+
+# Design constants (for manuscript wording)
+design:
+  blocks_per_participant: 8
+  trials_per_block: 27
+  total_main_trials_per_complete: 216  # 8 * 27
+  tlx_administrations: 8  # after each block

@@ -2,48 +2,26 @@
 """
 Compute manuscript statistics from trial data.
 Outputs: NASA-TLX subscales, Fitts' Law slopes, width scaling check, etc.
+Uses manuscript_analysis_policy: 8-block-complete primary sample.
 Run from project root: python3 scripts/compute_manuscript_stats.py
 """
 
-import pandas as pd
-import numpy as np
+import sys
 from pathlib import Path
 
+# Ensure scripts/ is on path for manuscript_inclusion import
+_scripts_dir = Path(__file__).resolve().parent
+if str(_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(_scripts_dir))
+
+import pandas as pd
+import numpy as np
+
+from manuscript_inclusion import load_and_prep
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_PATH = PROJECT_ROOT / "data" / "clean" / "trial_data.csv"
 OUTPUT_DIR = PROJECT_ROOT / "docs" / "manuscript" / "assets"
 TLX_COLS = ["tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration"]
-
-
-def load_and_prep():
-    """Load trial data with QC filters matching Report.qmd."""
-    df = pd.read_csv(DATA_PATH, low_memory=False)
-    if "participant_id" in df.columns and "pid" not in df.columns:
-        df = df.rename(columns={"participant_id": "pid"})
-    if "movement_time_ms" in df.columns and "rt_ms" not in df.columns:
-        df = df.rename(columns={"movement_time_ms": "rt_ms"})
-
-    # QC filter (matching Report.qmd): exclude practice trials
-    practice_col = df.get("practice", pd.Series(dtype=object))
-    practice_ok = practice_col.isna() | (practice_col == False) | (practice_col.astype(str).str.lower() == "false")
-    zoom_ok = df.get("zoom_pct", 100).fillna(100) == 100
-    fullscreen_ok = df.get("is_fullscreen", True).fillna(True) | df.get("fullscreen", True).fillna(True)
-    tab_ok = df.get("tab_hidden_ms", 0).fillna(0) < 500
-    focus_ok = df.get("focus_blur_count", 0).fillna(0) == 0
-    df["trial_qc_ok"] = practice_ok & zoom_ok & fullscreen_ok & tab_ok & focus_ok
-
-    df = df[df["trial_qc_ok"]].copy()
-    df["modality"] = df["modality"].str.lower().replace("gaze_confirm", "gaze")
-    df["ui_mode"] = df["ui_mode"].str.lower()
-
-    # Input device exclusion
-    if "input_device" in df.columns:
-        df = df[
-            (df["input_device"] == "mouse")
-            | ((df["input_device"] == "trackpad") & (df["modality"] == "gaze"))
-        ]
-
-    return df
 
 
 def compute_tlx_subscales(df: pd.DataFrame) -> pd.DataFrame:
@@ -177,8 +155,8 @@ def compute_width_scaling_check(df: pd.DataFrame) -> dict:
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    df = load_and_prep()
-    print(f"Loaded {len(df)} QC-ok trials, {df['pid'].nunique()} participants")
+    df = load_and_prep(require_8_blocks=True)
+    print(f"Loaded {len(df)} QC-ok trials, {df['pid'].nunique()} participants (8-block complete)")
 
     # NASA-TLX subscales
     tlx = compute_tlx_subscales(df)

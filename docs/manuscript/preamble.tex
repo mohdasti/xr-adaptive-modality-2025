@@ -17,12 +17,16 @@
 \usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{tabularx}
 \usepackage{orcidlink}
 \usepackage{float}
 
 % Force figures and tables to appear exactly where placed (no floating)
 \floatplacement{figure}{H}
 \floatplacement{table}{H}
+
+% Slightly smaller font for tables to reduce wrapping
+\AtBeginEnvironment{table}{\small}
 
 % Keep tables from splitting awkwardly: require space before each table
 \usepackage{needspace}

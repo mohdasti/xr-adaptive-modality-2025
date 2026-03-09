@@ -111,6 +111,16 @@ if ("input_device" %in% names(df)) {
     )
 }
 
+# Manuscript policy: 8-block-complete primary sample (audit/manuscript_analysis_policy.md)
+pids_8block <- df_all_trials %>%
+  group_by(pid) %>%
+  summarise(n_blocks = n_distinct(block_number), .groups = "drop") %>%
+  filter(n_blocks == 8) %>%
+  pull(pid)
+df <- df %>% filter(pid %in% pids_8block)
+df_all_trials <- df_all_trials %>% filter(pid %in% pids_8block)
+cat("Manuscript policy: restricted to", length(pids_8block), "participants with 8 blocks\n")
+
 # Calculate ISO metrics (Throughput)
 df_iso <- df %>%
   group_by(pid, modality, ui_mode, pressure, A, W) %>%
@@ -278,8 +288,8 @@ if ("err_type" %in% names(df_all_trials)) {
 cat("Generating Figure E: NASA-TLX...\n")
 tlx_cols <- c("tlx_mental", "tlx_physical", "tlx_temporal", "tlx_performance", "tlx_effort", "tlx_frustration")
 if (all(tlx_cols %in% names(df_raw))) {
-  df_tlx <- df_raw %>%
-    filter(!is.na(pid), trial_qc_ok) %>%
+  df_tlx <- df_all_trials %>%
+    filter(!is.na(pid)) %>%
     select(pid, modality, ui_mode, all_of(tlx_cols)) %>%
     pivot_longer(cols = all_of(tlx_cols), names_to = "Scale", values_to = "Score") %>%
     filter(!is.na(Score)) %>%
@@ -419,8 +429,8 @@ results_glance <- bind_rows(
     ),
   # TLX (if available)
   if (all(tlx_cols %in% names(df_raw))) {
-    df_raw %>%
-      filter(!is.na(pid), trial_qc_ok) %>%
+    df_all_trials %>%
+      filter(!is.na(pid)) %>%
       group_by(pid, modality) %>%
       summarise(overall_tlx = mean(c_across(all_of(tlx_cols)), na.rm = TRUE), .groups = "drop") %>%
       group_by(modality) %>%
@@ -519,14 +529,14 @@ cat("Throughput: Hand =", sprintf("%.2f", tp_hand), "[", sprintf("%.2f", tp_hand
 
 # Overall TLX per modality, delta
 if (all(tlx_cols %in% names(df_raw))) {
-  tlx_hand <- df_raw %>%
-    filter(!is.na(pid), trial_qc_ok, modality == "hand") %>%
+  tlx_hand <- df_all_trials %>%
+    filter(!is.na(pid), modality == "hand") %>%
     group_by(pid) %>%
     summarise(overall_tlx = mean(c_across(all_of(tlx_cols)), na.rm = TRUE), .groups = "drop") %>%
     pull(overall_tlx) %>%
     mean(na.rm = TRUE)
-  tlx_gaze <- df_raw %>%
-    filter(!is.na(pid), trial_qc_ok, modality == "gaze") %>%
+  tlx_gaze <- df_all_trials %>%
+    filter(!is.na(pid), modality == "gaze") %>%
     group_by(pid) %>%
     summarise(overall_tlx = mean(c_across(all_of(tlx_cols)), na.rm = TRUE), .groups = "drop") %>%
     pull(overall_tlx) %>%

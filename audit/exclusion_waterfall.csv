@@ -1,0 +1,10 @@
+exclusion_step,participants_before,participants_removed,participants_after,participant_ids_removed,evidence_source_file,notes
+0_in_trial_data,0,0,81,,data/clean/trial_data.csv,All participants who submitted data (in merged CSV)
+1_practice_excluded,81,0,81,,scripts/compute_manuscript_stats.py,Trial-level only; all have non-practice trials
+2_trial_QC_display,81,0,81,,Manuscript.qmd line 141,"zoom=100, fullscreen, tab<500ms, focus=0; no participant has >40% excluded"
+3_input_device_filter,81,0,81,,scripts/compute_manuscript_stats.py,Trial-level: drop hand trials from trackpad; affects block count
+4_complete_8_blocks,81,12,69,"P002,P030,P037,P043,P048,P057,P059,P061,P063,P072,P073,P078",docs/EXCLUSION_CRITERIA.md,"After input-device filter: 6 trackpad (4 blocks each) + 6 mouse (incomplete)"
+5_both_pressure_levels,69,0,69,,docs/EXCLUSION_CRITERIA.md,All 69 have both pressure=0 and pressure=1 (pressure corrected from block_order)
+6_valid_trials_50pct,69,0,69,,docs/EXCLUSION_CRITERIA.md,All meet ≥50% valid RT (150-6000ms) and correct
+7_final_current_pipeline,69,0,69,,audit,Current trial_data + compute_manuscript_stats QC yields N=69
+8_manuscript_N67_gap,69,2,67,,manuscript,Manuscript reports N=67; 2-participant gap not reproduced

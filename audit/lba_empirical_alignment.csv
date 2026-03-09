@@ -1,0 +1,5 @@
+condition,modality,ui_mode,t0_mu_mean,empirical_verify_mean_ms,ordering_rank_t0,ordering_rank_empirical
+Hand – Adaptive,hand,adaptive,-3.01,414,1,1
+Hand – Static,hand,static,-2.85,436,2,2
+Gaze – Static,gaze,static,-1.41,558,3,3
+Gaze – Adaptive,gaze,adaptive,-0.97,599,4,4

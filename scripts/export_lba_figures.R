@@ -87,6 +87,8 @@ if (file.exists(lba_path)) {
 }
 
 # --- EMPIRICAL VERIFICATION-PHASE RT (bridge figure) ---
+# Policy: 200-5000 ms (match LBA), 8-block complete, QC, device filter (audit/verification_phase_definition.md)
+condition_levels <- c("Hand – Static", "Hand – Adaptive", "Gaze – Static", "Gaze – Adaptive")
 cat("Generating empirical verification-phase RT figure...\n")
 data_paths <- c("data/clean/trial_data.csv", "../data/clean/trial_data.csv")
 df_raw <- NULL
@@ -101,10 +103,37 @@ if (!is.null(df_raw) && "verification_time_ms" %in% names(df_raw)) {
   if ("participant_id" %in% names(df_raw) && !"pid" %in% names(df_raw)) {
     df_raw <- df_raw %>% rename(pid = participant_id)
   }
+  # QC (match export_case_study_assets.R)
+  df_raw <- df_raw %>%
+    mutate(
+      trial_qc_ok = (
+        (practice == FALSE | practice == "false" | is.na(practice)) &
+        (is.na(zoom_pct) | zoom_pct == 100) &
+        (is.na(is_fullscreen) | is_fullscreen == TRUE | (if("fullscreen" %in% names(.)) fullscreen == TRUE else TRUE)) &
+        (is.na(tab_hidden_ms) | tab_hidden_ms < 500) &
+        (is.na(focus_blur_count) | focus_blur_count == 0)
+      )
+    )
+  # 8-block primary sample (match manuscript policy)
+  pids_8block <- df_raw %>%
+    filter(trial_qc_ok) %>%
+    group_by(pid) %>%
+    summarise(n_blocks = n_distinct(block_number), .groups = "drop") %>%
+    filter(n_blocks == 8) %>%
+    pull(pid)
+  # Device filter
+  if ("input_device" %in% names(df_raw)) {
+    df_raw <- df_raw %>%
+      filter(
+        input_device == "mouse" |
+        (input_device == "trackpad" & modality == "gaze")
+      )
+  }
   df_verify <- df_raw %>%
     filter(
-      !is.na(verification_time_ms), verification_time_ms >= 50, verification_time_ms <= 5000,
-      (practice == FALSE | practice == "false" | is.na(practice))
+      trial_qc_ok,
+      pid %in% pids_8block,
+      !is.na(verification_time_ms), verification_time_ms >= 200, verification_time_ms <= 5000
     ) %>%
     mutate(
       modality = factor(modality, levels = c("hand", "gaze")),

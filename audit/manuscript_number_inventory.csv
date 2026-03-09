@@ -1,0 +1,51 @@
+manuscript_section,exact_text_snippet,reported_value,value_type,likely_source_file,status
+abstract,N=67 participants,67,N,Participants / pipeline,unresolved
+abstract,5.15 vs. 4.70 bits/s,"5.15, 4.70",throughput,docs/assets or Report,verified
+abstract,1.75% vs. 18.65%,"1.75, 18.65",error_rate,docs/assets or Report,verified
+abstract,99.2% slips (gaze),"99.2",percentage,docs/assets,verified
+abstract,95.7% misses (hand),"95.7",percentage,docs/assets,verified
+introduction,N=67,67,N,Participants,unresolved
+participants,N=81 enrolled,81,N,participant_tracking / trial_data,verified
+participants,N=67 with complete 2×2×2,67,N,pipeline,unresolved
+participants,14 excluded (10 no usable 4 incomplete),14,exclusion_count,manuscript,unresolved
+procedure,4 blocks of 40 trials each,4,block_count,manuscript,contradicted
+procedure,40 trials each,40,trials_per_block,manuscript,contradicted
+procedure,160 trials total,160,total_trials,manuscript,contradicted
+procedure,Pressure varied within blocks,NA,wording,manuscript,contradicted
+results,N=67 participants,67,N,Results,unresolved
+results,14,688 valid trials,14688,trial_count,Results,unresolved
+results,7,344 per modality,7344,trial_count_per_modality,Results,unresolved
+tbl-performance,5.15 [5.06 5.25] hand,5.15,throughput,docs/manuscript/assets or export_case_study,verified
+tbl-performance,4.70 [4.56 4.83] gaze,4.70,throughput,docs/manuscript/assets,verified
+tbl-performance,1.75 [1.23 2.26] hand,1.75,error_rate,docs/manuscript/assets,verified
+tbl-performance,18.65 [17.26 20.04] gaze,18.65,error_rate,docs/manuscript/assets,verified
+tbl-performance,1.09 [1.07 1.11] hand MT,1.09,movement_time,docs/manuscript/assets,verified
+tbl-performance,1.19 [1.16 1.23] gaze MT,1.19,movement_time,docs/manuscript/assets,verified
+tbl-error-types,99.2% gaze slips,99.2,percentage,docs/manuscript/assets,verified
+tbl-error-types,95.7% hand misses,95.7,percentage,docs/manuscript/assets,verified
+tbl-error-types,4.3% hand timeouts,4.3,percentage,docs/manuscript/assets,verified
+tbl-error-types,0.8% gaze timeouts,0.8,percentage,docs/manuscript/assets,verified
+RQ3,18.2% adaptive gaze error,18.2,percentage,docs/manuscript/assets,verified
+RQ3,19.1% static gaze error,19.1,percentage,docs/manuscript/assets,verified
+RQ3,1.18% to 0.42% timeouts,1.18 0.42,percentage,docs/manuscript/assets,verified
+tbl-tlx,40.4 [37.0 43.8] hand overall,40.4,TLX_mean,docs/manuscript/assets/tlx_subscales,verified
+tbl-tlx,47.0 [43.9 50.2] gaze overall,47.0,TLX_mean,docs/manuscript/assets/tlx_subscales,verified
+tbl-tlx,34.3 [30.8 37.8] hand physical,34.3,TLX_subscale,docs/manuscript/assets,verified
+tbl-tlx,41.9 [38.4 45.4] gaze physical,41.9,TLX_subscale,docs/manuscript/assets,verified
+tbl-tlx,32.2 [28.5 35.9] hand frustration,32.2,TLX_subscale,docs/manuscript/assets,verified
+tbl-tlx,43.2 [39.5 46.9] gaze frustration,43.2,TLX_subscale,docs/manuscript/assets,verified
+tbl-lba-params,t0 Hand-Static −2.85,−2.85,LBA_parameter,outputs/LBA or lba.py,verified
+tbl-lba-params,t0 Hand-Adaptive −3.01,−3.01,LBA_parameter,outputs/LBA,verified
+tbl-lba-params,t0 Gaze-Static −1.41,−1.41,LBA_parameter,outputs/LBA,verified
+tbl-lba-params,t0 Gaze-Adaptive −0.97,−0.97,LBA_parameter,outputs/LBA,verified
+tbl-lba-params,ID Slope −0.93,−0.93,LBA_parameter,outputs/LBA,verified
+tbl-lba-params,Pressure Slope 0.06,0.06,LBA_parameter,outputs/LBA,verified
+tbl-fitts,Hand-Static 0.155,0.155,slope,docs/manuscript/assets/fitts_slopes,verified
+tbl-fitts,Hand-Adaptive 0.146,0.146,slope,docs/manuscript/assets/fitts_slopes,verified
+tbl-fitts,Gaze-Static 0.179,0.179,slope,docs/manuscript/assets/fitts_slopes,verified
+tbl-fitts,Gaze-Adaptive 0.193,0.193,slope,docs/manuscript/assets/fitts_slopes,verified
+tbl-fitts,R² 0.54 hand,0.54,r_squared,docs/manuscript/assets,verified
+tbl-fitts,R² 0.28–0.35 gaze,"0.28–0.35",r_squared,docs/manuscript/assets,verified
+appendix,width_scale_factor remained 1.0,1.0,width_scaling,docs/manuscript/assets/width_scaling_check,verified
+appendix,0 trials with scaling,0,trial_count,docs/manuscript/assets,verified
+limitations,seven participants excluded pressure bug,7,exclusion_count,docs/EXCLUSION_CRITERIA,verified
