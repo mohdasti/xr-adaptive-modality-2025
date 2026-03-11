@@ -192,10 +192,9 @@
         University of California, Riverside \\
         \href{mailto:mohammad.dastgheib@email.ucr.edu}{\texttt{mohammad.dastgheib@email.ucr.edu}} \\[0.5em]
         Fatemeh Pourmahdian \orcidlink{0009-0007-5473-2070} \\
-        \href{mailto:fatemepourmahd@gmail.com}{\texttt{fatemepourmahd@gmail.com}}
+        \href{mailto:fatemepourmahd@gmail.com}{\texttt{fatemepourmahd@gmail.com}} \\
+        Independent Researcher \\
       \end{tabular}\par}%
-    \vskip 1em%
-    {\large \@date \par}%
   \end{center}%
   \vskip 0.5em%
   \begin{center}
@@ -603,7 +602,7 @@ the selection tolerance model.
 
 \centering{
 
-\includegraphics[width=0.9\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/psychophysics.png}
+\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/psychophysics.png}
 
 }
 
@@ -678,7 +677,7 @@ Figure~\ref{fig-task-layout} shows the task interface.
 
 \centering{
 
-\includegraphics[width=0.85\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/Task_layout.png}
+\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{../assets/case_study/Task_layout.png}
 
 }
 
@@ -714,15 +713,17 @@ aside from noticing the visual changes, to reduce expectancy biases.
 \subsubsection{Sample Size and
 Recruitment}\label{sample-size-and-recruitment}
 
-A total of 81 participants enrolled and completed at least one session.
-After applying the study's trial-validity and factorial-completeness
-criteria, 69 participants were retained for the primary analysis. The
-retained sample had a mean age of 30.0 years (SD = 7.5; range = 18--62)
-and included 39 men and 30 women. Most participants were right-handed
-(91.3\%), and all retained participants completed the hand condition
-using a mouse with the right hand. Participants reported no motor
-impairments. The study was approved by the Institutional Review Board
-(IRB) and all participants provided informed consent.
+A total of 81 participants enrolled and completed the task. After
+applying the inclusion criteria, study's trial-validity, and
+factorial-completeness criteria, 69 participants were retained for the
+primary analysis. The retained sample had a mean age of 30.0 years (SD =
+7.5; range = 18--62) and included 39 men and 30 women. Most participants
+were right-handed (91.3\%), and all retained participants completed the
+hand condition using a mouse with the right hand. Participants reported
+no motor impairments. This study was conducted as an independent
+personal research project and was not reviewed by an institutional
+review board. Participants provided informed consent electronically
+through the web application before participation.
 
 \subsection{Procedure}\label{procedure}
 
@@ -732,7 +733,7 @@ dwell clicking) and hand selection. During the experiment, they
 performed 8 blocks of 27 trials each (216 main-task trials per
 participant before trial-level exclusions). Practice trials were
 excluded from analysis. Target positions cycled through 8 directions;
-Index of Difficulty varied across three levels (\$\approx\$2--6 bits).
+Index of Difficulty varied across three levels (\(\approx\) 2--6 bits).
 Pressure (time-limited vs.~self-paced) was assigned at the block level.
 
 After each block, participants filled out a NASA-TLX workload survey
@@ -757,42 +758,51 @@ confidence intervals.
 \subsubsection{Throughput and Fitts-Style Performance
 Metrics}\label{throughput-and-fitts-style-performance-metrics}
 
-We adopted the \textbf{Shannon formulation} of Fitts's Law (Soukoreff \&
-MacKenzie, 2004), the standard for ISO 9241-9 compliance:
-\(ID = \log_2(D/W + 1)\). Movement time is modeled as
-\(MT = a + b \cdot ID\). The slope \(b\) represents the movement-time
-cost per additional bit of difficulty; correspondingly, smaller slopes
-imply higher information-processing efficiency. To standardize
-performance across users with varying error rates, we use
-\textbf{Effective Width} (\(W_e\)) derived from the spatial distribution
-of selection endpoints. Consistent with ISO 9241-9,
-\(W_e = 4.133 × \sigma_x\), where \(\sigma_x\) is the standard deviation
-of projected errors onto the task axis. This normalizes the error rate
-to 4\%, allowing \textbf{Throughput} (\(TP = ID_e/MT\)) as a unified
-metric of speed and accuracy. We also logged velocity profiles and
-submovement counts for control-theory analysis (Meyer et al., 1988); the
-present report focuses on macro-performance and LBA.
+We adopted the Shannon formulation of Fitts's Law (Soukoreff \&
+MacKenzie, 2004), the standard form used for ISO 9241-9 compliance:
+\(ID = \log_2(D/W + 1)\), where \(D\) is target distance and \(W\) is
+target width. Movement time was modeled as \(MT = a + b \cdot ID\),
+where \(a\) is the intercept and \(b\) reflects the movement-time cost
+per additional bit of difficulty; smaller slopes therefore imply greater
+information-processing efficiency. To account for endpoint variability,
+we used Effective Width (\(W_e\)), computed from the distribution of
+selection endpoints as \(W_e = 4.133 \sigma_x\), where \(\sigma_x\) is
+the standard deviation of endpoint error projected onto the task axis.
+This ISO-based correction yields an effective index of difficulty
+(\(ID_e\)) and allows Throughput (\(TP = ID_e / MT\)) to serve as a
+unified measure of speed--accuracy performance. We also logged velocity
+profiles and submovement counts for control-theoretic analysis (Meyer et
+al., 1988), although those measures are not the focus of the present
+report.
 
 \subsubsection{Verification-Phase Modeling with
 LBA}\label{verification-phase-modeling-with-lba}
 
-We adopted a \textbf{Hybrid Analysis} framework to disentangle ``motor''
-performance from ``decision'' caution. For the verification phase (time
-from first target entry to final selection), we used the \textbf{Linear
-Ballistic Accumulator (LBA)} (Brown \& Heathcote, 2008). LBA treats the
-decision as a race between independent accumulators: evidence
-accumulates linearly from a starting point \(A\) with drift rate \(d_i\)
-until reaching threshold \(b\). Unlike Drift Diffusion Models, LBA is
-robust to low-error scenarios typical of Fitts' tasks (Lerche et al.,
-2017). The model estimated condition-varying non-decision time (t0)
-together with drift rate and decision threshold. In the fitted
-parameterization, t0 is reported on the model's latent scale rather than
-as a directly observed millisecond quantity; condition differences in t0
-are interpreted directionally and in conjunction with empirical
-verification-phase RT summaries. We fit a hierarchical Bayesian LBA
-model in PyMC with modality- and UI-mode-varying t0, ID-varying drift
-rate, and pressure-varying threshold. The model used verification-phase
-RTs (200--5000 ms) from valid trials.
+To better understand behavior after the pointer first entered the
+target, we modeled the verification phase---the interval between first
+target entry and final selection---as a latent decision process. This
+phase is intended to capture the extra time users may spend confirming
+that the correct target has been acquired before committing to
+selection. We used the \textbf{Linear Ballistic Accumulator (LBA)} model
+(Brown \& Heathcote, 2008), a race model in which evidence for competing
+responses increases linearly until one reaches threshold. In behavioral
+terms: \textbf{drift rate} reflects how quickly and how well evidence
+accumulates that the target acquisition is correct; \textbf{threshold}
+reflects how much evidence is required before committing to selection;
+and \textbf{\(t_0\)} is a verification-related latent offset capturing
+residual non-accumulation time.
+
+In our fitted parameterization, \(t_0\) is reported on a latent scale
+rather than as a directly observed millisecond quantity, so condition
+differences in \(t_0\) are interpreted directionally and in conjunction
+with the empirical verification-phase RT summaries. We chose LBA rather
+than a Drift Diffusion Model because these data come from a low-error
+pointing task, a setting in which LBA is often more stable and
+interpretable than diffusion-based approaches (Lerche et al., 2017). We
+fit a hierarchical Bayesian LBA model in PyMC with modality- and
+UI-mode-varying \(t_0\), ID-varying drift rate, and pressure-varying
+threshold, using verification-phase RTs from valid trials (200--5000
+ms).
 
 \subsection{Deployment and Data Collection
 Infrastructure}\label{deployment-and-data-collection-infrastructure}
@@ -801,12 +811,11 @@ The experimental platform was deployed as a web application (React 18,
 TypeScript, Vite) hosted on Vercel
 (https://xr-adaptive-modality-2025.vercel.app) to enable remote,
 asynchronous data collection. Each participant received a unique URL
-containing embedded participant ID and session number parameters (e.g.,
-\texttt{?pid=P001\&session=1}). The application automatically detected
-these parameters on load, initializing the session with the appropriate
-identifier. Session state was managed client-side using browser
-localStorage, enabling participants to pause and resume sessions while
-maintaining progress tracking.
+containing embedded participant ID. The application automatically
+detected these parameters on load, initializing the session with the
+appropriate identifier. Session state was managed client-side using
+browser localStorage, enabling participants to pause and resume sessions
+while maintaining progress tracking.
 
 Data collection occurred entirely client-side to ensure participant
 privacy. The application implemented a structured CSV logging system
@@ -1020,17 +1029,21 @@ largest modality differences. Error bars show 95\% CI.}
 \subsection{LBA Cognitive Modeling}\label{lba-cognitive-modeling}
 
 Table~\ref{tbl-lba-params} reports group-level LBA parameter estimates
-by modality and UI mode. The non-decision-time parameter (t0) is the
-primary parameter that varies across conditions; it is reported on the
-model's latent scale, not as a raw duration in milliseconds. More
-rightward (less negative) values indicate a larger verification-related
-offset under the fitted parameterization. Figure~\ref{fig-lba-t0}
-visualizes the t0 posterior estimates and 95\% HDIs by condition; gaze
-conditions show higher (less negative) t0 values than hand conditions,
-consistent with longer verification-phase duration in the empirical
-data. Figure~\ref{fig-verification-rt} shows the empirical
-verification-phase RT by condition; the condition ordering matches the
-latent t0 ordering.
+by modality and UI mode. In the fitted model, the primary
+condition-sensitive parameter was \(t_0\); drift base, the ID-related
+drift slope, and the pressure-related threshold slope were modeled as
+shared effects and therefore do not vary across modality × UI rows in
+Table~\ref{tbl-lba-params}. The non-decision-time parameter (\(t_0\)) is
+reported on the model's latent scale, not as a raw duration in
+milliseconds. More rightward (less negative) values indicate a larger
+verification-related offset under the fitted parameterization.
+Figure~\ref{fig-lba-t0} visualizes the \(t_0\) posterior estimates and
+95\% HDIs by condition; gaze conditions show higher (less negative)
+\(t_0\) values than hand conditions, consistent with longer
+verification-phase duration in the empirical data.
+Figure~\ref{fig-verification-rt} shows the empirical verification-phase
+RT by condition; the condition ordering matches the latent \(t_0\)
+ordering.
 
 \subsubsection{Parameter Estimates}\label{parameter-estimates}
 
@@ -1041,7 +1054,7 @@ latent t0 ordering.
   >{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2200}}
   >{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2400}}@{}}
 \caption{LBA parameter estimates by modality and UI mode. Point
-estimates with 95\% highest-density intervals. t0 (latent):
+estimates with 95\% highest-density intervals. \(t_0\) (latent):
 verification-related offset on the model's latent scale; values are not
 in milliseconds. More rightward (less negative) values indicate longer
 verification-phase duration under the fitted parameterization. ID slope:
@@ -1053,7 +1066,7 @@ conditions.}\label{tbl-lba-params}\tabularnewline
 \begin{minipage}[b]{\linewidth}\raggedright
 Condition
 \end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-t0 (latent) {[}95\% HDI{]}
+\(t_0\) (latent) {[}95\% HDI{]}
 \end{minipage} & \begin{minipage}[b]{\linewidth}\centering
 Drift Base
 \end{minipage} & \begin{minipage}[b]{\linewidth}\centering
@@ -1067,7 +1080,7 @@ Pressure {[}95\% HDI{]}
 \begin{minipage}[b]{\linewidth}\raggedright
 Condition
 \end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-t0 (latent) {[}95\% HDI{]}
+\(t_0\) (latent) {[}95\% HDI{]}
 \end{minipage} & \begin{minipage}[b]{\linewidth}\centering
 Drift Base
 \end{minipage} & \begin{minipage}[b]{\linewidth}\centering
@@ -1097,15 +1110,15 @@ Gaze -- Adaptive & −0.97 {[}−1.39, −0.57{]} & 5.03 & −0.93 {[}−0.95,
 
 }
 
-\caption{\label{fig-lba-t0}Non-decision time (t0) by condition. Each row
-shows one condition; the point is the posterior mean and the horizontal
-line is the 95\% highest-density interval. t0 is shown on the model's
-latent scale, not in raw milliseconds. More rightward (less negative)
-values correspond to a larger verification-related offset under the
-fitted parameterization. Gaze conditions (top two rows) show longer
-verification-related offsets than hand conditions (bottom two rows),
-consistent with the empirical verification-phase RT and the Midas Touch
-account.}
+\caption{\label{fig-lba-t0}Non-decision time (\(t_0\)) by condition.
+Each row shows one condition; the point is the posterior mean and the
+horizontal line is the 95\% highest-density interval. \(t_0\) is shown
+on the model's latent scale, not in raw milliseconds. More rightward
+(less negative) values correspond to a larger verification-related
+offset under the fitted parameterization. Gaze conditions (top two rows)
+show longer verification-related offsets than hand conditions (bottom
+two rows), consistent with the empirical verification-phase RT and the
+Midas Touch account.}
 
 \end{figure}%
 
@@ -1120,7 +1133,7 @@ account.}
 \caption{\label{fig-verification-rt}Empirical verification-phase RT by
 condition. Mean verification time (ms) from first target entry to
 selection, with 95\% CI. The condition ordering in this figure matches
-the latent t0 ordering in Figure~\ref{fig-lba-t0}, supporting the
+the latent \(t_0\) ordering in Figure~\ref{fig-lba-t0}, supporting the
 interpretation that gaze conditions impose a longer verification-phase
 burden than hand conditions.}
 
@@ -1128,23 +1141,26 @@ burden than hand conditions.}
 
 \subsubsection{Interpretation}\label{interpretation}
 
-\textbf{Modality effect on t0:} Gaze conditions show higher t0 values
-(less negative: −1.41 to −0.97) than hand conditions (−3.01 to −2.85) on
-the latent scale, consistent with a longer verification-phase duration
-for gaze interaction. This ordering aligns with the empirical
+\textbf{Modality effect on \(t_0\):} Gaze conditions show higher \(t_0\)
+values (less negative: −1.41 to −0.97) than hand conditions (−3.01 to
+−2.85) on the latent scale, consistent with a longer verification-phase
+duration for gaze interaction. This ordering aligns with the empirical
 verification-phase RT (Figure~\ref{fig-verification-rt}). The pattern is
 compatible with the Midas Touch account: gaze may require additional
 time for intent disambiguation before selection.
 
-\textbf{UI mode effect:} Adaptive UI shows different t0 patterns,
-particularly for gaze (static: −1.41, adaptive: −0.97). The higher t0 in
-gaze-adaptive may reflect altered verification timing under declutter,
-though the direction warrants further investigation.
+\textbf{UI mode effect:} Adaptive UI shows different \(t_0\) patterns,
+particularly for gaze (static: −1.41, adaptive: −0.97). The higher
+\(t_0\) in gaze-adaptive may reflect altered verification timing under
+declutter, though the direction warrants further investigation.
 
-\textbf{Difficulty and pressure:} The negative ID slope (−0.93) is
-consistent with harder trials reducing drift rate (Fitts's Law). The
-positive pressure slope (0.06) suggests a speed--accuracy tradeoff:
-higher time pressure increases the decision threshold.
+\textbf{Difficulty and pressure:} The shared effects capture general
+task dynamics. The negative ID-related drift slope (−0.93) indicates
+that greater task difficulty reduces evidence-accumulation efficiency
+(consistent with Fitts's Law). The positive pressure-related threshold
+slope (0.06) indicates that time pressure alters response caution---the
+amount of evidence required before committing---rather than evidence
+quality. The main modality difference remains concentrated in \(t_0\).
 
 \subsubsection{Convergence Diagnostics}\label{convergence-diagnostics}
 
@@ -1199,7 +1215,7 @@ also appears to have amplified downstream verification demands.
 
 The cognitive modeling results sharpen that interpretation. In the LBA
 analysis, gaze showed a larger verification-related latent offset than
-hand (t0 on the model's latent scale), indicating a longer pre- or
+hand (\(t_0\) on the model's latent scale), indicating a longer pre- or
 post-decisional component surrounding overt selection (Brown \&
 Heathcote, 2008). This ordering was consistent with the empirical
 verification-phase RT. In the present task, the most plausible
@@ -1214,7 +1230,10 @@ slope (0.06) further suggests that time pressure altered the caution
 policy rather than simply speeding responses, which is consistent with a
 speed--accuracy tradeoff account. Taken together, the LBA results
 indicate that gaze interaction imposed a verification burden beyond raw
-target acquisition.
+target acquisition. Because the condition-varying effect was
+concentrated in \(t_0\), the modality difference in this dataset appears
+to reflect a verification burden more than a broad change in evidence
+quality or response caution.
 
 This pattern can also be understood through the lens of cognitive load.
 In principle, gaze offers a low-effort means of orienting to targets,
