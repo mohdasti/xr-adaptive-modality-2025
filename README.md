@@ -3,6 +3,7 @@
 ![CI Status](https://img.shields.io/github/actions/workflow/status/mohdasti/xr-adaptive-modality-2025/ci.yml?branch=main&logo=github)
 [![Vercel](https://vercelbadge.vercel.app/api/mohdasti/xr-adaptive-modality-2025)](https://vercel.com)
 ![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
+[![arXiv](https://img.shields.io/badge/arXiv-2603.15991-b31b1b.svg)](https://arxiv.org/abs/2603.15991)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18204915.svg)](https://doi.org/10.5281/zenodo.18204915)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
@@ -10,7 +11,9 @@
 ![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)
 ![R](https://img.shields.io/badge/R-4.4.0-276DC3?logo=r&logoColor=white)
 
-> **Study status: Data Collection (Finalizing)**
+> **Study status: Preprint Available**
+> 
+> **📄 Preprint:** [arXiv:2603.15991](https://arxiv.org/abs/2603.15991) — *The Midas Touch in Gaze vs. Hand Pointing: Modality-Specific Failure Modes and Implications for XR Interfaces*
 > 
 > **Status Checklist:**
 > - ✅ Design finalized & preregistered
